@@ -133,12 +133,13 @@
     #inline-text {
       position: absolute; display: none;
       font-family: "SF Mono", ui-monospace, Menlo, Consolas, monospace;
-      font-size: 15px; font-weight: 500; min-width: 130px;
-      color: var(--ink-ui);
-      border: 1px dashed rgba(35, 32, 28, 0.5); border-radius: 5px;
-      background: rgba(248, 243, 234, 0.9);
-      padding: 4px 8px; outline: none;
-      box-shadow: 0 4px 14px rgba(45, 32, 18, 0.12);
+      font-size: 11px; font-weight: 500; min-width: 140px;
+      color: var(--ink-muted);
+      border: 1px solid rgba(92, 74, 52, 0.25); border-radius: 999px;
+      background: rgba(248, 243, 234, 0.86);
+      padding: 3px 10px; outline: none;
+      box-shadow: 0 3px 10px rgba(45, 32, 18, 0.10);
+      backdrop-filter: blur(4px);
     }
 
     #status-pill {
@@ -531,7 +532,7 @@ async function initWasmPool() {
   });
 }
 
-function layoutWordsToStrokes(wordBuffers, xCenter, yCenter, targetH, maxW, color, baseW = 1.65) {
+function layoutWordsToStrokes(wordBuffers, anchorX, anchorY, targetH, maxW, color, baseW = 1.65, align = 'center') {
   const wordBoxes = [];
   let totalRawW = 0;
   let globalMinY = 1e9, globalMaxY = -1e9;
@@ -572,7 +573,7 @@ function layoutWordsToStrokes(wordBuffers, xCenter, yCenter, targetH, maxW, colo
   let sc = targetH / bh;
   if (maxW && totalRawW * sc > maxW) sc = maxW / totalRawW;
   const cy = (globalMinY + globalMaxY) * 0.5;
-  let curX = xCenter - (totalRawW * sc) * 0.5;
+  let curX = align === 'left' ? anchorX : (anchorX - (totalRawW * sc) * 0.5);
 
   const strokes = [];
   let outMinX = 1e9, outMaxX = -1e9, outMinY = 1e9, outMaxY = -1e9;
@@ -586,7 +587,7 @@ function layoutWordsToStrokes(wordBuffers, xCenter, yCenter, targetH, maxW, colo
         const taper = Math.min(1, t * 6, (1 - t) * 6);
         const p = Math.max(0.24, Math.min(0.94, (0.88 - sp * 0.045) * (0.45 + 0.55 * taper)));
         const sx = curX + (px - wb.minX) * sc;
-        const sy = yCenter + (py - cy) * sc;
+        const sy = anchorY + (py - cy) * sc;
         if (sx < outMinX) outMinX = sx; if (sx > outMaxX) outMaxX = sx;
         if (sy < outMinY) outMinY = sy; if (sy > outMaxY) outMaxY = sy;
         return [sx, sy, p];
@@ -597,59 +598,128 @@ function layoutWordsToStrokes(wordBuffers, xCenter, yCenter, targetH, maxW, colo
   }
   return {
     strokes,
-    bbox: outMinX < outMaxX ? { x: outMinX, y: outMinY, w: Math.max(24, outMaxX - outMinX), h: Math.max(20, outMaxY - outMinY) } : null
+    bbox: outMinX < outMaxX ? { x: outMinX, y: outMinY, w: Math.max(16, outMaxX - outMinX), h: Math.max(20, outMaxY - outMinY) } : null
   };
 }
 
-function onWorkerChunk(msg) {
-  const job = activeJobs.get(msg.reqId);
-  if (!job) return;
-  const arr = job.wordBufs[msg.wordIdx];
-  for (let i = 0; i < msg.chunk.length; i++) arr.push(msg.chunk[i]);
-  if (job.firstInkMs === null) job.firstInkMs = performance.now() - job.t0;
-  if (msg.done) job.doneCount++;
-
+function applyJobStrokes(job) {
   const { strokes, bbox } = layoutWordsToStrokes(
-    job.wordBufs, job.cx, job.cy, job.targetH, job.maxW, job.color, job.baseW
+    job.wordBufs, job.cx, job.cy, job.targetH, job.maxW, job.color, job.baseW, job.align
   );
   if (job.targetShape) {
     job.targetShape.textStrokes = strokes;
+    job.targetShape.wordCache = job.words.map((w, i) => ({ word: w, buf: job.wordBufs[i], seed: job.wordSeeds[i] }));
+    job.targetShape.wordCacheStyle = job.styleKey;
   } else if (job.textItem) {
     job.textItem.strokes = strokes;
+    job.textItem.wordCache = job.words.map((w, i) => ({ word: w, buf: job.wordBufs[i], seed: job.wordSeeds[i] }));
+    job.textItem.wordCacheStyle = job.styleKey;
     if (bbox) {
       job.textItem.x = bbox.x; job.textItem.y = bbox.y;
       job.textItem.w = bbox.w; job.textItem.h = bbox.h;
     }
   }
   scheduleRender();
+}
 
-  if (job.doneCount === job.words.length) {
+function onWorkerChunk(msg) {
+  const job = activeJobs.get(msg.reqId);
+  if (!job) return;
+  const owner = job.targetShape || job.textItem;
+  // Drop stale chunks immediately if user already typed another character!
+  if (owner && owner.latestReqId !== job.reqId) {
+    activeJobs.delete(msg.reqId);
+    return;
+  }
+
+  // First chunk of a re-synthesized word replaces the old placeholder cleanly (zero flicker!)
+  if (!job.wordStarted[msg.wordIdx]) {
+    job.wordStarted[msg.wordIdx] = true;
+    job.wordBufs[msg.wordIdx] = [];
+  }
+  const arr = job.wordBufs[msg.wordIdx];
+  for (let i = 0; i < msg.chunk.length; i++) arr.push(msg.chunk[i]);
+  if (job.firstInkMs === null) job.firstInkMs = performance.now() - job.t0;
+  if (msg.done) job.doneCount++;
+
+  applyJobStrokes(job);
+
+  if (job.doneCount >= job.pendingCount) {
     const totalMs = performance.now() - job.t0;
-    setStatus(`${job.styleLabel}: "${job.text}" · first ink ${job.firstInkMs.toFixed(0)}ms, done ${totalMs.toFixed(0)}ms`);
+    const cachedN = job.words.length - job.pendingCount;
+    setStatus(
+      `${job.styleLabel}: "${job.text}" · ${job.pendingCount} word${job.pendingCount > 1 ? 's' : ''} rendered in ${totalMs.toFixed(0)}ms` +
+      (cachedN > 0 ? ` (${cachedN} cached)` : ` (first ink ${job.firstInkMs.toFixed(0)}ms)`)
+    );
     activeJobs.delete(msg.reqId);
     if (job.resolve) job.resolve();
   }
 }
 
-function synthesizeCursiveStreaming(text, cx, cy, targetH, maxW, color, targetShape = null, textItem = null, styleKey = currentStyleKey) {
+function synthesizeCursiveStreaming(text, cx, cy, targetH, maxW, color, targetShape = null, textItem = null, styleKey = currentStyleKey, align = 'center') {
   const words = text.trim().split(/\s+/).filter(Boolean);
-  if (!words.length || !workers.length) return Promise.resolve();
+  const owner = targetShape || textItem;
+  if (!words.length || !workers.length) {
+    if (targetShape) { targetShape.textStrokes = []; targetShape.wordCache = []; }
+    else if (textItem) { textItem.strokes = []; textItem.wordCache = []; }
+    scheduleRender();
+    return Promise.resolve();
+  }
   const st = WRITING_STYLES[styleKey] || getStyle();
   const reqId = ++reqCounter;
+  if (owner) owner.latestReqId = reqId;
+
+  // Per-word diff against owner.wordCache -> ONLY re-synthesize changed word(s) (typically just the last word!)
+  const prevCache = (owner && owner.wordCacheStyle === styleKey && Array.isArray(owner.wordCache)) ? owner.wordCache : [];
+  const wordBufs = [];
+  const wordSeeds = [];
+  const wordStarted = [];
+  const toSynth = [];
+
+  for (let i = 0; i < words.length; i++) {
+    const prev = prevCache[i];
+    if (prev && prev.word === words[i] && prev.buf && prev.buf.length > 0) {
+      // Exact cache hit -> 0ms!
+      wordBufs.push(prev.buf);
+      wordSeeds.push(prev.seed);
+      wordStarted.push(true);
+    } else {
+      // Changed word (e.g. last word being typed): keep previous strokes as zero-flicker placeholder + stable seed!
+      wordBufs.push(prev && prev.buf ? prev.buf : []);
+      const seed = (prev && prev.seed) ? prev.seed : (Math.floor(Math.random() * 1e9) + 1);
+      wordSeeds.push(seed);
+      wordStarted.push(false);
+      toSynth.push({ wordIdx: i, word: words[i], seed });
+    }
+  }
+
+  const job = {
+    reqId, text, words, cx, cy, targetH, maxW, color, align, styleKey,
+    styleLabel: st.label,
+    baseW: targetShape ? 1.55 : 1.72,
+    targetShape, textItem,
+    wordBufs, wordSeeds, wordStarted,
+    pendingCount: toSynth.length,
+    doneCount: 0,
+    t0: performance.now(),
+    firstInkMs: null,
+    resolve: null
+  };
+
+  // All words cached (e.g. user pressed Space or deleted trailing word) -> instant 0ms re-layout!
+  if (toSynth.length === 0) {
+    applyJobStrokes(job);
+    setStatus(`${st.label}: "${text}" · instant (${words.length} cached)`);
+    return Promise.resolve();
+  }
+
+  // Immediately render any cached prefix words (and placeholders) so there's zero blink
+  applyJobStrokes(job);
+
   return new Promise((resolve) => {
-    const job = {
-      reqId, text, words, cx, cy, targetH, maxW, color,
-      styleLabel: st.label,
-      baseW: targetShape ? 1.55 : 1.72,
-      targetShape, textItem,
-      wordBufs: words.map(() => []),
-      doneCount: 0,
-      t0: performance.now(),
-      firstInkMs: null,
-      resolve
-    };
+    job.resolve = resolve;
     activeJobs.set(reqId, job);
-    words.forEach((word, wordIdx) => {
+    toSynth.forEach(({ wordIdx, word, seed }) => {
       const w = workers[(workerRR++) % workers.length];
       w.postMessage({
         type: 'synth_word',
@@ -659,7 +729,7 @@ function synthesizeCursiveStreaming(text, cx, cy, targetH, maxW, color, targetSh
         styleId: st.wasmStyleId,
         dkMult: st.dkMult,
         bias: st.bias,
-        seed: Math.floor(Math.random() * 1e9) + 1,
+        seed,
         chunkSteps: DEFAULTS.streamChunkSteps
       });
     });
@@ -908,12 +978,16 @@ async function onStyleChange() {
       hwUpdated++;
     } else if (it.kind === 'shape' && it.label) {
       it.styleKey = currentStyleKey;
+      it.wordCache = []; // Force re-synth in new style
       const maxW = it.shapeType === 'diamond' ? it.w * 0.62 : it.w * 0.84;
       const targetH = Math.min(30, Math.max(18, it.h * 0.48));
-      tasks.push(synthesizeCursiveStreaming(it.label, it.x + it.w / 2, it.y + it.h / 2, targetH, maxW, it.color, it, null, currentStyleKey));
+      tasks.push(synthesizeCursiveStreaming(it.label, it.x + it.w / 2, it.y + it.h / 2, targetH, maxW, it.color, it, null, currentStyleKey, 'center'));
     } else if (it.kind === 'text' && it.text) {
       it.styleKey = currentStyleKey;
-      tasks.push(synthesizeCursiveStreaming(it.text, it.x + it.w / 2, it.y + it.h / 2, 32, 520, it.color, null, it, currentStyleKey));
+      it.wordCache = [];
+      const ax = it.anchorX !== undefined ? it.anchorX : it.x;
+      const ay = it.anchorY !== undefined ? it.anchorY : (it.y + it.h / 2);
+      tasks.push(synthesizeCursiveStreaming(it.text, ax, ay, 32, 640, it.color, null, it, currentStyleKey, 'left'));
     }
   }
   scheduleRender();
@@ -922,7 +996,7 @@ async function onStyleChange() {
 }
 
 // ============================================================================
-// 5. CANVAS ENGINE: SINGLE-CLICK TEXT + 600ms MULTI-STROKE + DRAG SHAPES + MOVE
+// 5. CANVAS ENGINE: LIVE KEYSTROKE TYPING + 600ms MULTI-STROKE + SHAPES + MOVE
 // ============================================================================
 const canvas = document.getElementById('c');
 const inlineInput = document.getElementById('inline-text');
@@ -936,6 +1010,8 @@ let dragShape = null;
 let dragItem = null, dragOff = [0, 0], dragMoved = false, hoverItem = null;
 let downPos = null;
 let typingTarget = null;
+let caretVisible = true;
+let caretTimer = null;
 let renderQueued = false;
 
 function scheduleRender() {
@@ -1013,6 +1089,34 @@ function render() {
     if (it.textStrokes) for (const s of it.textStrokes) drawPStroke(ctx, s.pts, s.baseW, s.color, s.alpha);
   }
 
+  // Blinking ink caret directly on the napkin while typing live!
+  if (typingTarget && caretVisible) {
+    let cx = typingTarget.x, cy = typingTarget.y, chH = 26, col = currentColor;
+    if (typingTarget.shapeRef) {
+      const sh = typingTarget.shapeRef;
+      col = sh.color;
+      cy = sh.y + sh.h / 2;
+      if (sh.textStrokes && sh.textStrokes.length) {
+        let maxX = sh.x + sh.w / 2;
+        for (const s of sh.textStrokes) for (const pt of s.pts) if (pt[0] > maxX) maxX = pt[0];
+        cx = maxX + 5;
+      } else {
+        cx = sh.x + sh.w / 2;
+      }
+      chH = Math.min(26, sh.h * 0.48);
+    } else if (typingTarget.textItem) {
+      const ti = typingTarget.textItem;
+      col = ti.color;
+      cy = ti.anchorY;
+      cx = (ti.strokes && ti.strokes.length) ? (ti.x + ti.w + 6) : ti.anchorX;
+      chH = 28;
+    }
+    ctx.save();
+    ctx.strokeStyle = col; ctx.globalAlpha = 0.72; ctx.lineWidth = 1.6; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(cx, cy - chH * 0.5); ctx.lineTo(cx, cy + chH * 0.5); ctx.stroke();
+    ctx.restore();
+  }
+
   // Subtle selection outline when hovering/moving objects
   const hi = dragItem || (tool === 'move' ? hoverItem : null);
   if (hi) {
@@ -1047,50 +1151,136 @@ function render() {
   }
 }
 
-function openTextBox(x, y, shapeRef = null) {
+function stopCaretBlink() {
+  if (caretTimer) { clearInterval(caretTimer); caretTimer = null; }
+}
+
+function openTextBox(x, y, shapeRef = null, existingTextItem = null) {
   flushPendingNow();
-  typingTarget = { x, y, shapeRef };
+  stopCaretBlink();
+  let textItem = existingTextItem;
+  let wasNew = false;
+  let snapshot = null;
+
+  if (shapeRef) {
+    snapshot = {
+      text: shapeRef.label || '',
+      strokes: shapeRef.textStrokes ? shapeRef.textStrokes.slice() : [],
+      cache: shapeRef.wordCache ? shapeRef.wordCache.slice() : [],
+      cacheStyle: shapeRef.wordCacheStyle
+    };
+  } else if (existingTextItem) {
+    snapshot = {
+      text: existingTextItem.text || '',
+      strokes: existingTextItem.strokes ? existingTextItem.strokes.slice() : [],
+      cache: existingTextItem.wordCache ? existingTextItem.wordCache.slice() : [],
+      cacheStyle: existingTextItem.wordCacheStyle
+    };
+  } else {
+    wasNew = true;
+    textItem = {
+      kind: 'text', text: '', styleKey: currentStyleKey,
+      anchorX: x, anchorY: y,
+      x, y: y - 16, w: 20, h: 32,
+      color: currentColor, strokes: [], wordCache: [], wordCacheStyle: currentStyleKey
+    };
+    items.push(textItem);
+  }
+
+  typingTarget = { x, y, shapeRef, textItem, wasNew, snapshot };
+
+  // Place compact typing pill neatly below the live handwritten baseline so it never obscures ink!
   const r = canvas.getBoundingClientRect();
-  const left = Math.max(10, Math.min(r.width - 170, x - 75));
-  const top = Math.max(10, Math.min(r.height - 44, y - 16));
-  inlineInput.style.left = left + 'px';
-  inlineInput.style.top = top + 'px';
-  inlineInput.style.color = currentColor;
+  const pillX = shapeRef ? (shapeRef.x + shapeRef.w / 2 - 75) : (textItem.anchorX - 8);
+  const pillY = shapeRef ? (shapeRef.y + shapeRef.h + 8) : (textItem.anchorY + 26);
+  inlineInput.style.left = Math.max(10, Math.min(r.width - 175, pillX)) + 'px';
+  inlineInput.style.top = Math.max(10, Math.min(r.height - 36, pillY)) + 'px';
   inlineInput.style.display = 'block';
-  inlineInput.value = shapeRef ? (shapeRef.label || '') : '';
+  inlineInput.value = shapeRef ? (shapeRef.label || '') : (textItem.text || '');
   inlineInput.focus();
+  inlineInput.setSelectionRange(inlineInput.value.length, inlineInput.value.length);
+
+  caretVisible = true;
+  caretTimer = setInterval(() => { caretVisible = !caretVisible; scheduleRender(); }, 530);
+  scheduleRender();
+}
+
+// Live keystroke handler: re-renders ONLY the changed / last word in WASM SIMD!
+function onLiveTextInput() {
+  if (!typingTarget) return;
+  caretVisible = true;
+  const val = inlineInput.value;
+  if (typingTarget.shapeRef) {
+    const it = typingTarget.shapeRef;
+    it.label = val;
+    it.styleKey = currentStyleKey;
+    const maxW = it.shapeType === 'diamond' ? it.w * 0.62 : it.w * 0.84;
+    const targetH = Math.min(30, Math.max(18, it.h * 0.48));
+    synthesizeCursiveStreaming(val, it.x + it.w / 2, it.y + it.h / 2, targetH, maxW, it.color, it, null, currentStyleKey, 'center');
+  } else if (typingTarget.textItem) {
+    const ti = typingTarget.textItem;
+    ti.text = val;
+    ti.styleKey = currentStyleKey;
+    synthesizeCursiveStreaming(val, ti.anchorX, ti.anchorY, 32, 640, ti.color, null, ti, currentStyleKey, 'left');
+  }
 }
 
 function commitTextBox() {
   if (!typingTarget) return;
   const tgt = typingTarget;
   typingTarget = null;
+  stopCaretBlink();
   const val = inlineInput.value.trim();
   inlineInput.style.display = 'none';
+
   if (!val) {
-    if (tgt.shapeRef) { tgt.shapeRef.label = ''; tgt.shapeRef.textStrokes = []; scheduleRender(); }
-    return;
+    if (tgt.shapeRef) {
+      tgt.shapeRef.label = '';
+      tgt.shapeRef.textStrokes = [];
+      tgt.shapeRef.wordCache = [];
+    } else if (tgt.textItem) {
+      const idx = items.indexOf(tgt.textItem);
+      if (idx !== -1) items.splice(idx, 1);
+    }
+  } else if (tgt.shapeRef) {
+    tgt.shapeRef.label = val;
+  } else if (tgt.textItem) {
+    tgt.textItem.text = val;
   }
-  if (tgt.shapeRef) {
-    const it = tgt.shapeRef;
-    it.label = val;
-    it.styleKey = currentStyleKey;
-    const maxW = it.shapeType === 'diamond' ? it.w * 0.62 : it.w * 0.84;
-    const targetH = Math.min(30, Math.max(18, it.h * 0.48));
-    synthesizeCursiveStreaming(val, it.x + it.w / 2, it.y + it.h / 2, targetH, maxW, it.color, it, null, currentStyleKey);
-  } else {
-    const textItem = {
-      kind: 'text', text: val, styleKey: currentStyleKey,
-      x: tgt.x - 40, y: tgt.y - 16, w: 80, h: 32, color: currentColor, strokes: []
-    };
-    items.push(textItem);
-    synthesizeCursiveStreaming(val, tgt.x, tgt.y, 32, 520, currentColor, null, textItem, currentStyleKey);
-  }
+  scheduleRender();
 }
 
+function cancelTextBox() {
+  if (!typingTarget) return;
+  const tgt = typingTarget;
+  typingTarget = null;
+  stopCaretBlink();
+  inlineInput.style.display = 'none';
+
+  if (tgt.wasNew && tgt.textItem) {
+    tgt.textItem.latestReqId = ++reqCounter; // drop any in-flight chunks
+    const idx = items.indexOf(tgt.textItem);
+    if (idx !== -1) items.splice(idx, 1);
+  } else if (tgt.snapshot) {
+    const owner = tgt.shapeRef || tgt.textItem;
+    owner.latestReqId = ++reqCounter;
+    if (tgt.shapeRef) {
+      tgt.shapeRef.label = tgt.snapshot.text;
+      tgt.shapeRef.textStrokes = tgt.snapshot.strokes;
+    } else if (tgt.textItem) {
+      tgt.textItem.text = tgt.snapshot.text;
+      tgt.textItem.strokes = tgt.snapshot.strokes;
+    }
+    owner.wordCache = tgt.snapshot.cache;
+    owner.wordCacheStyle = tgt.snapshot.cacheStyle;
+  }
+  scheduleRender();
+}
+
+inlineInput.addEventListener('input', onLiveTextInput);
 inlineInput.addEventListener('keydown', e => {
   if (e.key === 'Enter') { e.preventDefault(); commitTextBox(); }
-  if (e.key === 'Escape') { inlineInput.style.display = 'none'; typingTarget = null; }
+  if (e.key === 'Escape') { e.preventDefault(); cancelTextBox(); }
 });
 inlineInput.addEventListener('blur', commitTextBox);
 
@@ -1112,11 +1302,12 @@ canvas.addEventListener('pointerdown', e => {
   downPos = p;
   canvas.setPointerCapture(e.pointerId);
 
-  // Single click in Text mode immediately opens inline input!
+  // Single click in Text mode immediately opens live keystroke typing!
   if (tool === 'text') {
     const hit = hitItem(p.x, p.y);
-    if (hit && hit.kind === 'shape') openTextBox(hit.x + hit.w / 2, hit.y + hit.h / 2, hit);
-    else openTextBox(p.x, p.y, null);
+    if (hit && hit.kind === 'shape') openTextBox(hit.x + hit.w / 2, hit.y + hit.h / 2, hit, null);
+    else if (hit && hit.kind === 'text') openTextBox(hit.anchorX ?? hit.x, hit.anchorY ?? (hit.y + hit.h / 2), null, hit);
+    else openTextBox(p.x, p.y, null, null);
     return;
   }
 
@@ -1154,6 +1345,7 @@ canvas.addEventListener('pointermove', e => {
     if (Math.hypot(dx, dy) > 1.5) dragMoved = true;
     dragOff = [p.x, p.y];
     dragItem.x += dx; dragItem.y += dy;
+    if (dragItem.anchorX !== undefined) { dragItem.anchorX += dx; dragItem.anchorY += dy; }
     const shift = s => { for (const pt of s.pts) { pt[0] += dx; pt[1] += dy; } };
     dragItem.strokes.forEach(shift);
     if (dragItem.textStrokes) dragItem.textStrokes.forEach(shift);
@@ -1181,9 +1373,11 @@ canvas.addEventListener('pointerup', e => {
     dragItem = null;
     canvas.style.cursor = 'grab';
     scheduleRender();
-    // Single-click (without drag) on a shape in Move mode opens its label!
+    // Single-click (without drag) on a shape or text in Move mode opens live editing!
     if (wasClick && clickedItem.kind === 'shape') {
-      openTextBox(clickedItem.x + clickedItem.w / 2, clickedItem.y + clickedItem.h / 2, clickedItem);
+      openTextBox(clickedItem.x + clickedItem.w / 2, clickedItem.y + clickedItem.h / 2, clickedItem, null);
+    } else if (wasClick && clickedItem.kind === 'text') {
+      openTextBox(clickedItem.anchorX ?? clickedItem.x, clickedItem.anchorY ?? (clickedItem.y + clickedItem.h / 2), null, clickedItem);
     }
     return;
   }
@@ -1193,10 +1387,11 @@ canvas.addEventListener('pointerup', e => {
     dragShape = null;
     const dist = Math.hypot(x2 - x1, y2 - y1);
     if (dist < 5) {
-      // Single click without drag -> add text right there!
+      // Single click without drag -> add/edit text right there!
       const hit = hitItem(p.x, p.y);
-      if (hit && hit.kind === 'shape') openTextBox(hit.x + hit.w / 2, hit.y + hit.h / 2, hit);
-      else openTextBox(p.x, p.y, null);
+      if (hit && hit.kind === 'shape') openTextBox(hit.x + hit.w / 2, hit.y + hit.h / 2, hit, null);
+      else if (hit && hit.kind === 'text') openTextBox(hit.anchorX ?? hit.x, hit.anchorY ?? (hit.y + hit.h / 2), null, hit);
+      else openTextBox(p.x, p.y, null, null);
     } else if (tool === 'arrow' && dist > 16) {
       items.push(buildArrowItem(x1, y1, x2, y2));
       setStatus('Arrow added');
@@ -1215,12 +1410,13 @@ canvas.addEventListener('pointerup', e => {
     let arc = 0;
     for (let i = 1; i < pts.length; i++) arc += Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y);
 
-    // Clean single-click (no drag) in Sketch mode -> immediately open inline text!
+    // Clean single-click (no drag) in Sketch mode -> immediately open live keystroke typing!
     if (pendingMode === 'sketch' && !pendingStrokes.length && arc < 5) {
       pendingMode = null;
       const hit = hitItem(p.x, p.y);
-      if (hit && hit.kind === 'shape') openTextBox(hit.x + hit.w / 2, hit.y + hit.h / 2, hit);
-      else openTextBox(p.x, p.y, null);
+      if (hit && hit.kind === 'shape') openTextBox(hit.x + hit.w / 2, hit.y + hit.h / 2, hit, null);
+      else if (hit && hit.kind === 'text') openTextBox(hit.anchorX ?? hit.x, hit.anchorY ?? (hit.y + hit.h / 2), null, hit);
+      else openTextBox(p.x, p.y, null, null);
       scheduleRender();
       return;
     }
