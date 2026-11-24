@@ -1,0 +1,1791 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Napkin Sketch v7</title>
+  <style>
+    :root {
+      --bg: #d9cbb5;
+      --paper: #e7dbc6;
+      --bar-bg: rgba(248, 243, 234, 0.94);
+      --bar-border: rgba(92, 74, 52, 0.18);
+      --ink-ui: #23201c;
+      --ink-muted: #6e6457;
+      --active-bg: #23201c;
+      --active-fg: #f8f3ea;
+      --hover-bg: rgba(35, 32, 28, 0.08);
+      --radius: 8px;
+    }
+
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0; padding: 0; height: 100dvh; width: 100vw; overflow: hidden;
+      background: var(--bg); color: var(--ink-ui);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, sans-serif;
+      font-size: 13px; -webkit-font-smoothing: antialiased;
+    }
+
+    .app {
+      display: flex; flex-direction: column; height: 100dvh; width: 100vw;
+    }
+
+    header.toolbar {
+      display: flex; align-items: center; justify-content: space-between;
+      gap: 8px; padding: 8px 12px;
+      background: var(--bar-bg);
+      border-bottom: 1px solid var(--bar-border);
+      backdrop-filter: blur(8px);
+      flex-wrap: wrap;
+      z-index: 20;
+    }
+
+    .group { display: flex; align-items: center; gap: 3px; }
+    .divider { width: 1px; height: 20px; background: var(--bar-border); margin: 0 4px; flex-shrink: 0; }
+
+    .brand {
+      font-weight: 600; font-size: 13px; letter-spacing: -0.01em;
+      padding: 0 6px 0 2px; color: var(--ink-ui); white-space: nowrap;
+      display: flex; align-items: center; gap: 6px;
+    }
+    .brand span.ver {
+      font-size: 11px; font-weight: 500; color: var(--ink-muted);
+      border: 1px solid var(--bar-border); border-radius: 4px; padding: 0 4px;
+    }
+
+    button.tool-btn {
+      display: inline-flex; align-items: center; justify-content: center; gap: 5px;
+      height: 32px; padding: 0 9px;
+      border: 1px solid transparent; border-radius: var(--radius);
+      background: transparent; color: var(--ink-ui);
+      font-size: 12px; font-weight: 500; cursor: pointer;
+      transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+      white-space: nowrap;
+    }
+    button.tool-btn:hover { background: var(--hover-bg); }
+    button.tool-btn.active { background: var(--active-bg); color: var(--active-fg); }
+    button.tool-btn svg {
+      width: 16px; height: 16px; flex-shrink: 0;
+      stroke: currentColor; fill: none; stroke-width: 1.7;
+      stroke-linecap: round; stroke-linejoin: round;
+    }
+
+    .swatches { display: flex; align-items: center; gap: 6px; padding: 0 4px; }
+    button.swatch {
+      width: 20px; height: 20px; border-radius: 50%; padding: 0;
+      border: 2px solid transparent; cursor: pointer;
+      transition: transform 0.12s ease, box-shadow 0.12s ease;
+    }
+    button.swatch:hover { transform: scale(1.12); }
+    button.swatch.active {
+      box-shadow: 0 0 0 2px var(--bar-bg), 0 0 0 3.5px var(--ink-ui);
+    }
+
+    .style-select-wrap {
+      display: inline-flex; align-items: center; gap: 5px;
+      padding: 0 8px; height: 32px;
+      border: 1px solid var(--bar-border); border-radius: var(--radius);
+      background: rgba(255, 255, 255, 0.45);
+    }
+    .style-select-wrap svg {
+      width: 14px; height: 14px; stroke: var(--ink-muted); fill: none; stroke-width: 1.7;
+      stroke-linecap: round; stroke-linejoin: round; flex-shrink: 0;
+    }
+    select#style-sel {
+      border: none; background: transparent; color: var(--ink-ui);
+      font-family: inherit; font-size: 12px; font-weight: 500;
+      outline: none; cursor: pointer; padding-right: 2px;
+    }
+
+    main.stage {
+      position: relative; flex: 1; min-height: 0; width: 100%;
+      display: flex; align-items: center; justify-content: center;
+      padding: 14px;
+      background: radial-gradient(circle at 50% 45%, #d8c9b2 0%, #c8b69b 100%);
+    }
+
+    .napkin-frame {
+      position: relative; width: 100%; height: 100%; max-width: 1440px;
+      border-radius: 6px; overflow: hidden;
+      background: var(--paper);
+      box-shadow:
+        0 1px 2px rgba(55, 40, 22, 0.14),
+        0 10px 28px rgba(55, 40, 22, 0.16),
+        inset 0 0 0 1px rgba(104, 82, 54, 0.22);
+    }
+
+    canvas#c { display: block; width: 100%; height: 100%; touch-action: none; }
+
+    #inline-text {
+      position: absolute; display: none;
+      font-family: "SF Mono", ui-monospace, Menlo, Consolas, monospace;
+      font-size: 11px; font-weight: 500; min-width: 140px;
+      color: var(--ink-muted);
+      border: 1px solid rgba(92, 74, 52, 0.25); border-radius: 999px;
+      background: rgba(248, 243, 234, 0.88);
+      padding: 3px 10px; outline: none;
+      box-shadow: 0 3px 10px rgba(45, 32, 18, 0.10);
+      backdrop-filter: blur(4px);
+    }
+
+    /* Full-viewport overlay for the crumpled napkin ball throw animation */
+    canvas#crumple-overlay {
+      position: fixed; inset: 0; width: 100vw; height: 100dvh;
+      pointer-events: none; z-index: 60; display: none;
+    }
+
+    @media (max-width: 1080px) {
+      button.tool-btn .lbl { display: none; }
+      button.tool-btn { padding: 0 8px; }
+    }
+    @media (max-width: 680px) {
+      header.toolbar { padding: 6px 8px; gap: 5px; }
+      main.stage { padding: 6px; }
+      .brand span.ver { display: none; }
+      .divider { margin: 0 2px; }
+      button.tool-btn { height: 30px; padding: 0 7px; }
+      .style-select-wrap { height: 30px; padding: 0 6px; }
+    }
+  </style>
+</head>
+<body>
+<div class="app">
+  <header class="toolbar">
+    <div class="group">
+      <div class="brand">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/><path d="M2 2l7.586 7.586"/></svg>
+        Napkin <span class="ver">v7</span>
+      </div>
+      <div class="divider"></div>
+
+      <button id="t-sketch" class="tool-btn active" onclick="setTool('sketch')" title="Smart Sketch (600ms multi-stroke auto-beautify) [S]">
+        <svg viewBox="0 0 24 24"><path d="M4 19c2.5-3 4-9 8-9s3.5 6 8 3"/><path d="M16 5l3 3-9 9H7v-3l9-9z"/></svg>
+        <span class="lbl">Sketch</span>
+      </button>
+      <button id="t-handwrite" class="tool-btn" onclick="setTool('handwrite')" title="Direct Handwrite (600ms burst, styled ink) [H]">
+        <svg viewBox="0 0 24 24"><path d="M3 17c2-4 4-8 6-8s1.5 6 3.5 6 3-5 4.5-5 1.5 4 4 3"/><path d="M3 20h18"/></svg>
+        <span class="lbl">Handwrite</span>
+      </button>
+      <button id="t-text" class="tool-btn" onclick="setTool('text')" title="Single-click anywhere or inside a shape to type live [T]">
+        <svg viewBox="0 0 24 24"><path d="M5 6V4h14v2"/><path d="M12 4v16"/><path d="M9 20h6"/></svg>
+        <span class="lbl">Text</span>
+      </button>
+
+      <div class="divider"></div>
+
+      <button id="t-box" class="tool-btn" onclick="setTool('box')" title="Drag Box [B]">
+        <svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="14" rx="1.5"/></svg>
+        <span class="lbl">Box</span>
+      </button>
+      <button id="t-oval" class="tool-btn" onclick="setTool('oval')" title="Drag Oval [O]">
+        <svg viewBox="0 0 24 24"><ellipse cx="12" cy="12" rx="9" ry="6.5"/></svg>
+        <span class="lbl">Oval</span>
+      </button>
+      <button id="t-diamond" class="tool-btn" onclick="setTool('diamond')" title="Drag Diamond [D]">
+        <svg viewBox="0 0 24 24"><polygon points="12 3 21 12 12 21 3 12"/></svg>
+        <span class="lbl">Diamond</span>
+      </button>
+      <button id="t-arrow" class="tool-btn" onclick="setTool('arrow')" title="Drag Arrow [A]">
+        <svg viewBox="0 0 24 24"><path d="M5 19L19 5"/><path d="M10 5h9v9"/></svg>
+        <span class="lbl">Arrow</span>
+      </button>
+
+      <div class="divider"></div>
+
+      <button id="t-move" class="tool-btn" onclick="setTool('move')" title="Select, Move, Resize & Delete [V]">
+        <svg viewBox="0 0 24 24"><path d="M4 4l7.5 16 2.8-6.2L20.5 11 4 4z"/></svg>
+        <span class="lbl">Select</span>
+      </button>
+    </div>
+
+    <div class="group">
+      <div class="style-select-wrap" title="Writing style for future typed & handwritten text">
+        <svg viewBox="0 0 24 24"><path d="M17 3a2.83 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>
+        <select id="style-sel" onchange="onStyleChange()">
+          <option value="cursive" selected>Designer Cursive</option>
+          <option value="print">Crisp Print</option>
+          <option value="upright">Clean Upright</option>
+          <option value="journal">Fast Journal</option>
+        </select>
+      </div>
+
+      <div class="divider"></div>
+
+      <div class="swatches" role="group" aria-label="Ink color">
+        <button class="swatch active" data-color="#1b3d8f" style="background:#1b3d8f;" onclick="setColor('#1b3d8f', this)" title="Ballpoint Blue"></button>
+        <button class="swatch" data-color="#1c1e22" style="background:#1c1e22;" onclick="setColor('#1c1e22', this)" title="Black Ink"></button>
+        <button class="swatch" data-color="#b91c1c" style="background:#b91c1c;" onclick="setColor('#b91c1c', this)" title="Red Ink"></button>
+      </div>
+
+      <div class="divider"></div>
+
+      <button class="tool-btn" onclick="undo()" title="Undo [Ctrl+Z]">
+        <svg viewBox="0 0 24 24"><path d="M9 14L4 9l5-5"/><path d="M20 20v-7a4 4 0 0 0-4-4H4"/></svg>
+      </button>
+      <button id="clear-btn" class="tool-btn" onclick="clearAllWithCrumple()" title="Crumple & Toss Napkin">
+        <svg viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/></svg>
+      </button>
+      <button class="tool-btn" onclick="exportSVG()" title="Export SVG">
+        <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>
+        <span class="lbl">SVG</span>
+      </button>
+    </div>
+  </header>
+
+  <main class="stage">
+    <div class="napkin-frame" id="wrap">
+      <canvas id="c"></canvas>
+      <input id="inline-text" type="text" placeholder="Type & press Enter..." />
+    </div>
+  </main>
+</div>
+<canvas id="crumple-overlay"></canvas>
+
+<script>
+// ============================================================================
+// DEFAULTS & WRITING STYLES (APPLIES TO FUTURE TYPED & HANDWRITTEN TEXT)
+// ============================================================================
+const DEFAULTS = {
+  isPres: 0.75,
+  tau: 0.65,
+  underSketch: true,
+  debounceMs: 600,
+  streamChunkSteps: 28
+};
+
+const WRITING_STYLES = {
+  cursive: {
+    label: 'Designer Cursive',
+    wasmStyleId: 9, bias: 1.05, dkMult: 1.06,
+    hwSlant: -0.10, hwChaikin: 1, hwMinDist: 2.3, hwBaseW: 1.75, hwMinP: 0.22, hwVelDrop: 0.038, hwBaselinePull: 0.0
+  },
+  print: {
+    label: 'Crisp Print',
+    wasmStyleId: 1, bias: 1.12, dkMult: 1.06,
+    hwSlant: 0.02, hwChaikin: 0, hwMinDist: 2.6, hwBaseW: 1.62, hwMinP: 0.42, hwVelDrop: 0.022, hwBaselinePull: 0.08
+  },
+  upright: {
+    label: 'Clean Upright',
+    wasmStyleId: 7, bias: 1.08, dkMult: 1.06,
+    hwSlant: 0.0, hwChaikin: 1, hwMinDist: 2.4, hwBaseW: 1.72, hwMinP: 0.30, hwVelDrop: 0.030, hwBaselinePull: 0.14
+  },
+  journal: {
+    label: 'Fast Journal',
+    wasmStyleId: 12, bias: 1.02, dkMult: 1.08,
+    hwSlant: -0.20, hwChaikin: 2, hwMinDist: 2.2, hwBaseW: 1.58, hwMinP: 0.18, hwVelDrop: 0.048, hwBaselinePull: 0.0
+  }
+};
+
+let currentColor = '#1b3d8f';
+let currentStyleKey = 'cursive';
+
+function getStyle() { return WRITING_STYLES[currentStyleKey] || WRITING_STYLES.cursive; }
+
+function setColor(hex, btnEl) {
+  currentColor = hex;
+  document.querySelectorAll('button.swatch').forEach(b => b.classList.remove('active'));
+  if (btnEl) btnEl.classList.add('active');
+}
+
+function onStyleChange() {
+  currentStyleKey = document.getElementById('style-sel').value;
+}
+
+// ============================================================================
+// 1. PROCEDURAL LIGHT-BROWN PAPER NAPKIN TEXTURE
+// ============================================================================
+let napkinPattern = null;
+
+function createNapkinPattern(ctx) {
+  const tile = document.createElement('canvas');
+  tile.width = 256; tile.height = 256;
+  const tctx = tile.getContext('2d');
+
+  tctx.fillStyle = '#e7dbc6';
+  tctx.fillRect(0, 0, 256, 256);
+
+  const step = 8;
+  for (let y = 0; y < 256; y += step) {
+    const rowShift = ((y / step) % 2) * (step / 2);
+    for (let x = 0; x < 256; x += step) {
+      const px = (x + rowShift) % 256;
+      tctx.fillStyle = 'rgba(112, 86, 56, 0.045)';
+      tctx.fillRect(px, y, 2, 2);
+      tctx.fillStyle = 'rgba(255, 250, 240, 0.065)';
+      tctx.fillRect(px + 1, y + 1, 2, 2);
+    }
+  }
+
+  let s = 1337;
+  const rnd = () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; };
+
+  for (let i = 0; i < 160; i++) {
+    const x = rnd() * 256, y = rnd() * 256, r = 6 + rnd() * 20;
+    tctx.fillStyle = rnd() > 0.5 ? 'rgba(130, 102, 68, 0.018)' : 'rgba(255, 248, 236, 0.025)';
+    tctx.beginPath(); tctx.arc(x, y, r, 0, Math.PI * 2); tctx.fill();
+  }
+
+  tctx.lineWidth = 0.7;
+  for (let i = 0; i < 420; i++) {
+    const x = rnd() * 256, y = rnd() * 256;
+    const len = 2 + rnd() * 7, ang = rnd() * Math.PI * 2;
+    tctx.strokeStyle = rnd() > 0.38 ? 'rgba(118, 90, 58, 0.075)' : 'rgba(255, 252, 244, 0.09)';
+    tctx.beginPath(); tctx.moveTo(x, y); tctx.lineTo(x + Math.cos(ang) * len, y + Math.sin(ang) * len); tctx.stroke();
+  }
+
+  for (let i = 0; i < 240; i++) {
+    tctx.fillStyle = rnd() > 0.25 ? 'rgba(102, 74, 44, 0.085)' : 'rgba(72, 52, 32, 0.10)';
+    tctx.fillRect(rnd() * 256, rnd() * 256, 1.1, 1.1);
+  }
+
+  return ctx.createPattern(tile, 'repeat');
+}
+
+function drawNapkinBackground(ctx, w, h) {
+  if (!napkinPattern) napkinPattern = createNapkinPattern(ctx);
+  ctx.fillStyle = napkinPattern;
+  ctx.fillRect(0, 0, w, h);
+
+  const midX = w * 0.5, midY = h * 0.5;
+  const gV = ctx.createLinearGradient(midX - 18, 0, midX + 18, 0);
+  gV.addColorStop(0, 'rgba(90, 68, 42, 0)');
+  gV.addColorStop(0.46, 'rgba(90, 68, 42, 0.045)');
+  gV.addColorStop(0.52, 'rgba(255, 250, 240, 0.055)');
+  gV.addColorStop(1, 'rgba(90, 68, 42, 0)');
+  ctx.fillStyle = gV; ctx.fillRect(midX - 18, 0, 36, h);
+
+  const gH = ctx.createLinearGradient(0, midY - 16, 0, midY + 16);
+  gH.addColorStop(0, 'rgba(90, 68, 42, 0)');
+  gH.addColorStop(0.46, 'rgba(90, 68, 42, 0.04)');
+  gH.addColorStop(0.52, 'rgba(255, 250, 240, 0.05)');
+  gH.addColorStop(1, 'rgba(90, 68, 42, 0)');
+  ctx.fillStyle = gH; ctx.fillRect(0, midY - 16, w, 32);
+
+  const vig = ctx.createRadialGradient(w * 0.5, h * 0.5, Math.min(w, h) * 0.35, w * 0.5, h * 0.5, Math.max(w, h) * 0.78);
+  vig.addColorStop(0, 'rgba(255, 248, 236, 0.04)');
+  vig.addColorStop(1, 'rgba(110, 82, 50, 0.095)');
+  ctx.fillStyle = vig; ctx.fillRect(0, 0, w, h);
+}
+
+// ============================================================================
+// 2. OPENSKETCH (dx, dy, pressure) RESIDUAL VAE (<0.2ms / stroke)
+// ============================================================================
+let VAE = null;
+
+function randn() {
+  let u = 0, v = 0;
+  while (!u) u = Math.random();
+  while (!v) v = Math.random();
+  return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
+}
+function silu(x) { return x / (1 + Math.exp(-x)); }
+function sigmoid(x) { return 1 / (1 + Math.exp(-Math.max(-20, Math.min(20, x)))); }
+
+function decodeResidual(isCurved, isPres, chordLen, tau = DEFAULTS.tau) {
+  if (!VAE) {
+    return Array.from({ length: 16 }, (_, i) => [0, 0, 0.25 + 0.55 * Math.sin((i / 15) * Math.PI)]);
+  }
+  const nll = Math.max(-1.5, Math.min(1.5, (Math.log(Math.max(chordLen, 25)) - Math.log(140)) / 1.2));
+  let h = [];
+  for (let i = 0; i < VAE.latent_dim; i++) h.push(randn() * tau);
+  h.push(isCurved, isPres, nll);
+  for (let li = 0; li < VAE.layers.length; li++) {
+    const { w, b } = VAE.layers[li];
+    const out = new Array(b.length);
+    for (let i = 0; i < b.length; i++) {
+      let sum = b[i];
+      const row = w[i];
+      for (let j = 0; j < row.length; j++) sum += row[j] * h[j];
+      out[i] = li < VAE.layers.length - 1 ? silu(sum) : sum;
+    }
+    h = out;
+  }
+  const K = VAE.k, sc = VAE.res_scale, out = [];
+  for (let i = 0; i < K; i++) out.push([h[i * 3] * sc, h[i * 3 + 1] * sc, sigmoid(h[i * 3 + 2])]);
+  return out;
+}
+
+function designerLine(x1, y1, x2, y2, isPres = DEFAULTS.isPres, tau = DEFAULTS.tau, ov = 3) {
+  const dx = x2 - x1, dy = y2 - y1, len = Math.hypot(dx, dy) || 1;
+  const ux = dx / len, uy = dy / len, nx = -uy, ny = ux;
+  const sx = x1 - ux * ov * Math.random(), sy = y1 - uy * ov * Math.random();
+  const ex = x2 + ux * ov * Math.random(), ey = y2 + uy * ov * Math.random();
+  const res = decodeResidual(0, isPres, len, tau);
+  const K = res.length;
+  return res.map(([ru, rv, p], i) => {
+    const t = i / (K - 1);
+    return [sx + (ex - sx) * (t + ru) + nx * rv * len, sy + (ey - sy) * (t + ru) + ny * rv * len, p];
+  });
+}
+
+function designerBezier(x0, y0, cx, cy, x2, y2, isPres = DEFAULTS.isPres, tau = DEFAULTS.tau) {
+  const chord = Math.hypot(x2 - x0, y2 - y0) || 1;
+  const ux = (x2 - x0) / chord, uy = (y2 - y0) / chord, nx = -uy, ny = ux;
+  const res = decodeResidual(1, isPres, chord, tau);
+  const K = res.length;
+  return res.map(([ru, rv, p], i) => {
+    const t = i / (K - 1), mt = 1 - t, env = Math.sin(t * Math.PI);
+    const bx = mt * mt * x0 + 2 * mt * t * cx + t * t * x2;
+    const by = mt * mt * y0 + 2 * mt * t * cy + t * t * y2;
+    return [bx + (ux * ru + nx * rv) * chord * env, by + (uy * ru + ny * rv) * chord * env, p];
+  });
+}
+
+function chaikin(pts, iters = 1) {
+  let cur = pts;
+  for (let k = 0; k < iters; k++) {
+    if (cur.length < 3) break;
+    const next = [cur[0]];
+    for (let i = 0; i < cur.length - 1; i++) {
+      const a = cur[i], b = cur[i + 1];
+      next.push([0.75 * a[0] + 0.25 * b[0], 0.75 * a[1] + 0.25 * b[1]]);
+      next.push([0.25 * a[0] + 0.75 * b[0], 0.25 * a[1] + 0.75 * b[1]]);
+    }
+    next.push(cur[cur.length - 1]);
+    cur = next;
+  }
+  return cur;
+}
+
+// ============================================================================
+// 3. PARALLEL WEB WORKER POOL FOR 60 FPS STREAMING WAT SIMD128 CURSIVE
+// ============================================================================
+const POOL_SIZE = Math.min(3, Math.max(2, navigator.hardwareConcurrency || 2));
+const readyWorkers = [];
+let workerRR = 0;
+let reqCounter = 0;
+const activeJobs = new Map();
+const preReadyQueue = [];
+
+async function cachedFetchBytes(url) {
+  const cacheName = 'napkin-ml-v6';
+  let cache = null;
+  try { if ('caches' in window) cache = await caches.open(cacheName); } catch (_) {}
+  if (cache) {
+    const hit = await cache.match(url);
+    if (hit) return await hit.arrayBuffer();
+  }
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`HTTP ${res.status} for ${url}`);
+  const buf = await res.arrayBuffer();
+  if (cache) {
+    try { await cache.put(url, new Response(buf.slice(0), { headers: { 'Content-Type': res.headers.get('Content-Type') || 'application/octet-stream' } })); } catch (_) {}
+  }
+  return buf;
+}
+
+async function cachedFetchJSON(url) {
+  const buf = await cachedFetchBytes(url);
+  return JSON.parse(new TextDecoder().decode(buf));
+}
+
+function spawnOneWorker(wasmModule, binBuf, meta, isPrimary, onPrimaryReady) {
+  const w = new Worker('hw_worker_v5.js');
+  w.onmessage = (e) => {
+    const msg = e.data;
+    if (msg.type === 'ready') {
+      readyWorkers.push(w);
+      if (isPrimary) {
+        while (preReadyQueue.length) preReadyQueue.shift()();
+        if (onPrimaryReady) onPrimaryReady();
+      }
+    } else if (msg.type === 'chunk') {
+      onWorkerChunk(msg);
+    }
+  };
+  const copy = binBuf.slice(0);
+  w.postMessage({ type: 'init', wasmModule, binBuf: copy, meta }, [copy]);
+}
+
+async function initWasmPool() {
+  const [meta, wasmBytes, binBuf] = await Promise.all([
+    cachedFetchJSON('../exports/handwriting/graves_v5_meta.json'),
+    cachedFetchBytes('../exports/handwriting/graves_v5.wasm'),
+    cachedFetchBytes('../exports/handwriting/graves_v5.bin')
+  ]);
+  const wasmModule = await WebAssembly.compile(wasmBytes);
+  return new Promise((resolve) => {
+    spawnOneWorker(wasmModule, binBuf, meta, true, () => {
+      resolve();
+      for (let i = 1; i < POOL_SIZE; i++) {
+        setTimeout(() => spawnOneWorker(wasmModule, binBuf, meta, false, null), i * 160);
+      }
+    });
+  });
+}
+
+function layoutWordsToStrokes(wordBuffers, anchorX, anchorY, targetH, maxW, color, baseW = 1.65, align = 'center') {
+  const wordBoxes = [];
+  let totalRawW = 0;
+  let globalMinY = 1e9, globalMaxY = -1e9;
+  const wordGap = 14.0;
+
+  for (const buf of wordBuffers) {
+    const segs = [];
+    let x = 0, y = 0, cur = [];
+    let minX = 1e9, maxX = -1e9, minY = 1e9, maxY = -1e9;
+    const n = buf.length / 3;
+    for (let i = 0; i < n; i++) {
+      const dx = buf[i * 3], dy = buf[i * 3 + 1], eos = buf[i * 3 + 2];
+      x += dx; y -= dy;
+      cur.push([x, y]);
+      if (x < minX) minX = x; if (x > maxX) maxX = x;
+      if (y < minY) minY = y; if (y > maxY) maxY = y;
+      if (eos > 0.5) { if (cur.length >= 2) segs.push(cur); cur = []; }
+    }
+    if (cur.length >= 2) segs.push(cur);
+    if (!segs.length) {
+      wordBoxes.push({ segs: [], minX: 0, w: 10 });
+      totalRawW += 10 + wordGap;
+      continue;
+    }
+    if (minY < globalMinY) globalMinY = minY;
+    if (maxY > globalMaxY) globalMaxY = maxY;
+    const w = Math.max(4, maxX - minX);
+    wordBoxes.push({ segs, minX, w });
+    totalRawW += w + wordGap;
+  }
+  if (globalMinY > globalMaxY) return { strokes: [], bbox: null };
+  totalRawW = Math.max(1, totalRawW - wordGap);
+
+  const bh = Math.max(10, globalMaxY - globalMinY);
+  let sc = targetH / bh;
+  if (maxW && totalRawW * sc > maxW) sc = maxW / totalRawW;
+  const cy = (globalMinY + globalMaxY) * 0.5;
+  let curX = align === 'left' ? anchorX : (anchorX - (totalRawW * sc) * 0.5);
+
+  const strokes = [];
+  let outMinX = 1e9, outMaxX = -1e9, outMinY = 1e9, outMaxY = -1e9;
+
+  for (const wb of wordBoxes) {
+    for (const seg of wb.segs) {
+      const pts = seg.map(([px, py], idx) => {
+        const prev = seg[Math.max(0, idx - 1)];
+        const sp = Math.hypot(px - prev[0], py - prev[1]);
+        const t = idx / Math.max(1, seg.length - 1);
+        const taper = Math.min(1, t * 6, (1 - t) * 6);
+        const p = Math.max(0.24, Math.min(0.94, (0.88 - sp * 0.045) * (0.45 + 0.55 * taper)));
+        const sx = curX + (px - wb.minX) * sc;
+        const sy = anchorY + (py - cy) * sc;
+        if (sx < outMinX) outMinX = sx; if (sx > outMaxX) outMaxX = sx;
+        if (sy < outMinY) outMinY = sy; if (sy > outMaxY) outMaxY = sy;
+        return [sx, sy, p];
+      });
+      strokes.push({ pts, alpha: 0.96, baseW, color });
+    }
+    curX += (wb.w + wordGap) * sc;
+  }
+  return {
+    strokes,
+    bbox: outMinX < outMaxX ? { x: outMinX, y: outMinY, w: Math.max(16, outMaxX - outMinX), h: Math.max(20, outMaxY - outMinY) } : null
+  };
+}
+
+function applyJobStrokes(job) {
+  const { strokes, bbox } = layoutWordsToStrokes(
+    job.wordBufs, job.cx, job.cy, job.targetH, job.maxW, job.color, job.baseW, job.align
+  );
+  if (job.targetShape) {
+    job.targetShape.textStrokes = strokes;
+    job.targetShape.wordCache = job.words.map((w, i) => ({ word: w, buf: job.wordBufs[i], seed: job.wordSeeds[i] }));
+    job.targetShape.wordCacheStyle = job.styleKey;
+  } else if (job.textItem) {
+    job.textItem.strokes = strokes;
+    job.textItem.wordCache = job.words.map((w, i) => ({ word: w, buf: job.wordBufs[i], seed: job.wordSeeds[i] }));
+    job.textItem.wordCacheStyle = job.styleKey;
+    if (bbox) {
+      job.textItem.x = bbox.x; job.textItem.y = bbox.y;
+      job.textItem.w = bbox.w; job.textItem.h = bbox.h;
+    }
+  }
+  scheduleRender();
+}
+
+function onWorkerChunk(msg) {
+  const job = activeJobs.get(msg.reqId);
+  if (!job) return;
+  const owner = job.targetShape || job.textItem;
+  if (owner && owner.latestReqId !== job.reqId) {
+    activeJobs.delete(msg.reqId);
+    return;
+  }
+  if (!job.wordStarted[msg.wordIdx]) {
+    job.wordStarted[msg.wordIdx] = true;
+    job.wordBufs[msg.wordIdx] = [];
+  }
+  const arr = job.wordBufs[msg.wordIdx];
+  for (let i = 0; i < msg.chunk.length; i++) arr.push(msg.chunk[i]);
+  if (msg.done) job.doneCount++;
+
+  applyJobStrokes(job);
+
+  if (job.doneCount >= job.pendingCount) {
+    activeJobs.delete(msg.reqId);
+    if (job.resolve) job.resolve();
+  }
+}
+
+function synthesizeCursiveStreaming(text, cx, cy, targetH, maxW, color, targetShape = null, textItem = null, styleKey = currentStyleKey, align = 'center') {
+  const words = text.trim().split(/\s+/).filter(Boolean);
+  const owner = targetShape || textItem;
+  if (!words.length) {
+    if (targetShape) { targetShape.textStrokes = []; targetShape.wordCache = []; }
+    else if (textItem) { textItem.strokes = []; textItem.wordCache = []; }
+    scheduleRender();
+    return Promise.resolve();
+  }
+  if (!readyWorkers.length) {
+    return new Promise((resolve) => {
+      preReadyQueue.push(() => {
+        const liveText = targetShape ? (targetShape.label || '') : (textItem ? (textItem.text || '') : text);
+        synthesizeCursiveStreaming(liveText, cx, cy, targetH, maxW, color, targetShape, textItem, styleKey, align).then(resolve);
+      });
+    });
+  }
+  const st = WRITING_STYLES[styleKey] || getStyle();
+  const reqId = ++reqCounter;
+  if (owner) owner.latestReqId = reqId;
+
+  const prevCache = (owner && owner.wordCacheStyle === styleKey && Array.isArray(owner.wordCache)) ? owner.wordCache : [];
+  const wordBufs = [], wordSeeds = [], wordStarted = [], toSynth = [];
+
+  for (let i = 0; i < words.length; i++) {
+    const prev = prevCache[i];
+    if (prev && prev.word === words[i] && prev.buf && prev.buf.length > 0) {
+      wordBufs.push(prev.buf);
+      wordSeeds.push(prev.seed);
+      wordStarted.push(true);
+    } else {
+      wordBufs.push(prev && prev.buf ? prev.buf : []);
+      const seed = (prev && prev.seed) ? prev.seed : (Math.floor(Math.random() * 1e9) + 1);
+      wordSeeds.push(seed);
+      wordStarted.push(false);
+      toSynth.push({ wordIdx: i, word: words[i], seed });
+    }
+  }
+
+  const job = {
+    reqId, text, words, cx, cy, targetH, maxW, color, align, styleKey,
+    baseW: targetShape ? 1.55 : 1.72,
+    targetShape, textItem,
+    wordBufs, wordSeeds, wordStarted,
+    pendingCount: toSynth.length,
+    doneCount: 0,
+    resolve: null
+  };
+
+  if (toSynth.length === 0) {
+    applyJobStrokes(job);
+    return Promise.resolve();
+  }
+  applyJobStrokes(job);
+
+  return new Promise((resolve) => {
+    job.resolve = resolve;
+    activeJobs.set(reqId, job);
+    toSynth.forEach(({ wordIdx, word, seed }) => {
+      const w = readyWorkers[(workerRR++) % readyWorkers.length];
+      w.postMessage({
+        type: 'synth_word', reqId, wordIdx, word,
+        styleId: st.wasmStyleId, dkMult: st.dkMult, bias: st.bias, seed,
+        chunkSteps: DEFAULTS.streamChunkSteps
+      });
+    });
+  });
+}
+
+// ============================================================================
+// 4. OBJECT BUILDERS + FIXED CIRCLE/BOX/DIAMOND CLASSIFIER (97% OVAL ACC!)
+// ============================================================================
+function buildShapeStrokes(shapeType, x, y, w, h, col) {
+  const strokes = [];
+  const addPass = (isP, tau, ov, alpha, baseW) => {
+    if (shapeType === 'box') {
+      strokes.push({ pts: designerLine(x, y, x + w, y, isP, tau, ov), alpha, baseW, color: col });
+      strokes.push({ pts: designerLine(x + w, y, x + w, y + h, isP, tau, ov), alpha, baseW, color: col });
+      strokes.push({ pts: designerLine(x + w, y + h, x, y + h, isP, tau, ov), alpha, baseW, color: col });
+      strokes.push({ pts: designerLine(x, y + h, x, y, isP, tau, ov), alpha, baseW, color: col });
+    } else if (shapeType === 'diamond') {
+      const cx = x + w / 2, cy = y + h / 2;
+      strokes.push({ pts: designerLine(cx, y, x + w, cy, isP, tau, ov), alpha, baseW, color: col });
+      strokes.push({ pts: designerLine(x + w, cy, cx, y + h, isP, tau, ov), alpha, baseW, color: col });
+      strokes.push({ pts: designerLine(cx, y + h, x, cy, isP, tau, ov), alpha, baseW, color: col });
+      strokes.push({ pts: designerLine(x, cy, cx, y, isP, tau, ov), alpha, baseW, color: col });
+    } else {
+      const cx = x + w / 2, cy = y + h / 2, rx = w / 2, ry = h / 2;
+      strokes.push({ pts: designerBezier(cx - rx, cy, cx - rx, cy - ry, cx, cy - ry, isP, tau), alpha, baseW, color: col });
+      strokes.push({ pts: designerBezier(cx, cy - ry, cx + rx, cy - ry, cx + rx, cy, isP, tau), alpha, baseW, color: col });
+      strokes.push({ pts: designerBezier(cx + rx, cy, cx + rx, cy + ry, cx, cy + ry, isP, tau), alpha, baseW, color: col });
+      strokes.push({ pts: designerBezier(cx, cy + ry, cx - rx, cy + ry, cx - rx, cy, isP, tau), alpha, baseW, color: col });
+    }
+  };
+  if (DEFAULTS.underSketch) addPass(0.0, DEFAULTS.tau * 1.15, 6.0, 0.20, 1.25);
+  addPass(DEFAULTS.isPres, DEFAULTS.tau, 2.5, 0.98, 2.1);
+  return strokes;
+}
+
+function buildShapeItem(shapeType, x, y, w, h, label = '', color = null) {
+  const col = color || currentColor;
+  return {
+    kind: 'shape', shapeType, x, y, w, h, label, styleKey: currentStyleKey,
+    color: col, strokes: buildShapeStrokes(shapeType, x, y, w, h, col), textStrokes: []
+  };
+}
+
+function buildArrowItem(x1, y1, x2, y2, color = null) {
+  const col = color || currentColor;
+  const ang = Math.atan2(y2 - y1, x2 - x1), hl = 12;
+  const strokes = [
+    { pts: designerLine(x1, y1, x2, y2, DEFAULTS.isPres, DEFAULTS.tau, 1.5), alpha: 0.96, baseW: 1.95, color: col },
+    { pts: designerLine(x2 - hl * Math.cos(ang - 0.45), y2 - hl * Math.sin(ang - 0.45), x2, y2, DEFAULTS.isPres, DEFAULTS.tau, 1.0), alpha: 0.96, baseW: 1.8, color: col },
+    { pts: designerLine(x2 - hl * Math.cos(ang + 0.45), y2 - hl * Math.sin(ang + 0.45), x2, y2, DEFAULTS.isPres, DEFAULTS.tau, 1.0), alpha: 0.96, baseW: 1.8, color: col }
+  ];
+  return {
+    kind: 'arrow', x1, y1, x2, y2,
+    x: Math.min(x1, x2) - 6, y: Math.min(y1, y2) - 6,
+    w: Math.max(18, Math.abs(x2 - x1) + 12), h: Math.max(18, Math.abs(y2 - y1) + 12),
+    color: col, strokes
+  };
+}
+
+function styleHandwritingStrokes(rawList, styleKey, color) {
+  const st = WRITING_STYLES[styleKey] || getStyle();
+  let sumY = 0, cnt = 0, minX = 1e9, maxX = -1e9;
+  for (const raw of rawList) {
+    for (const p of raw) {
+      sumY += p.y; cnt++;
+      if (p.x < minX) minX = p.x; if (p.x > maxX) maxX = p.x;
+    }
+  }
+  const midY = cnt ? sumY / cnt : 0;
+  let slope = 0;
+  if (st.hwBaselinePull > 0 && maxX - minX > 30 && cnt > 8) {
+    let sxx = 0, sxy = 0;
+    const cx = (minX + maxX) * 0.5;
+    for (const raw of rawList) {
+      for (const p of raw) {
+        const dx = p.x - cx, dy = p.y - midY;
+        sxx += dx * dx; sxy += dx * dy;
+      }
+    }
+    if (sxx > 1) slope = Math.max(-0.22, Math.min(0.22, sxy / sxx)) * st.hwBaselinePull;
+  }
+  const midX = (minX + maxX) * 0.5;
+
+  const strokes = rawList.map(raw => {
+    const simp = [raw[0]];
+    for (let i = 1; i < raw.length; i++) {
+      const prev = simp[simp.length - 1];
+      if (Math.hypot(raw[i].x - prev.x, raw[i].y - prev.y) >= st.hwMinDist) simp.push(raw[i]);
+    }
+    if (simp.length < 2) simp.push({ x: raw[0].x + 1.0, y: raw[0].y + 0.8 });
+    const basePts = simp.map(p => {
+      const yCorr = p.y - (p.x - midX) * slope;
+      return [p.x + (midY - yCorr) * st.hwSlant, yCorr];
+    });
+    const smoothed = st.hwChaikin > 0 ? chaikin(basePts, st.hwChaikin) : basePts;
+    const pts = smoothed.map(([x, y], i) => {
+      const prev = smoothed[Math.max(0, i - 1)];
+      const sp = Math.hypot(x - prev[0], y - prev[1]);
+      const t = i / Math.max(1, smoothed.length - 1);
+      const endTaper = Math.min(1, t * 7, (1 - t) * 7);
+      const p = Math.max(st.hwMinP, Math.min(0.95, (0.90 - sp * st.hwVelDrop) * (0.42 + 0.58 * endTaper)));
+      return [x, y, p];
+    });
+    return { pts, alpha: 0.96, baseW: st.hwBaseW, color };
+  });
+
+  let bMinX = 1e9, bMaxX = -1e9, bMinY = 1e9, bMaxY = -1e9;
+  for (const s of strokes) for (const [x, y] of s.pts) {
+    if (x < bMinX) bMinX = x; if (x > bMaxX) bMaxX = x;
+    if (y < bMinY) bMinY = y; if (y > bMaxY) bMaxY = y;
+  }
+  return { strokes, bbox: { x: bMinX, y: bMinY, w: Math.max(16, bMaxX - bMinX), h: Math.max(16, bMaxY - bMinY) } };
+}
+
+function buildHandwriteObject(rawList, color = null, styleKey = currentStyleKey) {
+  const col = color || currentColor;
+  const rawCopy = rawList.map(r => r.map(p => ({ x: p.x, y: p.y })));
+  const { strokes, bbox } = styleHandwritingStrokes(rawCopy, styleKey, col);
+  return { kind: 'handwrite', styleKey, color: col, rawList: rawCopy, strokes, x: bbox.x, y: bbox.y, w: bbox.w, h: bbox.h };
+}
+
+function buildFreehandObject(rawList, color = null) {
+  const col = color || currentColor;
+  const strokes = rawList.map(raw => {
+    const simp = [raw[0]];
+    for (let i = 1; i < raw.length; i++) {
+      const prev = simp[simp.length - 1];
+      if (Math.hypot(raw[i].x - prev.x, raw[i].y - prev.y) >= 3.5) simp.push(raw[i]);
+    }
+    if (simp.length < 2) simp.push({ x: raw[0].x + 1, y: raw[0].y + 1 });
+    const smoothed = chaikin(simp.map(p => [p.x, p.y]), 1);
+    const pts = smoothed.map(([x, y], i) => {
+      const prev = smoothed[Math.max(0, i - 1)];
+      const sp = Math.hypot(x - prev[0], y - prev[1]);
+      const t = i / Math.max(1, smoothed.length - 1);
+      const endTaper = Math.min(1, t * 7, (1 - t) * 7);
+      const p = Math.max(0.20, Math.min(0.94, (0.86 - sp * 0.03) * (0.40 + 0.60 * endTaper)));
+      return [x, y, p];
+    });
+    return { pts, alpha: 0.96, baseW: 2.05, color: col };
+  });
+  let minX = 1e9, maxX = -1e9, minY = 1e9, maxY = -1e9;
+  for (const s of strokes) for (const [x, y] of s.pts) {
+    if (x < minX) minX = x; if (x > maxX) maxX = x;
+    if (y < minY) minY = y; if (y > maxY) maxY = y;
+  }
+  return { kind: 'free', color: col, strokes, x: minX, y: minY, w: Math.max(16, maxX - minX), h: Math.max(16, maxY - minY) };
+}
+
+// Uniform arc-length resampling across 1..N strokes so slow pointer corners don't bias classification
+function resampleStrokesUniform(rawList, totalK = 64) {
+  const lengths = rawList.map(raw => {
+    let L = 0;
+    for (let i = 1; i < raw.length; i++) L += Math.hypot(raw[i].x - raw[i - 1].x, raw[i].y - raw[i - 1].y);
+    return Math.max(L, 1e-3);
+  });
+  const sumL = lengths.reduce((a, b) => a + b, 0);
+  const out = [];
+  rawList.forEach((raw, idx) => {
+    const k = Math.max(3, Math.round(totalK * lengths[idx] / sumL));
+    const cum = [0];
+    for (let i = 1; i < raw.length; i++) cum.push(cum[i - 1] + Math.hypot(raw[i].x - raw[i - 1].x, raw[i].y - raw[i - 1].y));
+    const L = cum[cum.length - 1] || 1;
+    let j = 0;
+    for (let m = 0; m < k; m++) {
+      const target = (m / Math.max(1, k - 1)) * L;
+      while (j < cum.length - 2 && cum[j + 1] < target) j++;
+      const span = Math.max(1e-6, cum[j + 1] - cum[j]);
+      const t = Math.max(0, Math.min(1, (target - cum[j]) / span));
+      out.push({ x: raw[j].x + (raw[j + 1].x - raw[j].x) * t, y: raw[j].y + (raw[j + 1].y - raw[j].y) * t });
+    }
+  });
+  return out;
+}
+
+function recognizeMultiStroke(rawList) {
+  const stats = rawList.map(raw => {
+    let arc = 0;
+    for (let i = 1; i < raw.length; i++) arc += Math.hypot(raw[i].x - raw[i - 1].x, raw[i].y - raw[i - 1].y);
+    const s = raw[0], e = raw[raw.length - 1];
+    const chord = Math.hypot(e.x - s.x, e.y - s.y);
+    return { raw, s, e, arc, chord, straightness: chord / Math.max(arc, 1) };
+  });
+
+  const uniPts = resampleStrokesUniform(rawList, 64);
+  let minX = 1e9, maxX = -1e9, minY = 1e9, maxY = -1e9;
+  for (const p of uniPts) {
+    if (p.x < minX) minX = p.x; if (p.x > maxX) maxX = p.x;
+    if (p.y < minY) minY = p.y; if (p.y > maxY) maxY = p.y;
+  }
+  const w = maxX - minX, h = maxY - minY, diag = Math.hypot(w, h);
+  if (diag < 26) return buildFreehandObject(rawList);
+
+  // 1. Single or multi-stroke Arrow
+  if (rawList.length <= 3) {
+    let mainIdx = 0;
+    for (let i = 1; i < stats.length; i++) if (stats[i].arc > stats[mainIdx].arc) mainIdx = i;
+    const main = stats[mainIdx];
+    if (rawList.length === 1 && main.straightness > 0.72 && main.chord > 34) {
+      return buildArrowItem(main.s.x, main.s.y, main.e.x, main.e.y);
+    }
+    if (rawList.length >= 2 && main.straightness > 0.68 && main.chord > 36) {
+      const others = stats.filter((_, i) => i !== mainIdx);
+      const nearEnd = others.every(o =>
+        o.arc < main.arc * 0.65 &&
+        Math.min(Math.hypot(o.s.x - main.e.x, o.s.y - main.e.y), Math.hypot(o.e.x - main.e.x, o.e.y - main.e.y)) < Math.max(36, main.chord * 0.4)
+      );
+      const nearStart = others.every(o =>
+        o.arc < main.arc * 0.65 &&
+        Math.min(Math.hypot(o.s.x - main.s.x, o.s.y - main.s.y), Math.hypot(o.e.x - main.s.x, o.e.y - main.s.y)) < Math.max(36, main.chord * 0.4)
+      );
+      if (nearEnd) return buildArrowItem(main.s.x, main.s.y, main.e.x, main.e.y);
+      if (nearStart) return buildArrowItem(main.e.x, main.e.y, main.s.x, main.s.y);
+    }
+  }
+
+  // 2. Closed 1-stroke or Multi-Stroke Shape (True Euclidean Radial Metric + Cornerness!)
+  const isSingleClosed = rawList.length === 1 && stats[0].chord < diag * 0.45;
+  const totalArc = stats.reduce((a, s) => a + s.arc, 0);
+  const isMultiClosed = rawList.length >= 2 && rawList.length <= 6 && totalArc > 2 * (w + h) * 0.60;
+
+  if ((isSingleClosed || isMultiClosed) && w > 28 && h > 22) {
+    const cx = (minX + maxX) / 2, cy = (minY + maxY) / 2, rx = w / 2, ry = h / 2;
+    let eErr = 0, bErr = 0, dErr = 0;
+    const radii = [];
+    for (const p of uniPts) {
+      const nx = Math.abs(p.x - cx) / rx, ny = Math.abs(p.y - cy) / ry;
+      const r = Math.hypot(nx, ny);
+      radii.push(r);
+      const invR = 1 / Math.max(r, 1e-6);
+      const ca = nx * invR, sa = ny * invR;
+      const rBox = 1 / Math.max(Math.max(ca, sa), 1e-6);
+      const rDia = 1 / Math.max(ca + sa, 1e-6);
+      eErr += Math.abs(r - 1.0);
+      bErr += Math.abs(r - rBox);
+      dErr += Math.abs(r - rDia);
+    }
+    const n = uniPts.length;
+    eErr /= n; bErr /= n; dErr /= n;
+
+    radii.sort((a, b) => a - b);
+    const p90 = radii[Math.min(n - 1, Math.floor(n * 0.90))];
+    const p15 = radii[Math.floor(n * 0.15)];
+
+    // Boxes reach deep into 4 corners (r -> 1.414); ovals hover near r=1.0; diamonds pinch near r=0.707
+    const bScore = bErr - (p90 > 1.16 ? 0.040 : -0.025);
+    const dScore = dErr - (p15 < 0.77 ? 0.025 : 0.0);
+    const eScore = eErr;
+
+    if (Math.min(eErr, bErr, dErr) < 0.28) {
+      let shapeType = 'oval';
+      if (dScore < eScore && dScore < bScore) shapeType = 'diamond';
+      else if (bScore < eScore) shapeType = 'box';
+      return buildShapeItem(shapeType, minX, minY, w, h);
+    }
+  }
+
+  return buildFreehandObject(rawList);
+}
+
+// ============================================================================
+// 5. CRUMPLED NAPKIN BALL & THROW ANIMATION (3D FACETED AFFINE-TEXTURED MESH!)
+// ============================================================================
+let crumpleRaf = null;
+
+function drawTexturedTriangle(ctx, img, u0, v0, u1, v1, u2, v2, x0, y0, x1, y1, x2, y2, shade) {
+  const denom = (u0 * (v1 - v2) + u1 * (v2 - v0) + u2 * (v0 - v1));
+  if (Math.abs(denom) < 1e-3) return;
+
+  // Slightly expand clip triangle by 0.7px from centroid to eliminate hairline seams
+  const cx = (x0 + x1 + x2) / 3, cy = (y0 + y1 + y2) / 3;
+  const ex = (x, y) => {
+    const dx = x - cx, dy = y - cy, l = Math.hypot(dx, dy) || 1;
+    return [x + (dx / l) * 0.75, y + (dy / l) * 0.75];
+  };
+  const [px0, py0] = ex(x0, y0), [px1, py1] = ex(x1, y1), [px2, py2] = ex(x2, y2);
+
+  ctx.save();
+  ctx.beginPath();
+  ctx.moveTo(px0, py0); ctx.lineTo(px1, py1); ctx.lineTo(px2, py2); ctx.closePath();
+  ctx.clip();
+
+  // Solve affine transform mapping (u,v) -> (x,y)
+  const a = (x0 * (v1 - v2) + x1 * (v2 - v0) + x2 * (v0 - v1)) / denom;
+  const b = (y0 * (v1 - v2) + y1 * (v2 - v0) + y2 * (v0 - v1)) / denom;
+  const c = (x0 * (u2 - u1) + x1 * (u0 - u2) + x2 * (u1 - u0)) / denom;
+  const d = (y0 * (u2 - u1) + y1 * (u0 - u2) + y2 * (u1 - u0)) / denom;
+  const e = (x0 * (u1 * v2 - u2 * v1) + x1 * (u2 * v0 - u0 * v2) + x2 * (u0 * v1 - u1 * v0)) / denom;
+  const f = (y0 * (u1 * v2 - u2 * v1) + y1 * (u2 * v0 - u0 * v2) + y2 * (u0 * v1 - u1 * v0)) / denom;
+
+  ctx.transform(a, b, c, d, e, f);
+  ctx.drawImage(img, 0, 0);
+  ctx.restore();
+
+  // 3D paper crease lighting overlay (warm umber shadows in folds, soft cream highlights on ridges)
+  if (Math.abs(shade) > 0.01) {
+    ctx.save();
+    ctx.beginPath();
+    ctx.moveTo(px0, py0); ctx.lineTo(px1, py1); ctx.lineTo(px2, py2); ctx.closePath();
+    ctx.fillStyle = shade > 0
+      ? `rgba(255, 249, 238, ${Math.min(0.42, shade * 0.42).toFixed(3)})`
+      : `rgba(74, 52, 28, ${Math.min(0.54, -shade * 0.54).toFixed(3)})`;
+    ctx.fill();
+    ctx.restore();
+  }
+}
+
+function clearAllWithCrumple() {
+  if (typingTarget) cancelTextBox();
+  if (pendingTimer) { clearTimeout(pendingTimer); pendingTimer = null; }
+  pendingStrokes = [];
+  selectedItem = null;
+
+  // If canvas is already blank, skip animation
+  if (!items.length) { scheduleRender(); return; }
+
+  // 1. Snapshot the current napkin + drawings before clearing!
+  render();
+  const frameRect = document.getElementById('wrap').getBoundingClientRect();
+  const snap = document.createElement('canvas');
+  snap.width = Math.max(1, Math.round(frameRect.width));
+  snap.height = Math.max(1, Math.round(frameRect.height));
+  snap.getContext('2d').drawImage(canvas, 0, 0, snap.width, snap.height);
+
+  // 2. Clear the live napkin underneath immediately so a fresh napkin is waiting!
+  items = [];
+  scheduleRender();
+
+  // 3. Prepare triangulated crumpled paper mesh (10 x 7 grid)
+  if (crumpleRaf) { cancelAnimationFrame(crumpleRaf); crumpleRaf = null; }
+  const overlay = document.getElementById('crumple-overlay');
+  const dpr = window.devicePixelRatio || 1;
+  overlay.width = Math.round(window.innerWidth * dpr);
+  overlay.height = Math.round(window.innerHeight * dpr);
+  overlay.style.display = 'block';
+  const octx = overlay.getContext('2d');
+
+  const cols = 10, rows = 7;
+  const ballR = Math.min(54, Math.min(frameRect.width, frameRect.height) * 0.13);
+  const centerX = frameRect.left + frameRect.width * 0.5;
+  const centerY = frameRect.top + frameRect.height * 0.5;
+
+  // Build vertices with deterministic organic crumpled-ball target positions & 3D z-depths
+  const verts = [];
+  for (let j = 0; j <= rows; j++) {
+    for (let i = 0; i <= cols; i++) {
+      const u = (i / cols) * snap.width;
+      const v = (j / rows) * snap.height;
+      const sx = frameRect.left + u;
+      const sy = frameRect.top + v;
+      // Angle & layered crumpled radius inside the paper ball
+      const ang = Math.atan2(sy - centerY, sx - centerX) + (Math.random() - 0.5) * 0.85;
+      const normDist = Math.hypot((i / cols) - 0.5, (j / rows) - 0.5) * 1.414;
+      const foldR = ballR * (0.28 + 0.72 * Math.pow(normDist, 0.75) * (0.68 + Math.random() * 0.45));
+      const bx = Math.cos(ang) * foldR + (Math.random() - 0.5) * ballR * 0.28;
+      const by = Math.sin(ang) * foldR + (Math.random() - 0.5) * ballR * 0.28;
+      // Random 3D height for realistic facet lighting
+      const bz = (Math.random() - 0.45) * 2.0;
+      const creaseDelay = Math.random() * 0.22; // outer corners fold slightly staggered
+      verts.push({ u, v, sx, sy, bx, by, bz, delay: creaseDelay * (1 - normDist * 0.4) });
+    }
+  }
+
+  const tris = [];
+  for (let j = 0; j < rows; j++) {
+    for (let i = 0; i < cols; i++) {
+      const a = j * (cols + 1) + i;
+      const b = a + 1;
+      const c = a + (cols + 1);
+      const d = c + 1;
+      if ((i + j) % 2 === 0) { tris.push([a, b, d]); tris.push([a, d, c]); }
+      else { tris.push([a, b, c]); tris.push([b, d, c]); }
+    }
+  }
+
+  const totalDur = 880; // ms
+  const tStart = performance.now();
+
+  function step(now) {
+    const t = Math.min(1, (now - tStart) / totalDur);
+    octx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    octx.clearRect(0, 0, window.innerWidth, window.innerHeight);
+
+    // Phase 1 (0..0.48): crumple flat napkin into 3D paper ball
+    // Phase 2 (0.48..1.0): toss paper ball in parabolic arc up & off to upper-right!
+    const cPhase = Math.min(1, t / 0.48);
+    const tossPhase = Math.max(0, (t - 0.46) / 0.54);
+
+    // Ball center position + ballistic arc + spin + distance shrink
+    const recoilY = cPhase > 0.78 && tossPhase < 0.12 ? Math.sin(((cPhase - 0.78) / 0.22) * Math.PI) * 10 : 0;
+    const tx = tossPhase * (window.innerWidth * 0.58 + 160);
+    const ty = -Math.sin(tossPhase * Math.PI * 0.85) * 220 + tossPhase * tossPhase * 90 + recoilY;
+    const ballCx = centerX + tx;
+    const ballCy = centerY + ty;
+    const spin = tossPhase * tossPhase * 7.8;
+    const scale = 1.0 - 0.72 * Math.pow(tossPhase, 1.15);
+    const alpha = tossPhase > 0.78 ? Math.max(0, 1 - (tossPhase - 0.78) / 0.22) : 1;
+
+    const cosS = Math.cos(spin), sinS = Math.sin(spin);
+
+    // Compute current screen positions & z for every vertex
+    const cur = verts.map(vt => {
+      const lc = Math.max(0, Math.min(1, (cPhase - vt.delay) / Math.max(0.1, 1 - vt.delay)));
+      // Smooth ease-in-out cubic with crisp crinkle snap
+      const ease = lc < 0.5 ? 4 * lc * lc * lc : 1 - Math.pow(-2 * lc + 2, 3) / 2;
+      const rx = (vt.bx * cosS - vt.by * sinS) * scale;
+      const ry = (vt.bx * sinS + vt.by * cosS) * scale;
+      const x = vt.sx * (1 - ease) + (ballCx + rx) * ease;
+      const y = vt.sy * (1 - ease) + (ballCy + ry) * ease;
+      return { u: vt.u, v: vt.v, x, y, z: vt.bz * ease };
+    });
+
+    // Soft cast shadow beneath crumpled ball (separates downward during throw!)
+    const shadowAlpha = (0.18 * Math.pow(cPhase, 1.5)) * (1 - tossPhase * 0.85);
+    if (shadowAlpha > 0.005) {
+      octx.save();
+      octx.fillStyle = `rgba(50, 36, 18, ${shadowAlpha.toFixed(3)})`;
+      octx.beginPath();
+      const sRad = ballR * (0.95 + (1 - cPhase) * 1.4) * scale;
+      octx.ellipse(ballCx + 10, ballCy + 18 + tossPhase * 85, sRad, sRad * 0.55, 0, 0, Math.PI * 2);
+      octx.fill();
+      octx.restore();
+    }
+
+    // Painter's algorithm: sort triangles back-to-front by average z
+    const sorted = tris.map(([i0, i1, i2]) => {
+      const p0 = cur[i0], p1 = cur[i1], p2 = cur[i2];
+      const avgZ = (p0.z + p1.z + p2.z) / 3;
+      // 3D facet normal for directional top-left lamp shading
+      const ux = p1.x - p0.x, uy = p1.y - p0.y, uz = (p1.z - p0.z) * 28;
+      const vx = p2.x - p0.x, vy = p2.y - p0.y, vz = (p2.z - p0.z) * 28;
+      const nx = uy * vz - uz * vy;
+      const ny = uz * vx - ux * vz;
+      const nz = ux * vy - uy * vx;
+      const nl = Math.hypot(nx, ny, nz) || 1;
+      // Light from upper-left (-0.5, -0.6, 0.62)
+      const dot = (nx * -0.5 + ny * -0.6 + Math.abs(nz) * 0.62) / nl;
+      const shade = (dot - 0.52) * Math.min(1, cPhase * 1.4);
+      return { p0, p1, p2, avgZ, shade };
+    }).sort((a, b) => a.avgZ - b.avgZ);
+
+    octx.save();
+    octx.globalAlpha = alpha;
+    for (const tr of sorted) {
+      drawTexturedTriangle(
+        octx, snap,
+        tr.p0.u, tr.p0.v, tr.p1.u, tr.p1.v, tr.p2.u, tr.p2.v,
+        tr.p0.x, tr.p0.y, tr.p1.x, tr.p1.y, tr.p2.x, tr.p2.y,
+        tr.shade
+      );
+    }
+    octx.restore();
+
+    if (t < 1) {
+      crumpleRaf = requestAnimationFrame(step);
+    } else {
+      overlay.style.display = 'none';
+      crumpleRaf = null;
+    }
+  }
+
+  crumpleRaf = requestAnimationFrame(step);
+}
+
+// ============================================================================
+// 6. CANVAS ENGINE: SELECT + RESIZE + DELETE + LIVE TYPING + 600ms SKETCH
+// ============================================================================
+const canvas = document.getElementById('c');
+const inlineInput = document.getElementById('inline-text');
+let tool = 'sketch';
+let items = [];
+let activeRaw = null;
+let pendingStrokes = [];
+let pendingMode = null;
+let pendingTimer = null;
+let dragShape = null;
+
+// Selection, Drag & Resize state
+let selectedItem = null;
+let hoverItem = null;
+let dragItem = null, dragOff = [0, 0], dragMoved = false;
+let resizeState = null; // { item, handle:'nw'|'ne'|'sw'|'se', origBox, origSnap }
+
+let typingTarget = null;
+let caretVisible = true;
+let caretTimer = null;
+let renderQueued = false;
+
+function scheduleRender() {
+  if (renderQueued) return;
+  renderQueued = true;
+  requestAnimationFrame(() => { renderQueued = false; render(); });
+}
+
+function flushPendingNow() {
+  if (pendingTimer) { clearTimeout(pendingTimer); pendingTimer = null; }
+  if (!pendingStrokes.length) return;
+  const batch = pendingStrokes;
+  const mode = pendingMode || tool;
+  pendingStrokes = [];
+  pendingMode = null;
+  if (mode === 'handwrite') items.push(buildHandwriteObject(batch));
+  else items.push(recognizeMultiStroke(batch));
+  scheduleRender();
+}
+
+function setTool(t) {
+  flushPendingNow();
+  tool = t;
+  hoverItem = null;
+  if (t !== 'move') selectedItem = null;
+  document.querySelectorAll('button.tool-btn[id^="t-"]').forEach(b => b.classList.remove('active'));
+  const btn = document.getElementById('t-' + t);
+  if (btn) btn.classList.add('active');
+  canvas.style.cursor = t === 'move' ? 'default' : (t === 'text' ? 'text' : 'crosshair');
+  scheduleRender();
+}
+
+function getResizeHandles(it) {
+  const pad = 5;
+  return [
+    { id: 'nw', x: it.x - pad,        y: it.y - pad,        cursor: 'nwse-resize' },
+    { id: 'ne', x: it.x + it.w + pad, y: it.y - pad,        cursor: 'nesw-resize' },
+    { id: 'sw', x: it.x - pad,        y: it.y + it.h + pad, cursor: 'nesw-resize' },
+    { id: 'se', x: it.x + it.w + pad, y: it.y + it.h + pad, cursor: 'nwse-resize' }
+  ];
+}
+
+function hitResizeHandle(it, px, py) {
+  if (!it) return null;
+  for (const h of getResizeHandles(it)) {
+    if (Math.abs(px - h.x) <= 7 && Math.abs(py - h.y) <= 7) return h;
+  }
+  return null;
+}
+
+function snapshotItemGeometry(it) {
+  return {
+    x: it.x, y: it.y, w: it.w, h: it.h,
+    x1: it.x1, y1: it.y1, x2: it.x2, y2: it.y2,
+    anchorX: it.anchorX, anchorY: it.anchorY,
+    strokes: it.strokes.map(s => s.pts.map(p => [p[0], p[1], p[2]])),
+    textStrokes: it.textStrokes ? it.textStrokes.map(s => s.pts.map(p => [p[0], p[1], p[2]])) : null,
+    rawList: it.rawList ? it.rawList.map(r => r.map(p => ({ x: p.x, y: p.y }))) : null
+  };
+}
+
+function applyLiveResize(it, snap, newX, newY, newW, newH) {
+  const sx = newW / Math.max(1, snap.w);
+  const sy = newH / Math.max(1, snap.h);
+  const mapX = x => newX + (x - snap.x) * sx;
+  const mapY = y => newY + (y - snap.y) * sy;
+
+  it.x = newX; it.y = newY; it.w = newW; it.h = newH;
+  it.strokes.forEach((s, si) => {
+    const orig = snap.strokes[si];
+    for (let i = 0; i < orig.length; i++) {
+      s.pts[i][0] = mapX(orig[i][0]);
+      s.pts[i][1] = mapY(orig[i][1]);
+    }
+  });
+  if (it.textStrokes && snap.textStrokes) {
+    it.textStrokes.forEach((s, si) => {
+      const orig = snap.textStrokes[si];
+      for (let i = 0; i < orig.length; i++) {
+        s.pts[i][0] = mapX(orig[i][0]);
+        s.pts[i][1] = mapY(orig[i][1]);
+      }
+    });
+  }
+  if (it.rawList && snap.rawList) {
+    it.rawList.forEach((r, ri) => {
+      const orig = snap.rawList[ri];
+      for (let i = 0; i < orig.length; i++) {
+        r[i].x = mapX(orig[i].x);
+        r[i].y = mapY(orig[i].y);
+      }
+    });
+  }
+  if (snap.anchorX !== undefined) {
+    it.anchorX = mapX(snap.anchorX);
+    it.anchorY = mapY(snap.anchorY);
+  }
+  if (snap.x1 !== undefined) {
+    it.x1 = mapX(snap.x1); it.y1 = mapY(snap.y1);
+    it.x2 = mapX(snap.x2); it.y2 = mapY(snap.y2);
+  }
+}
+
+function finalizeResize(it) {
+  if (it.kind === 'shape') {
+    // Re-generate crisp OpenSketch designer strokes at new dimensions
+    it.strokes = buildShapeStrokes(it.shapeType, it.x, it.y, it.w, it.h, it.color);
+    // Re-layout cached cursive label cleanly inside the resized shape (0ms via wordCache!)
+    if (it.label) {
+      const maxW = it.shapeType === 'diamond' ? it.w * 0.62 : it.w * 0.84;
+      const targetH = Math.min(34, Math.max(16, it.h * 0.48));
+      synthesizeCursiveStreaming(it.label, it.x + it.w / 2, it.y + it.h / 2, targetH, maxW, it.color, it, null, it.styleKey || currentStyleKey, 'center');
+    }
+  } else if (it.kind === 'arrow' && it.x1 !== undefined) {
+    const fresh = buildArrowItem(it.x1, it.y1, it.x2, it.y2, it.color);
+    it.strokes = fresh.strokes;
+    it.x = fresh.x; it.y = fresh.y; it.w = fresh.w; it.h = fresh.h;
+  }
+}
+
+function drawPStroke(ctx, pts, baseW, color, alphaScale) {
+  if (!pts || pts.length < 2) return;
+  ctx.save();
+  ctx.globalCompositeOperation = 'multiply';
+  ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.strokeStyle = color;
+  for (let i = 1; i < pts.length; i++) {
+    const [x0, y0, p0] = pts[i - 1], [x1, y1, p1] = pts[i];
+    const p = (p0 + p1) * 0.5;
+    ctx.lineWidth = Math.max(0.5, baseW * (0.28 + 1.12 * p));
+    ctx.globalAlpha = Math.min(0.96, (0.46 + 0.52 * p) * alphaScale);
+    ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke();
+  }
+  ctx.restore();
+}
+
+function drawRawPreview(ctx, rawPts, color) {
+  if (!rawPts || rawPts.length < 2) return;
+  ctx.save();
+  ctx.globalCompositeOperation = 'multiply';
+  ctx.strokeStyle = color; ctx.lineWidth = 1.9; ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.globalAlpha = 0.62;
+  ctx.beginPath(); ctx.moveTo(rawPts[0].x, rawPts[0].y);
+  for (let i = 1; i < rawPts.length; i++) ctx.lineTo(rawPts[i].x, rawPts[i].y);
+  ctx.stroke();
+  ctx.restore();
+}
+
+function render() {
+  const r = canvas.getBoundingClientRect();
+  const dpr = window.devicePixelRatio || 1;
+  const cw = Math.round(r.width * dpr), ch = Math.round(r.height * dpr);
+  if (canvas.width !== cw || canvas.height !== ch) { canvas.width = cw; canvas.height = ch; }
+  const ctx = canvas.getContext('2d');
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+  drawNapkinBackground(ctx, r.width, r.height);
+
+  for (const it of items) {
+    for (const s of it.strokes) drawPStroke(ctx, s.pts, s.baseW, s.color, s.alpha);
+    if (it.textStrokes) for (const s of it.textStrokes) drawPStroke(ctx, s.pts, s.baseW, s.color, s.alpha);
+  }
+
+  // Blinking ink caret directly on napkin while typing live
+  if (typingTarget && caretVisible) {
+    let cx = typingTarget.x, cy = typingTarget.y, chH = 26, col = currentColor;
+    if (typingTarget.shapeRef) {
+      const sh = typingTarget.shapeRef;
+      col = sh.color; cy = sh.y + sh.h / 2;
+      if (sh.textStrokes && sh.textStrokes.length) {
+        let maxX = sh.x + sh.w / 2;
+        for (const s of sh.textStrokes) for (const pt of s.pts) if (pt[0] > maxX) maxX = pt[0];
+        cx = maxX + 5;
+      } else cx = sh.x + sh.w / 2;
+      chH = Math.min(26, sh.h * 0.48);
+    } else if (typingTarget.textItem) {
+      const ti = typingTarget.textItem;
+      col = ti.color; cy = ti.anchorY;
+      cx = (ti.strokes && ti.strokes.length) ? (ti.x + ti.w + 6) : ti.anchorX;
+      chH = 28;
+    }
+    ctx.save();
+    ctx.strokeStyle = col; ctx.globalAlpha = 0.72; ctx.lineWidth = 1.6; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(cx, cy - chH * 0.5); ctx.lineTo(cx, cy + chH * 0.5); ctx.stroke();
+    ctx.restore();
+  }
+
+  // Selection box + 4 corner resize handles (in Select/Move mode)
+  if (tool === 'move' && hoverItem && hoverItem !== selectedItem && !dragItem && !resizeState) {
+    ctx.save();
+    ctx.strokeStyle = 'rgba(35, 32, 28, 0.25)'; ctx.lineWidth = 1; ctx.setLineDash([4, 3]);
+    ctx.strokeRect(hoverItem.x - 5, hoverItem.y - 5, hoverItem.w + 10, hoverItem.h + 10);
+    ctx.restore();
+  }
+  if (selectedItem && items.includes(selectedItem)) {
+    ctx.save();
+    ctx.strokeStyle = 'rgba(35, 32, 28, 0.58)'; ctx.lineWidth = 1.1; ctx.setLineDash([4, 3]);
+    ctx.strokeRect(selectedItem.x - 5, selectedItem.y - 5, selectedItem.w + 10, selectedItem.h + 10);
+    ctx.setLineDash([]);
+    for (const h of getResizeHandles(selectedItem)) {
+      ctx.fillStyle = '#f8f3ea';
+      ctx.strokeStyle = '#23201c';
+      ctx.lineWidth = 1.4;
+      ctx.fillRect(h.x - 3.5, h.y - 3.5, 7, 7);
+      ctx.strokeRect(h.x - 3.5, h.y - 3.5, 7, 7);
+    }
+    ctx.restore();
+  }
+
+  for (const ps of pendingStrokes) drawRawPreview(ctx, ps, currentColor);
+  if (activeRaw) drawRawPreview(ctx, activeRaw, currentColor);
+
+  if (dragShape && dragShape.cur) {
+    const x1 = dragShape.x, y1 = dragShape.y, x2 = dragShape.cur.x, y2 = dragShape.cur.y;
+    const x = Math.min(x1, x2), y = Math.min(y1, y2), w = Math.abs(x2 - x1), h = Math.abs(y2 - y1);
+    ctx.save();
+    ctx.strokeStyle = currentColor; ctx.globalAlpha = 0.55; ctx.setLineDash([5, 4]); ctx.lineWidth = 1.4;
+    if (tool === 'arrow') { ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke(); }
+    else if (tool === 'oval') { ctx.beginPath(); ctx.ellipse(x + w / 2, y + h / 2, w / 2, h / 2, 0, 0, Math.PI * 2); ctx.stroke(); }
+    else if (tool === 'diamond') {
+      ctx.beginPath();
+      ctx.moveTo(x + w / 2, y); ctx.lineTo(x + w, y + h / 2);
+      ctx.lineTo(x + w / 2, y + h); ctx.lineTo(x, y + h / 2); ctx.closePath(); ctx.stroke();
+    } else ctx.strokeRect(x, y, w, h);
+    ctx.restore();
+  }
+}
+
+function stopCaretBlink() {
+  if (caretTimer) { clearInterval(caretTimer); caretTimer = null; }
+}
+
+function openTextBox(x, y, shapeRef = null, existingTextItem = null) {
+  flushPendingNow();
+  stopCaretBlink();
+  selectedItem = null;
+  let textItem = existingTextItem;
+  let wasNew = false;
+  let snapshot = null;
+
+  if (shapeRef) {
+    snapshot = {
+      text: shapeRef.label || '',
+      strokes: shapeRef.textStrokes ? shapeRef.textStrokes.slice() : [],
+      cache: shapeRef.wordCache ? shapeRef.wordCache.slice() : [],
+      cacheStyle: shapeRef.wordCacheStyle
+    };
+  } else if (existingTextItem) {
+    snapshot = {
+      text: existingTextItem.text || '',
+      strokes: existingTextItem.strokes ? existingTextItem.strokes.slice() : [],
+      cache: existingTextItem.wordCache ? existingTextItem.wordCache.slice() : [],
+      cacheStyle: existingTextItem.wordCacheStyle
+    };
+  } else {
+    wasNew = true;
+    textItem = {
+      kind: 'text', text: '', styleKey: currentStyleKey,
+      anchorX: x, anchorY: y,
+      x, y: y - 16, w: 20, h: 32,
+      color: currentColor, strokes: [], wordCache: [], wordCacheStyle: currentStyleKey
+    };
+    items.push(textItem);
+  }
+
+  typingTarget = { x, y, shapeRef, textItem, wasNew, snapshot, openedAt: performance.now() };
+
+  const r = canvas.getBoundingClientRect();
+  const pillX = shapeRef ? (shapeRef.x + shapeRef.w / 2 - 75) : (textItem.anchorX - 8);
+  const pillY = shapeRef ? (shapeRef.y + shapeRef.h + 8) : (textItem.anchorY + 26);
+  inlineInput.style.left = Math.max(10, Math.min(r.width - 175, pillX)) + 'px';
+  inlineInput.style.top = Math.max(10, Math.min(r.height - 36, pillY)) + 'px';
+  inlineInput.style.display = 'block';
+  inlineInput.value = shapeRef ? (shapeRef.label || '') : (textItem.text || '');
+  inlineInput.focus();
+  requestAnimationFrame(() => {
+    if (!typingTarget) return;
+    inlineInput.focus();
+    inlineInput.setSelectionRange(inlineInput.value.length, inlineInput.value.length);
+  });
+
+  caretVisible = true;
+  caretTimer = setInterval(() => { caretVisible = !caretVisible; scheduleRender(); }, 530);
+  scheduleRender();
+}
+
+function onLiveTextInput() {
+  if (!typingTarget) return;
+  caretVisible = true;
+  const val = inlineInput.value;
+  if (typingTarget.shapeRef) {
+    const it = typingTarget.shapeRef;
+    it.label = val;
+    it.styleKey = currentStyleKey;
+    const maxW = it.shapeType === 'diamond' ? it.w * 0.62 : it.w * 0.84;
+    const targetH = Math.min(30, Math.max(18, it.h * 0.48));
+    synthesizeCursiveStreaming(val, it.x + it.w / 2, it.y + it.h / 2, targetH, maxW, it.color, it, null, currentStyleKey, 'center');
+  } else if (typingTarget.textItem) {
+    const ti = typingTarget.textItem;
+    ti.text = val;
+    ti.styleKey = currentStyleKey;
+    synthesizeCursiveStreaming(val, ti.anchorX, ti.anchorY, 32, 640, ti.color, null, ti, currentStyleKey, 'left');
+  }
+}
+
+function commitTextBox() {
+  if (!typingTarget) return;
+  const tgt = typingTarget;
+  typingTarget = null;
+  stopCaretBlink();
+  const val = inlineInput.value.trim();
+  inlineInput.style.display = 'none';
+
+  if (!val) {
+    if (tgt.shapeRef) { tgt.shapeRef.label = ''; tgt.shapeRef.textStrokes = []; tgt.shapeRef.wordCache = []; }
+    else if (tgt.textItem) { const idx = items.indexOf(tgt.textItem); if (idx !== -1) items.splice(idx, 1); }
+  } else if (tgt.shapeRef) tgt.shapeRef.label = val;
+  else if (tgt.textItem) tgt.textItem.text = val;
+  scheduleRender();
+}
+
+function cancelTextBox() {
+  if (!typingTarget) return;
+  const tgt = typingTarget;
+  typingTarget = null;
+  stopCaretBlink();
+  inlineInput.style.display = 'none';
+
+  if (tgt.wasNew && tgt.textItem) {
+    tgt.textItem.latestReqId = ++reqCounter;
+    const idx = items.indexOf(tgt.textItem);
+    if (idx !== -1) items.splice(idx, 1);
+  } else if (tgt.snapshot) {
+    const owner = tgt.shapeRef || tgt.textItem;
+    owner.latestReqId = ++reqCounter;
+    if (tgt.shapeRef) { tgt.shapeRef.label = tgt.snapshot.text; tgt.shapeRef.textStrokes = tgt.snapshot.strokes; }
+    else if (tgt.textItem) { tgt.textItem.text = tgt.snapshot.text; tgt.textItem.strokes = tgt.snapshot.strokes; }
+    owner.wordCache = tgt.snapshot.cache;
+    owner.wordCacheStyle = tgt.snapshot.cacheStyle;
+  }
+  scheduleRender();
+}
+
+inlineInput.addEventListener('input', onLiveTextInput);
+inlineInput.addEventListener('keydown', e => {
+  if (e.key === 'Enter') { e.preventDefault(); commitTextBox(); }
+  if (e.key === 'Escape') { e.preventDefault(); cancelTextBox(); }
+});
+inlineInput.addEventListener('blur', () => {
+  if (typingTarget && (performance.now() - typingTarget.openedAt) < 160) {
+    inlineInput.focus();
+    return;
+  }
+  commitTextBox();
+});
+
+function getPos(e) {
+  const r = canvas.getBoundingClientRect();
+  return { x: e.clientX - r.left, y: e.clientY - r.top };
+}
+function hitItem(x, y) {
+  for (let i = items.length - 1; i >= 0; i--) {
+    const it = items[i];
+    if (x >= it.x - 8 && x <= it.x + it.w + 8 && y >= it.y - 8 && y <= it.y + it.h + 8) return it;
+  }
+  return null;
+}
+
+canvas.addEventListener('pointerdown', e => {
+  if (typingTarget) { commitTextBox(); return; }
+  const p = getPos(e);
+
+  if (tool === 'text') {
+    e.preventDefault();
+    const hit = hitItem(p.x, p.y);
+    if (hit && hit.kind === 'shape') openTextBox(hit.x + hit.w / 2, hit.y + hit.h / 2, hit, null);
+    else if (hit && hit.kind === 'text') openTextBox(hit.anchorX ?? hit.x, hit.anchorY ?? (hit.y + hit.h / 2), null, hit);
+    else openTextBox(p.x, p.y, null, null);
+    return;
+  }
+
+  canvas.setPointerCapture(e.pointerId);
+
+  if (tool === 'move') {
+    // 1. Check resize handles on currently selected item FIRST!
+    if (selectedItem) {
+      const h = hitResizeHandle(selectedItem, p.x, p.y);
+      if (h) {
+        resizeState = { item: selectedItem, handle: h.id, snap: snapshotItemGeometry(selectedItem) };
+        canvas.style.cursor = h.cursor;
+        scheduleRender();
+        return;
+      }
+    }
+    // 2. Hit-test objects to select / drag
+    const hit = hitItem(p.x, p.y);
+    selectedItem = hit;
+    if (hit) {
+      dragItem = hit;
+      dragOff = [p.x, p.y];
+      dragMoved = false;
+      canvas.style.cursor = 'grabbing';
+    }
+    scheduleRender();
+    return;
+  }
+
+  if (tool === 'box' || tool === 'oval' || tool === 'diamond' || tool === 'arrow') {
+    flushPendingNow();
+    dragShape = { x: p.x, y: p.y, cur: p };
+    scheduleRender();
+    return;
+  }
+
+  if (pendingTimer) { clearTimeout(pendingTimer); pendingTimer = null; }
+  pendingMode = tool;
+  activeRaw = [p];
+  scheduleRender();
+});
+
+canvas.addEventListener('pointermove', e => {
+  const p = getPos(e);
+
+  if (resizeState) {
+    const { item, handle, snap } = resizeState;
+    const minW = 28, minH = 22;
+    let x = snap.x, y = snap.y, w = snap.w, h = snap.h;
+    const right = snap.x + snap.w, bottom = snap.y + snap.h;
+    if (handle.includes('e')) w = Math.max(minW, p.x - snap.x);
+    if (handle.includes('s')) h = Math.max(minH, p.y - snap.y);
+    if (handle.includes('w')) { x = Math.min(right - minW, p.x); w = right - x; }
+    if (handle.includes('n')) { y = Math.min(bottom - minH, p.y); h = bottom - y; }
+    applyLiveResize(item, snap, x, y, w, h);
+    scheduleRender();
+    return;
+  }
+
+  if (dragItem) {
+    const dx = p.x - dragOff[0], dy = p.y - dragOff[1];
+    if (Math.hypot(dx, dy) > 1.5) dragMoved = true;
+    dragOff = [p.x, p.y];
+    dragItem.x += dx; dragItem.y += dy;
+    if (dragItem.anchorX !== undefined) { dragItem.anchorX += dx; dragItem.anchorY += dy; }
+    if (dragItem.x1 !== undefined) { dragItem.x1 += dx; dragItem.y1 += dy; dragItem.x2 += dx; dragItem.y2 += dy; }
+    const shift = s => { for (const pt of s.pts) { pt[0] += dx; pt[1] += dy; } };
+    dragItem.strokes.forEach(shift);
+    if (dragItem.textStrokes) dragItem.textStrokes.forEach(shift);
+    if (dragItem.rawList) for (const r of dragItem.rawList) for (const pt of r) { pt.x += dx; pt.y += dy; }
+    scheduleRender();
+    return;
+  }
+
+  if (tool === 'move') {
+    const rh = hitResizeHandle(selectedItem, p.x, p.y);
+    if (rh) { canvas.style.cursor = rh.cursor; return; }
+    const h = hitItem(p.x, p.y);
+    canvas.style.cursor = h ? 'grab' : 'default';
+    if (h !== hoverItem) { hoverItem = h; scheduleRender(); }
+    return;
+  }
+
+  if (dragShape) { dragShape.cur = p; scheduleRender(); return; }
+  if (activeRaw) { activeRaw.push(p); scheduleRender(); }
+});
+
+canvas.addEventListener('pointerup', e => {
+  const p = getPos(e);
+
+  if (resizeState) {
+    const it = resizeState.item;
+    resizeState = null;
+    finalizeResize(it);
+    canvas.style.cursor = 'default';
+    scheduleRender();
+    return;
+  }
+
+  if (dragItem) {
+    dragItem = null;
+    canvas.style.cursor = 'grab';
+    scheduleRender();
+    return;
+  }
+
+  if (dragShape && dragShape.cur) {
+    const x1 = dragShape.x, y1 = dragShape.y, x2 = dragShape.cur.x, y2 = dragShape.cur.y;
+    dragShape = null;
+    const dist = Math.hypot(x2 - x1, y2 - y1);
+    if (dist < 5) {
+      const hit = hitItem(p.x, p.y);
+      if (hit && hit.kind === 'shape') openTextBox(hit.x + hit.w / 2, hit.y + hit.h / 2, hit, null);
+      else if (hit && hit.kind === 'text') openTextBox(hit.anchorX ?? hit.x, hit.anchorY ?? (hit.y + hit.h / 2), null, hit);
+      else openTextBox(p.x, p.y, null, null);
+    } else if (tool === 'arrow' && dist > 16) {
+      items.push(buildArrowItem(x1, y1, x2, y2));
+    } else if (Math.abs(x2 - x1) > 18 && Math.abs(y2 - y1) > 14) {
+      items.push(buildShapeItem(tool, Math.min(x1, x2), Math.min(y1, y2), Math.abs(x2 - x1), Math.abs(y2 - y1)));
+    }
+    scheduleRender();
+    return;
+  }
+
+  if (activeRaw) {
+    const pts = activeRaw;
+    activeRaw = null;
+    let arc = 0;
+    for (let i = 1; i < pts.length; i++) arc += Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y);
+
+    if (pendingMode === 'sketch' && !pendingStrokes.length && arc < 5) {
+      pendingMode = null;
+      const hit = hitItem(p.x, p.y);
+      if (hit && hit.kind === 'shape') openTextBox(hit.x + hit.w / 2, hit.y + hit.h / 2, hit, null);
+      else if (hit && hit.kind === 'text') openTextBox(hit.anchorX ?? hit.x, hit.anchorY ?? (hit.y + hit.h / 2), null, hit);
+      else openTextBox(p.x, p.y, null, null);
+      scheduleRender();
+      return;
+    }
+
+    if (pts.length >= 2 || pendingMode === 'handwrite') {
+      pendingStrokes.push(pts.length >= 2 ? pts : [pts[0], { x: pts[0].x + 0.8, y: pts[0].y + 0.8 }]);
+      pendingTimer = setTimeout(flushPendingNow, DEFAULTS.debounceMs);
+    }
+    scheduleRender();
+  }
+});
+
+// Double-click in Select mode edits a shape's label or text object
+canvas.addEventListener('dblclick', e => {
+  if (tool !== 'move') return;
+  const p = getPos(e), hit = hitItem(p.x, p.y);
+  if (hit && hit.kind === 'shape') openTextBox(hit.x + hit.w / 2, hit.y + hit.h / 2, hit, null);
+  else if (hit && hit.kind === 'text') openTextBox(hit.anchorX ?? hit.x, hit.anchorY ?? (hit.y + hit.h / 2), null, hit);
+});
+
+// Keyboard shortcuts: Backspace/Delete deletes selected item; tool hotkeys; Ctrl/Cmd+Z undo
+window.addEventListener('keydown', e => {
+  if (typingTarget) return;
+  if ((e.key === 'Backspace' || e.key === 'Delete') && selectedItem) {
+    e.preventDefault();
+    const idx = items.indexOf(selectedItem);
+    if (idx !== -1) items.splice(idx, 1);
+    selectedItem = null;
+    hoverItem = null;
+    scheduleRender();
+    return;
+  }
+  if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); undo(); return; }
+  const k = e.key.toLowerCase();
+  if (k === 's') setTool('sketch');
+  else if (k === 'h') setTool('handwrite');
+  else if (k === 't') setTool('text');
+  else if (k === 'b') setTool('box');
+  else if (k === 'o') setTool('oval');
+  else if (k === 'd') setTool('diamond');
+  else if (k === 'a') setTool('arrow');
+  else if (k === 'v' || k === 'm') setTool('move');
+});
+
+function undo() {
+  if (pendingStrokes.length) {
+    pendingStrokes.pop();
+    if (!pendingStrokes.length && pendingTimer) { clearTimeout(pendingTimer); pendingTimer = null; }
+  } else {
+    const removed = items.pop();
+    if (removed === selectedItem) selectedItem = null;
+  }
+  scheduleRender();
+}
+
+function exportSVG() {
+  flushPendingNow();
+  const r = canvas.getBoundingClientRect();
+  const lines = [`<rect width="${r.width.toFixed(0)}" height="${r.height.toFixed(0)}" fill="#e7dbc6"/>`];
+  const emit = s => {
+    for (let i = 1; i < s.pts.length; i++) {
+      const [x0, y0, p0] = s.pts[i - 1], [x1, y1, p1] = s.pts[i];
+      const p = (p0 + p1) * 0.5;
+      lines.push(`<line x1="${x0.toFixed(1)}" y1="${y0.toFixed(1)}" x2="${x1.toFixed(1)}" y2="${y1.toFixed(1)}" stroke="${s.color}" stroke-width="${(s.baseW * (0.28 + 1.12 * p)).toFixed(2)}" stroke-opacity="${((0.46 + 0.52 * p) * s.alpha).toFixed(2)}" stroke-linecap="round"/>`);
+    }
+  };
+  for (const it of items) { it.strokes.forEach(emit); if (it.textStrokes) it.textStrokes.forEach(emit); }
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${r.width.toFixed(0)} ${r.height.toFixed(0)}">${lines.join('')}</svg>`], { type: 'image/svg+xml' }));
+  a.download = 'napkin-sketch-v7.svg'; a.click();
+}
+
+async function loadStarterScene() {
+  const r = canvas.getBoundingClientRect();
+  const ox = Math.max(40, (r.width - 560) * 0.5);
+  const oy = Math.max(36, (r.height - 290) * 0.45);
+  const s1 = buildShapeItem('oval', ox + 20, oy, 185, 62, 'Raw Idea');
+  const a1 = buildArrowItem(ox + 112, oy + 66, ox + 112, oy + 116);
+  const s2 = buildShapeItem('box', ox, oy + 122, 228, 66, 'Sketch on Napkin');
+  const a2 = buildArrowItem(ox + 234, oy + 155, ox + 324, oy + 155);
+  const s3 = buildShapeItem('diamond', ox + 332, oy + 112, 178, 86, 'Clear?');
+  items = [s1, a1, s2, a2, s3];
+  scheduleRender();
+  await Promise.all([
+    synthesizeCursiveStreaming(s1.label, s1.x + s1.w / 2, s1.y + s1.h / 2, 28, s1.w * 0.82, s1.color, s1, null),
+    synthesizeCursiveStreaming(s2.label, s2.x + s2.w / 2, s2.y + s2.h / 2, 28, s2.w * 0.84, s2.color, s2, null),
+    synthesizeCursiveStreaming(s3.label, s3.x + s3.w / 2, s3.y + s3.h / 2, 26, s3.w * 0.62, s3.color, s3, null)
+  ]);
+}
+
+window.addEventListener('resize', scheduleRender);
+
+// Frame-1 instant kraft napkin render + background cached model loading
+scheduleRender();
+cachedFetchJSON('../exports/opensketch_residual_vae.json').then(j => {
+  VAE = j;
+  loadStarterScene();
+});
+initWasmPool();
+</script>
+</body>
+</html>
