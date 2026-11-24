@@ -1,32 +1,17 @@
 # Napkin
 
-Back of the napkin sketch for your next big idea, with creativity boost from a café drink menu!
+Back-of-the-napkin sketching for your next big idea—with organic hand-drawn shapes, streaming cursive handwriting, realistic pens, and a café drink menu.
 
 ![Napkin Sketch 8x Demo](docs/napkin_demo.gif)
 
-## Quick Start
-
-No Python ML libraries, build steps, or GPU required—serve the repository locally and open the app:
-
-```bash
-python3 -m http.server 8765
-```
-
-Then open **`http://localhost:8765/`** (or **`http://localhost:8765/index.html`**) in your browser.
-
-![Napkin Sketch Interface](docs/v9.webp)
-
 ## Features
 
-- **Smart Sketch (`S`) & Live Dynamic Shapes (`B`, `O`, `D`, `A`):** Freehand single- or multi-stroke drawings (600 ms debounce, 97.2% circle/box/diamond accuracy) auto-beautify into organic shapes and arrows using a 21k-param OpenSketch `(dx, dy, pressure)` Residual VAE with construction under-sketches. Dragging explicit shape or arrow tools renders deterministic hand-drawn ink dynamically as you draw—no dashed preview boxes and zero jump on release.
-- **Direct Handwrite (`H`) & Live On-Napkin Typing (`T`):** Single-click anywhere on the napkin or inside any shape to type directly on the paper without a floating input box. Hand-written `4.9 KB` WebAssembly SIMD128 (`graves_v5.wasm`) streams cursive words in parallel Web Workers (`~30–55 ms`) with per-word caching across 4 writing styles (_Clean Upright_, _Designer Cursive_, _Crisp Print_, _Fast Journal_).
-- **Combined Pen & Handwriting Style Menu:** Declarative Popover + Invoker Commands picker pairing 5 photo-segmented top-down pens (_Ballpoint Pen_, _2B Graphite Pencil_, _Felt-Tip Marker_, _Fountain Nib_, _0.5mm Mechanical_)—each with node-free single-fill ink ribbons and matched velocity-sensitive Web Audio foley—alongside live WASM-synthesized handwriting preview cards.
-- **Café Drink Menu & Unclipped 3× Interactive Mug:** Starts drink-free with a prominent **Menu** button (_"Get caffeinated for better ideas"_). Order _Coffee Latte_, _Black Coffee_, _Ceremonial Matcha_, or _Matcha Latte_ (replaces any existing drink). The 3× top-down cup renders on an unclipped full-stage overlay so the mug and handle overhang napkin edges naturally onto the café table. Click to drink (lifted off-napkin with decreasing volume `100% → 65% → 30% → 5%` and direct `0% → 100%` refill when empty), or press-and-hold to lift, move, and rotate with rigid-body torque.
-- **Smooth Programmatic Stains & Companion Audio:** Continuous-ribbon capillary cup rings plus randomly placed drips and multi-drop trails across the napkin (gated on drawing interaction or repeated mug moves) pair with a single toolbar Sound On/Off toggle driving velocity-matched pen audio, ceramic mug set-down foley, probabilistic brainstorming vocals (_ooo_, _aha_, _hmm_, _mm_, _eureka_, _oops_ on drips), and an exasperated grunt on non-empty sheet crumples.
-- **Random Starter Diagrams:** Refreshes load one of 10 lighthearted, abstract café-napkin diagrams (_Billion Dollar Plan_, _Coffee Loop_, _Weekend Plan_, _Cat Logic_, _Brainstorm Funnel_, etc.) without repeating back-to-back.
-- **Select, Move, Resize & Delete (`V`):** Drag any shape, arrow, handwritten burst, or text block, resize via 4 corner handles (regenerating crisp OpenSketch strokes on release), double-click to edit labels, or press `Backspace`/`Delete` to remove.
-- **Procedurally Unique Paper Napkins & Staged 3D Crumple Toss:** Every fresh sheet has its own warm kraft/ecru/linen tone, seamless embossed texture (`dimple`, `linen`, `diamond`, `pinpoint`), embossed café border, tilted quarter-folds, corner creases, and natural pulp flecks. Clicking the trash icon first lifts any drink completely off the napkin, then crumples the sheet into a 3D faceted paper ball synced to `web/crumble.mp3`, tosses it off-screen, and sets the mug back down onto a fresh sheet.
-- **Export (`Save`):** Download either a **2× HiDPI PNG** or an **editable Vector SVG**—both preserving the full textured napkin background, dried drink stains, and node-free `multiply`-blended ink.
+- **Smart Sketch (`S`) & Shape Tools (`B`, `O`, `D`, `A`):** Sketch rough shapes freehand and let them auto-beautify into clean hand-drawn boxes, circles, diamonds, and arrows—or use the explicit shape and arrow tools to draw them directly.
+- **Handwriting (`H`) & On-Napkin Typing (`T`):** Click anywhere on the napkin or inside a shape to type directly onto the paper in real-time cursive across 4 styles (_Clean Upright_, _Designer Cursive_, _Crisp Print_, _Fast Journal_).
+- **5 Pens & Sound Effects:** Switch between _Ballpoint Pen_, _2B Graphite Pencil_, _Felt-Tip Marker_, _Fountain Pen_, and _0.5mm Mechanical_ in the pen/style menu, with velocity-matched paper foley and an optional toolbar sound toggle.
+- **Café Drink Menu & Interactive Mug:** Open **Menu** to order _Coffee Latte_, _Black Coffee_, _Ceremonial Matcha_, or _Matcha Latte_. Click the mug to take a sip (or refill when empty), or press-and-hold to move and rotate it around the napkin and table—leaving occasional cup rings and drips.
+- **Select, Edit & Starter Diagrams (`V`):** Move or resize any shape, arrow, or text block, double-click to edit labels, or refresh for a new randomized starter diagram on a procedurally textured paper napkin.
+- **Crumple & Export:** Toss finished sheets away with a 3D crumple animation, or click **Save** to export a **2× PNG** or **Vector SVG** with the paper texture, stains, and ink intact.
 
 ## Keyboard Shortcuts
 
@@ -39,30 +24,70 @@ Then open **`http://localhost:8765/`** (or **`http://localhost:8765/index.html`*
 | `Ctrl+Z` / `Cmd+Z`     | Undo                         |
 | `Enter` / `Escape`     | Commit / Cancel active text  |
 
-## Architecture & Files
+## Development
 
-| Component                      | Files                                                                                                                                                                                                | Details                                                                                                                                                                                                |
-| :----------------------------- | :--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | :----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Latest App**                 | `index.html`, `web/hw_worker_v5.js`, `web/crumble.mp3`                                                                                                                                               | Root single-file HTML/Canvas/Web Audio app (promoted from `v9`) with unclipped cup overlay, declarative Popover menus, parallel Web Worker pool, and Cache API asset persistence.                      |
-| **Companion SFX & VFX Assets** | `web/sfx/*.mp3` (14 clips), `docs/vfx/cups/*.webp` (16 sprites), `docs/vfx/pens/*.webp` (5 sprites)                                                                                                  | Curated ElevenLabs vocal/foley clips plus Gemini + SAM 3.1 segmented transparent top-down drink (4 drinks × 4 volumes) and pen sprites.                                                                |
-| **Exploration Boards**         | `web/soundboard.html`, `docs/vfx-board.html`                                                                                                                                                         | Minimal standalone sandboxes for auditioning all 8 procedural pen surfaces, Speed Test Pad, SFX cadence, cup assets, and programmatic stains.                                                          |
-| **Designer Stroke VAE**        | `exports/opensketch_residual_vae.json` (`433 KB`)                                                                                                                                                    | Trained on 24,541 real Wacom strokes from 15 industrial designers (**OpenSketch**, CC0) for `(rx, ry, pressure)` residuals.                                                                            |
-| **Streaming Cursive WASM**     | `exports/handwriting/graves_v5.wasm` (`4.9 KB`), `graves_v5.bin` (`4.05 MB`), `graves_v5_meta.json`                                                                                                  | Hand-written WAT SIMD128 (`src/graves_v5.wat`) with sparse character-column skipping, `f32x4` LSTM gates, INT8 quantized weights, 4-char primed attention states, and delayed crossbar/dot completion. |
-| **Version Archive**            | `web/v1_napkin.html` (originally `index.html`), `web/v2_napkin.html`, `web/v3_draw.html`, `web/v4_draw.html`, `web/v5_napkin.html`, `web/v6_napkin.html`, `web/v7_napkin.html`, `web/v8_napkin.html` | Preserved historical milestones from the initial browser ML proof-of-concept through v8.                                                                                                               |
+The app is built with **Vite** and **TypeScript** (`index.html` + `src/app/`).
 
-## Rebuilding WASM (Optional)
+### Prerequisites
+
+- Node.js and npm
+
+### Commands
 
 ```bash
-wat2wasm src/graves_v5.wat -o exports/handwriting/graves_v5.wasm
+npm install          # Install dependencies (Vite, TypeScript)
+npm run dev          # Start the local Vite dev server
+npm run typecheck    # Run TypeScript type checking (tsc --noEmit)
+npm run build        # Typecheck and build production bundle to dist/
+npm run preview      # Preview the production dist/ build locally
 ```
 
-## Documentation
+### Project Layout
 
-- [Iteration Report (v1 → Latest)](docs/report.md)
-- [Soundboard Explorer](web/soundboard.html)
-- [VFX Cup & Stain Board](docs/vfx-board.html)
+- `index.html`, `src/app/` — Main TypeScript application (`main.ts`, `ink-vae.ts`, `handwriting.ts`, `hw-worker.ts`, `cup.ts`, `crumple.ts`, `napkin-paper.ts`, `audio.ts`, `assets.ts`, `starters.ts`, `styles.css`).
+- `vite.config.ts`, `tsconfig.json` — Vite build configuration (`base: "/napkin/"`) and TypeScript settings.
+- `.github/workflows/deploy.yml` — Automated GitHub Pages build and deploy on pushes to `master`.
+- `exports/` — Pre-trained model weights (`opensketch_residual_vae.json`, `handwriting/graves_v5.*`).
+- `web/` & `docs/` — Audio/SFX clips, cup & pen sprites, exploration boards ([Soundboard](web/soundboard.html), [VFX Board](docs/vfx-board.html)), and the [Iteration Report](docs/report.md).
 
-## Data Licenses
+## Model Training
+
+Pre-trained model artifacts are already committed under `exports/`, so training is only needed if you want to retrain or re-export the models. The Python training scripts require **PyTorch** and **NumPy** (and **Pillow** for `train_glyph_vae.py`).
+
+> **Note:** The Python scripts default `DATA_DIR` / `OS_DIR` / `EXPORT_DIR` to `/home/antigravity/napkin-ml/...`. Update those path constants at the top of the scripts if your local dataset or output directory differs.
+
+### 1. OpenSketch Stroke Residual VAE (Active)
+
+Learns human trajectory residuals `(rx, ry)` and stylus pressure `p` from 24,541 real Wacom strokes in the **OpenSketch** (Inria, CC0) dataset, and exports decoder-only JSON weights for browser inference:
+
+```bash
+python3 src/train_opensketch_residuals.py
+```
+
+Outputs `exports/opensketch_residual_vae.json` and `exports/opensketch_residual_vae.pt`.
+
+### 2. Streaming Handwriting Synthesis (Active)
+
+Quantizes the pretrained Graves (2013) IAM-OnDB LSTM weights (`exports/handwriting/hand_synth.bin` + `hand_synth.json`) into INT8 sparse/dense blocks with primed writer states, paired with the hand-written WebAssembly SIMD128 kernel:
+
+```bash
+python3 src/test_handwriting.py          # Verify baseline forward pass
+python3 src/export_v5_graves.py          # Export graves_v5.bin + graves_v5_meta.json
+wat2wasm src/graves_v5.wat -o exports/handwriting/graves_v5.wasm  # Optional: rebuild WASM
+```
+
+### 3. Auxiliary & Exploratory Models
+
+Earlier prototype models can also be retrained from Quick, Draw! / OpenSketch data:
+
+```bash
+python3 src/fetch_data.py                # Download Quick, Draw! stroke subsets
+python3 src/train_gesture_classifier.py  # -> exports/gesture_mlp.json
+python3 src/train_stroke_generator.py    # -> exports/stroke_gru_mdn.json
+python3 src/train_glyph_vae.py           # -> exports/glyph_vae.json
+```
+
+### Data Licenses
 
 - **OpenSketch** (Inria): CC0
 - **IAM-OnDB pretrained handwriting weights** (`Rybib/rytability-magic-handwriting` / `sjvasquez/handwriting-synthesis`): research/non-commercial terms of IAM-OnDB apply.
