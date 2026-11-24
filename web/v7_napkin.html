@@ -32,7 +32,7 @@
 
     header.toolbar {
       display: flex; align-items: center; justify-content: space-between;
-      gap: 8px; padding: 8px 12px;
+      gap: 6px; padding: 7px 10px;
       background: var(--bar-bg);
       border-bottom: 1px solid var(--bar-border);
       backdrop-filter: blur(8px);
@@ -40,13 +40,13 @@
       z-index: 20;
     }
 
-    .group { display: flex; align-items: center; gap: 3px; }
-    .divider { width: 1px; height: 20px; background: var(--bar-border); margin: 0 4px; flex-shrink: 0; }
+    .group { display: flex; align-items: center; gap: 2px; }
+    .divider { width: 1px; height: 20px; background: var(--bar-border); margin: 0 3px; flex-shrink: 0; }
 
     .brand {
       font-weight: 600; font-size: 13px; letter-spacing: -0.01em;
-      padding: 0 6px 0 2px; color: var(--ink-ui); white-space: nowrap;
-      display: flex; align-items: center; gap: 6px;
+      padding: 0 4px 0 2px; color: var(--ink-ui); white-space: nowrap;
+      display: flex; align-items: center; gap: 5px;
     }
     .brand span.ver {
       font-size: 11px; font-weight: 500; color: var(--ink-muted);
@@ -54,8 +54,8 @@
     }
 
     button.tool-btn {
-      display: inline-flex; align-items: center; justify-content: center; gap: 5px;
-      height: 32px; padding: 0 9px;
+      display: inline-flex; align-items: center; justify-content: center; gap: 4px;
+      height: 32px; padding: 0 7px;
       border: 1px solid transparent; border-radius: var(--radius);
       background: transparent; color: var(--ink-ui);
       font-size: 12px; font-weight: 500; cursor: pointer;
@@ -116,17 +116,174 @@
 
     canvas#c { display: block; width: 100%; height: 100%; touch-action: none; }
 
+    /* Invisible focus/IME proxy — the napkin canvas itself is the only visible text box */
     #inline-text {
       position: absolute; display: none;
-      font-family: "SF Mono", ui-monospace, Menlo, Consolas, monospace;
-      font-size: 11px; font-weight: 500; min-width: 140px;
-      color: var(--ink-muted);
-      border: 1px solid rgba(92, 74, 52, 0.25); border-radius: 999px;
-      background: rgba(248, 243, 234, 0.88);
-      padding: 3px 10px; outline: none;
-      box-shadow: 0 3px 10px rgba(45, 32, 18, 0.10);
-      backdrop-filter: blur(4px);
+      left: 0; top: 0;
+      width: 2px; height: 28px;
+      padding: 0; margin: 0;
+      border: 0; outline: none;
+      background: transparent; color: transparent; caret-color: transparent;
+      opacity: 0; pointer-events: none;
+      font-size: 16px;
     }
+
+    /* Collapsible Sound Board popover */
+    button#sound-toggle { position: relative; }
+    button#sound-toggle .snd-dot {
+      width: 6px; height: 6px; border-radius: 50%;
+      background: #15803d; display: inline-block;
+      transition: background 0.15s ease, transform 0.15s ease;
+    }
+    button#sound-toggle.muted .snd-dot { background: #a89f91; }
+    button#sound-toggle.active .snd-dot { background: #4ade80; }
+
+    .sound-board {
+      position: absolute; top: 14px; right: 14px;
+      width: 336px; max-width: calc(100vw - 28px);
+      max-height: calc(100% - 28px);
+      overflow-y: auto;
+      background: rgba(248, 243, 234, 0.96);
+      border: 1px solid rgba(92, 74, 52, 0.24);
+      border-radius: 12px;
+      box-shadow: 0 12px 34px rgba(45, 32, 18, 0.20), 0 2px 6px rgba(45, 32, 18, 0.08);
+      backdrop-filter: blur(12px);
+      padding: 12px;
+      z-index: 35;
+      display: none;
+      flex-direction: column;
+      gap: 10px;
+      user-select: none;
+    }
+    .sound-board.open { display: flex; }
+
+    .sb-head {
+      display: flex; align-items: center; justify-content: space-between; gap: 8px;
+      padding-bottom: 8px; border-bottom: 1px solid var(--bar-border);
+    }
+    .sb-title {
+      display: flex; align-items: center; gap: 6px;
+      font-weight: 600; font-size: 13px; color: var(--ink-ui);
+    }
+    .sb-title svg {
+      width: 15px; height: 15px; stroke: currentColor; fill: none;
+      stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round;
+    }
+    .sb-actions { display: flex; align-items: center; gap: 4px; }
+    .sb-pill {
+      display: inline-flex; align-items: center; gap: 4px;
+      height: 25px; padding: 0 8px;
+      border: 1px solid var(--bar-border); border-radius: 6px;
+      background: rgba(255, 255, 255, 0.55); color: var(--ink-ui);
+      font-size: 11px; font-weight: 500; cursor: pointer;
+      transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+    }
+    .sb-pill:hover { background: var(--hover-bg); }
+    .sb-pill.active { background: var(--active-bg); color: var(--active-fg); border-color: var(--active-bg); }
+    .sb-close {
+      width: 25px; height: 25px; padding: 0; justify-content: center;
+      font-size: 15px; line-height: 1;
+    }
+
+    .sb-section-lbl {
+      display: flex; align-items: center; justify-content: space-between;
+      font-size: 11px; font-weight: 600; text-transform: uppercase;
+      letter-spacing: 0.04em; color: var(--ink-muted);
+    }
+
+    .sb-grid {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 5px;
+    }
+    button.sb-preset {
+      display: flex; flex-direction: column; align-items: flex-start; gap: 1px;
+      padding: 7px 8px; text-align: left;
+      border: 1px solid rgba(92, 74, 52, 0.18); border-radius: 8px;
+      background: rgba(255, 255, 255, 0.52); color: var(--ink-ui);
+      cursor: pointer;
+      transition: background 0.12s ease, border-color 0.12s ease, transform 0.08s ease;
+    }
+    button.sb-preset:hover {
+      background: rgba(255, 255, 255, 0.85);
+      border-color: rgba(92, 74, 52, 0.36);
+    }
+    button.sb-preset:active { transform: scale(0.98); }
+    button.sb-preset.active {
+      background: var(--active-bg); color: var(--active-fg);
+      border-color: var(--active-bg);
+    }
+    button.sb-preset .p-name { font-size: 12px; font-weight: 600; line-height: 1.25; }
+    button.sb-preset .p-desc {
+      font-size: 10.5px; color: var(--ink-muted); line-height: 1.2;
+    }
+    button.sb-preset.active .p-desc { color: rgba(248, 243, 234, 0.72); }
+
+    .sb-pad-wrap {
+      display: flex; flex-direction: column; gap: 6px;
+      padding: 8px; border-radius: 9px;
+      background: rgba(110, 86, 56, 0.07);
+      border: 1px solid rgba(92, 74, 52, 0.16);
+    }
+    .sb-meter-row {
+      display: flex; align-items: center; justify-content: space-between; gap: 8px;
+      font-size: 11px; color: var(--ink-muted);
+    }
+    .sb-speed-val {
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 11px; font-weight: 600; color: var(--ink-ui);
+    }
+    .sb-meter-track {
+      height: 5px; width: 100%; border-radius: 99px;
+      background: rgba(92, 74, 52, 0.15); overflow: hidden;
+    }
+    .sb-meter-fill {
+      height: 100%; width: 0%; border-radius: 99px;
+      background: linear-gradient(90deg, #6b5740 0%, #1b3d8f 65%, #b91c1c 100%);
+      transition: width 0.04s linear;
+    }
+    canvas#sound-pad {
+      display: block; width: 100%; height: 64px;
+      border-radius: 6px; cursor: crosshair; touch-action: none;
+      background: #e7dbc6;
+      box-shadow: inset 0 0 0 1px rgba(104, 82, 54, 0.25);
+    }
+    .sb-test-btns { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; }
+    .sb-test-btns button {
+      height: 26px; border-radius: 6px;
+      border: 1px solid rgba(92, 74, 52, 0.22);
+      background: rgba(255, 255, 255, 0.65); color: var(--ink-ui);
+      font-size: 11px; font-weight: 500; cursor: pointer;
+      transition: background 0.12s ease;
+    }
+    .sb-test-btns button:hover { background: rgba(255, 255, 255, 0.95); }
+    .sb-test-btns button.playing {
+      background: var(--active-bg); color: var(--active-fg); border-color: var(--active-bg);
+    }
+
+    .sb-controls {
+      display: flex; flex-direction: column; gap: 7px;
+      padding-top: 2px;
+    }
+    .sb-slider-row {
+      display: grid; grid-template-columns: 96px 1fr 34px; align-items: center; gap: 6px;
+      font-size: 11.5px; color: var(--ink-ui);
+    }
+    .sb-slider-row input[type="range"] {
+      width: 100%; margin: 0; accent-color: #23201c; cursor: pointer;
+    }
+    .sb-slider-row .val {
+      text-align: right;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 11px; color: var(--ink-muted);
+    }
+    .sb-toggle-row {
+      display: flex; align-items: center; justify-content: space-between; gap: 8px;
+      font-size: 11.5px; color: var(--ink-ui);
+      padding-top: 6px; border-top: 1px solid var(--bar-border);
+    }
+    .sb-check {
+      display: inline-flex; align-items: center; gap: 5px; cursor: pointer;
+    }
+    .sb-check input { margin: 0; accent-color: #23201c; cursor: pointer; }
 
     /* Full-viewport overlay for the crumpled napkin ball throw animation */
     canvas#crumple-overlay {
@@ -134,7 +291,7 @@
       pointer-events: none; z-index: 60; display: none;
     }
 
-    @media (max-width: 1080px) {
+    @media (max-width: 1180px) {
       button.tool-btn .lbl { display: none; }
       button.tool-btn { padding: 0 8px; }
     }
@@ -219,6 +376,14 @@
 
       <div class="divider"></div>
 
+      <button id="sound-toggle" class="tool-btn" onclick="toggleSoundBoard()" title="Open Sound Board (Drawing & Crumple SFX)">
+        <svg viewBox="0 0 24 24"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg>
+        <span class="lbl">Sound</span>
+        <span class="snd-dot"></span>
+      </button>
+
+      <div class="divider"></div>
+
       <button class="tool-btn" onclick="undo()" title="Undo [Ctrl+Z]">
         <svg viewBox="0 0 24 24"><path d="M9 14L4 9l5-5"/><path d="M20 20v-7a4 4 0 0 0-4-4H4"/></svg>
       </button>
@@ -235,8 +400,71 @@
   <main class="stage">
     <div class="napkin-frame" id="wrap">
       <canvas id="c"></canvas>
-      <input id="inline-text" type="text" placeholder="Type & press Enter..." />
+      <input id="inline-text" type="text" autocomplete="off" autocorrect="off" spellcheck="false" aria-label="Napkin text input" />
     </div>
+
+    <aside id="sound-board" class="sound-board" aria-label="Drawing & Crumple Sound Board">
+      <div class="sb-head">
+        <div class="sb-title">
+          <svg viewBox="0 0 24 24"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg>
+          Sound Board
+        </div>
+        <div class="sb-actions">
+          <button id="sb-mute-btn" class="sb-pill" onclick="NapkinAudio.toggleMute()">Mute</button>
+          <button class="sb-pill sb-close" onclick="toggleSoundBoard(false)" title="Close Sound Board">&times;</button>
+        </div>
+      </div>
+
+      <div class="sb-section-lbl">
+        <span>Drawing Surface Sound</span>
+        <button id="sb-off-btn" class="sb-pill" onclick="NapkinAudio.setPreset('off')">Off</button>
+      </div>
+      <div id="sb-preset-grid" class="sb-grid"></div>
+
+      <div class="sb-pad-wrap">
+        <div class="sb-meter-row">
+          <span>Speed Test Pad (drag slow &rarr; fast)</span>
+          <span id="sb-speed-val" class="sb-speed-val">0 px/s</span>
+        </div>
+        <div class="sb-meter-track"><div id="sb-meter-fill" class="sb-meter-fill"></div></div>
+        <canvas id="sound-pad"></canvas>
+        <div class="sb-test-btns">
+          <button id="sb-demo-slow" onclick="NapkinAudio.playDemoStroke('slow')">Slow Stroke</button>
+          <button id="sb-demo-med" onclick="NapkinAudio.playDemoStroke('medium')">Write Pace</button>
+          <button id="sb-demo-fast" onclick="NapkinAudio.playDemoStroke('fast')">Fast Sketch</button>
+        </div>
+      </div>
+
+      <div class="sb-controls">
+        <label class="sb-slider-row">
+          <span>Draw Volume</span>
+          <input id="sb-draw-vol" type="range" min="0" max="100" value="75" oninput="NapkinAudio.setDrawVolume(this.value / 100)" />
+          <span id="sb-draw-vol-val" class="val">75%</span>
+        </label>
+        <label class="sb-slider-row">
+          <span>Speed Curve</span>
+          <input id="sb-speed-sens" type="range" min="0" max="100" value="75" oninput="NapkinAudio.setSpeedSens(this.value / 100)" />
+          <span id="sb-speed-sens-val" class="val">75%</span>
+        </label>
+        <label class="sb-slider-row">
+          <span>Crumple Vol</span>
+          <input id="sb-crumple-vol" type="range" min="0" max="100" value="85" oninput="NapkinAudio.setCrumpleVolume(this.value / 100)" />
+          <span id="sb-crumple-vol-val" class="val">85%</span>
+        </label>
+      </div>
+
+      <div class="sb-toggle-row">
+        <label class="sb-check" title="Subtle pen strokes synced to live typing cadence">
+          <input id="sb-typing-sfx" type="checkbox" checked onchange="NapkinAudio.setTypingSfx(this.checked)" />
+          <span>Typing Pen SFX</span>
+        </label>
+        <label class="sb-check" title="Play ./crumble.mp3 when crumpling napkin">
+          <input id="sb-crumple-sfx" type="checkbox" checked onchange="NapkinAudio.setCrumpleEnabled(this.checked)" />
+          <span>Crumple</span>
+        </label>
+        <button class="sb-pill" onclick="NapkinAudio.testCrumple()" title="Audition ./crumble.mp3">&#9654; Crumple</button>
+      </div>
+    </aside>
   </main>
 </div>
 <canvas id="crumple-overlay"></canvas>
@@ -292,79 +520,417 @@ function onStyleChange() {
 }
 
 // ============================================================================
-// 1. PROCEDURAL LIGHT-BROWN PAPER NAPKIN TEXTURE
+// 1. PROCEDURAL LIGHT-BROWN PAPER NAPKIN TEXTURE (UNIQUE PER NAPKIN SHEET!)
 // ============================================================================
-let napkinPattern = null;
+const NAPKIN_PALETTES = [
+  { name: 'Warm Kraft',  r: 231, g: 219, b: 198, fiberMul: 1.05, fleckMul: 1.15 },
+  { name: 'Cafe Ecru',   r: 236, g: 227, b: 210, fiberMul: 0.90, fleckMul: 0.80 },
+  { name: 'Toasted Oat', r: 226, g: 211, b: 185, fiberMul: 1.25, fleckMul: 1.35 },
+  { name: 'Soft Linen',  r: 234, g: 224, b: 205, fiberMul: 0.95, fleckMul: 0.95 },
+  { name: 'Diner Ivory', r: 240, g: 232, b: 217, fiberMul: 0.78, fleckMul: 0.65 },
+  { name: 'Raw Sand',    r: 229, g: 215, b: 191, fiberMul: 1.18, fleckMul: 1.25 }
+];
+const EMBOSS_STYLES = ['dimple', 'linen', 'diamond', 'pinpoint'];
+const BORDER_STYLES = ['none', 'double', 'dotted', 'stitch'];
 
-function createNapkinPattern(ctx) {
+let napkinSeq = 0;
+let lastPaletteIdx = -1;
+let lastEmbossIdx = -1;
+let napkinSpec = null;
+let napkinBgCache = null; // { id, w, h, dpr, canvas }
+
+function makeRng(seed) {
+  let s = (seed >>> 0) || 1;
+  return () => {
+    s = (s * 1664525 + 1013904223) >>> 0;
+    return s / 4294967296;
+  };
+}
+
+function clampByte(v) { return Math.max(0, Math.min(255, Math.round(v))); }
+function rgbToHex(r, g, b) {
+  return '#' + [r, g, b].map(v => clampByte(v).toString(16).padStart(2, '0')).join('');
+}
+
+function createNapkinSpec() {
+  const seed = (Math.floor(Math.random() * 0xffffffff) ^ (Date.now() & 0xffffffff) ^ ((++napkinSeq) * 2654435761)) >>> 0;
+  const rnd = makeRng(seed);
+
+  // Pick a fresh palette & embossing pattern distinct from the previous napkin
+  let pIdx = Math.floor(rnd() * NAPKIN_PALETTES.length);
+  if (pIdx === lastPaletteIdx) pIdx = (pIdx + 1 + Math.floor(rnd() * (NAPKIN_PALETTES.length - 1))) % NAPKIN_PALETTES.length;
+  lastPaletteIdx = pIdx;
+  const pal = NAPKIN_PALETTES[pIdx];
+
+  let eIdx = Math.floor(rnd() * EMBOSS_STYLES.length);
+  if (eIdx === lastEmbossIdx) eIdx = (eIdx + 1 + Math.floor(rnd() * (EMBOSS_STYLES.length - 1))) % EMBOSS_STYLES.length;
+  lastEmbossIdx = eIdx;
+
+  // Subtle per-sheet warm tone drift so no two sheets share the exact same color
+  const lumDrift = (rnd() - 0.5) * 7;
+  const warmDrift = (rnd() - 0.5) * 4;
+  const r = clampByte(pal.r + lumDrift + warmDrift);
+  const g = clampByte(pal.g + lumDrift);
+  const b = clampByte(pal.b + lumDrift - warmDrift);
+
+  // Subtle corner/margin coffee-cup ghost ring on ~35% of napkins
+  const hasCupRing = rnd() < 0.35;
+  const ringCorner = Math.floor(rnd() * 4);
+  const ringX = (ringCorner % 2 === 0) ? (0.06 + rnd() * 0.14) : (0.80 + rnd() * 0.14);
+  const ringY = (ringCorner < 2) ? (0.08 + rnd() * 0.16) : (0.76 + rnd() * 0.16);
+
+  // 1-2 whisper-faint diagonal handling / corner creases
+  const diagCount = 1 + (rnd() < 0.55 ? 1 : 0);
+  const diagCreases = [];
+  for (let i = 0; i < diagCount; i++) {
+    const corner = Math.floor(rnd() * 4);
+    diagCreases.push({
+      corner,
+      span: 0.16 + rnd() * 0.22,
+      skew: (rnd() - 0.5) * 0.12,
+      alpha: 0.022 + rnd() * 0.026,
+      flip: rnd() > 0.5 ? 1 : -1
+    });
+  }
+
+  return {
+    id: napkinSeq,
+    seed,
+    paletteName: pal.name,
+    baseHex: rgbToHex(r, g, b),
+    embossStyle: EMBOSS_STYLES[eIdx],
+    embossStep: eIdx === 3 ? 6 : (rnd() < 0.5 ? 8 : 10),
+    embossAlpha: 0.72 + rnd() * 0.52,
+    borderStyle: BORDER_STYLES[Math.floor(rnd() * BORDER_STYLES.length)],
+    borderInset: 15 + Math.floor(rnd() * 13),
+    fiberMul: pal.fiberMul * (0.85 + rnd() * 0.35),
+    fleckMul: pal.fleckMul * (0.8 + rnd() * 0.45),
+    tileOffX: Math.floor(rnd() * 320),
+    tileOffY: Math.floor(rnd() * 320),
+    // Organic quarter-fold offsets, slight angles & fold polarity (valley vs ridge)
+    foldVPos: 0.465 + rnd() * 0.07,
+    foldVAngle: (rnd() - 0.5) * 0.024,
+    foldVWidth: 26 + rnd() * 18,
+    foldVStrength: 0.032 + rnd() * 0.028,
+    foldVFlip: rnd() > 0.5,
+    foldHPos: 0.465 + rnd() * 0.07,
+    foldHAngle: (rnd() - 0.5) * 0.022,
+    foldHWidth: 24 + rnd() * 16,
+    foldHStrength: 0.028 + rnd() * 0.026,
+    foldHFlip: rnd() > 0.5,
+    // Subtle off-center ambient light & vignette warmth
+    lightX: 0.42 + rnd() * 0.16,
+    lightY: 0.40 + rnd() * 0.18,
+    vigAlpha: 0.075 + rnd() * 0.045,
+    diagCreases,
+    cupRing: hasCupRing ? {
+      nx: ringX, ny: ringY,
+      radius: 40 + rnd() * 26,
+      alpha: 0.022 + rnd() * 0.022,
+      rot: rnd() * Math.PI * 2
+    } : null
+  };
+}
+
+function nextNapkin() {
+  napkinSpec = createNapkinSpec();
+  napkinBgCache = null;
+  const wrapEl = document.getElementById('wrap');
+  if (wrapEl) wrapEl.style.background = napkinSpec.baseHex;
+  return napkinSpec;
+}
+
+function createNapkinPattern(ctx, spec = null) {
+  const sp = spec || napkinSpec || nextNapkin();
+  const S = 320;
   const tile = document.createElement('canvas');
-  tile.width = 256; tile.height = 256;
+  tile.width = S; tile.height = S;
   const tctx = tile.getContext('2d');
 
-  tctx.fillStyle = '#e7dbc6';
-  tctx.fillRect(0, 0, 256, 256);
+  tctx.fillStyle = sp.baseHex;
+  tctx.fillRect(0, 0, S, S);
 
-  const step = 8;
-  for (let y = 0; y < 256; y += step) {
-    const rowShift = ((y / step) % 2) * (step / 2);
-    for (let x = 0; x < 256; x += step) {
-      const px = (x + rowShift) % 256;
-      tctx.fillStyle = 'rgba(112, 86, 56, 0.045)';
-      tctx.fillRect(px, y, 2, 2);
-      tctx.fillStyle = 'rgba(255, 250, 240, 0.065)';
-      tctx.fillRect(px + 1, y + 1, 2, 2);
+  // 1. Varied embossed napkin surface pattern
+  const ea = sp.embossAlpha;
+  if (sp.embossStyle === 'dimple') {
+    const step = sp.embossStep;
+    for (let y = 0; y < S; y += step) {
+      const rowShift = ((y / step) % 2) * (step / 2);
+      for (let x = 0; x < S; x += step) {
+        const px = (x + rowShift) % S;
+        tctx.fillStyle = `rgba(112, 86, 56, ${(0.042 * ea).toFixed(4)})`;
+        tctx.fillRect(px, y, 2, 2);
+        tctx.fillStyle = `rgba(255, 250, 240, ${(0.062 * ea).toFixed(4)})`;
+        tctx.fillRect(px + 1, y + 1, 2, 2);
+      }
+    }
+  } else if (sp.embossStyle === 'linen') {
+    const step = 6;
+    tctx.lineWidth = 0.8;
+    for (let i = 0; i < S; i += step) {
+      tctx.strokeStyle = `rgba(110, 84, 54, ${(0.028 * ea).toFixed(4)})`;
+      tctx.beginPath(); tctx.moveTo(0, i); tctx.lineTo(S, i); tctx.stroke();
+      tctx.beginPath(); tctx.moveTo(i, 0); tctx.lineTo(i, S); tctx.stroke();
+      tctx.strokeStyle = `rgba(255, 251, 242, ${(0.040 * ea).toFixed(4)})`;
+      tctx.beginPath(); tctx.moveTo(0, i + 1); tctx.lineTo(S, i + 1); tctx.stroke();
+    }
+  } else if (sp.embossStyle === 'diamond') {
+    const step = 16;
+    tctx.lineWidth = 0.75;
+    for (let k = -S; k <= S * 2; k += step) {
+      tctx.strokeStyle = `rgba(112, 86, 56, ${(0.030 * ea).toFixed(4)})`;
+      tctx.beginPath(); tctx.moveTo(k, 0); tctx.lineTo(k + S, S); tctx.stroke();
+      tctx.beginPath(); tctx.moveTo(k + S, 0); tctx.lineTo(k, S); tctx.stroke();
+      tctx.strokeStyle = `rgba(255, 250, 240, ${(0.042 * ea).toFixed(4)})`;
+      tctx.beginPath(); tctx.moveTo(k + 1, 0); tctx.lineTo(k + S + 1, S); tctx.stroke();
+    }
+  } else {
+    // 'pinpoint': fine dense embossed stipple
+    const step = 6;
+    for (let y = 0; y < S; y += step) {
+      for (let x = 0; x < S; x += step) {
+        tctx.fillStyle = `rgba(108, 82, 52, ${(0.038 * ea).toFixed(4)})`;
+        tctx.fillRect(x, y, 1.3, 1.3);
+        tctx.fillStyle = `rgba(255, 251, 244, ${(0.055 * ea).toFixed(4)})`;
+        tctx.fillRect(x + 1, y + 1, 1.3, 1.3);
+      }
     }
   }
 
-  let s = 1337;
-  const rnd = () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; };
+  const rnd = makeRng(sp.seed ^ 0x9e3779b9);
 
-  for (let i = 0; i < 160; i++) {
-    const x = rnd() * 256, y = rnd() * 256, r = 6 + rnd() * 20;
-    tctx.fillStyle = rnd() > 0.5 ? 'rgba(130, 102, 68, 0.018)' : 'rgba(255, 248, 236, 0.025)';
-    tctx.beginPath(); tctx.arc(x, y, r, 0, Math.PI * 2); tctx.fill();
+  // Helper to wrap marks across tile boundaries seamlessly (no grid seams!)
+  const drawWrapped = (x, y, margin, fn) => {
+    const oxs = [0]; if (x < margin) oxs.push(S); if (x > S - margin) oxs.push(-S);
+    const oys = [0]; if (y < margin) oys.push(S); if (y > S - margin) oys.push(-S);
+    for (const ox of oxs) for (const oy of oys) fn(x + ox, y + oy);
+  };
+
+  // 2. Soft seamless pulp clouds
+  for (let i = 0; i < 150; i++) {
+    const x = rnd() * S, y = rnd() * S, r = 7 + rnd() * 22;
+    const fill = rnd() > 0.5 ? 'rgba(130, 102, 68, 0.015)' : 'rgba(255, 248, 236, 0.022)';
+    tctx.fillStyle = fill;
+    drawWrapped(x, y, r + 1, (px, py) => {
+      tctx.beginPath(); tctx.arc(px, py, r, 0, Math.PI * 2); tctx.fill();
+    });
   }
 
+  // 3. Random organic paper fibers
+  const fiberCount = Math.round(480 * sp.fiberMul);
   tctx.lineWidth = 0.7;
-  for (let i = 0; i < 420; i++) {
-    const x = rnd() * 256, y = rnd() * 256;
-    const len = 2 + rnd() * 7, ang = rnd() * Math.PI * 2;
-    tctx.strokeStyle = rnd() > 0.38 ? 'rgba(118, 90, 58, 0.075)' : 'rgba(255, 252, 244, 0.09)';
-    tctx.beginPath(); tctx.moveTo(x, y); tctx.lineTo(x + Math.cos(ang) * len, y + Math.sin(ang) * len); tctx.stroke();
+  for (let i = 0; i < fiberCount; i++) {
+    const x = rnd() * S, y = rnd() * S;
+    const len = 2 + rnd() * 8, ang = rnd() * Math.PI * 2;
+    const dx = Math.cos(ang) * len, dy = Math.sin(ang) * len;
+    tctx.strokeStyle = rnd() > 0.38 ? 'rgba(118, 90, 58, 0.072)' : 'rgba(255, 252, 244, 0.088)';
+    drawWrapped(x, y, len + 1, (px, py) => {
+      tctx.beginPath(); tctx.moveTo(px, py); tctx.lineTo(px + dx, py + dy); tctx.stroke();
+    });
   }
 
-  for (let i = 0; i < 240; i++) {
-    tctx.fillStyle = rnd() > 0.25 ? 'rgba(102, 74, 44, 0.085)' : 'rgba(72, 52, 32, 0.10)';
-    tctx.fillRect(rnd() * 256, rnd() * 256, 1.1, 1.1);
+  // 4. Recycled kraft speckles
+  const fleckCount = Math.round(280 * sp.fleckMul);
+  for (let i = 0; i < fleckCount; i++) {
+    const sz = 0.9 + rnd() * 0.7;
+    tctx.fillStyle = rnd() > 0.28 ? 'rgba(102, 74, 44, 0.082)' : 'rgba(72, 52, 32, 0.105)';
+    tctx.fillRect(rnd() * S, rnd() * S, sz, sz);
   }
 
   return ctx.createPattern(tile, 'repeat');
 }
 
-function drawNapkinBackground(ctx, w, h) {
-  if (!napkinPattern) napkinPattern = createNapkinPattern(ctx);
-  ctx.fillStyle = napkinPattern;
+function drawCreaseBand(ctx, x1, y1, x2, y2, halfW, strength, flip) {
+  const dx = x2 - x1, dy = y2 - y1, len = Math.hypot(dx, dy) || 1;
+  const nx = -dy / len, ny = dx / len;
+  const mx = (x1 + x2) * 0.5, my = (y1 + y2) * 0.5;
+  const g = ctx.createLinearGradient(mx - nx * halfW, my - ny * halfW, mx + nx * halfW, my + ny * halfW);
+  const dark = `rgba(88, 65, 38, ${strength.toFixed(4)})`;
+  const light = `rgba(255, 250, 240, ${(strength * 1.18).toFixed(4)})`;
+  g.addColorStop(0, 'rgba(88, 65, 38, 0)');
+  g.addColorStop(0.45, flip ? light : dark);
+  g.addColorStop(0.54, flip ? dark : light);
+  g.addColorStop(1, 'rgba(88, 65, 38, 0)');
+
+  ctx.save();
+  ctx.fillStyle = g;
+  ctx.beginPath();
+  ctx.moveTo(x1 - nx * halfW, y1 - ny * halfW);
+  ctx.lineTo(x2 - nx * halfW, y2 - ny * halfW);
+  ctx.lineTo(x2 + nx * halfW, y2 + ny * halfW);
+  ctx.lineTo(x1 + nx * halfW, y1 + ny * halfW);
+  ctx.closePath();
+  ctx.fill();
+  ctx.restore();
+}
+
+function buildNapkinSheetCanvas(sp, w, h, dpr) {
+  const off = document.createElement('canvas');
+  off.width = Math.max(1, Math.round(w * dpr));
+  off.height = Math.max(1, Math.round(h * dpr));
+  const ctx = off.getContext('2d');
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+  // 1. Seamless fiber/emboss tile shifted to a unique phase offset per napkin
+  const pat = createNapkinPattern(ctx, sp);
+  ctx.save();
+  ctx.translate(-sp.tileOffX, -sp.tileOffY);
+  ctx.fillStyle = pat;
+  ctx.fillRect(sp.tileOffX, sp.tileOffY, w, h);
+  ctx.restore();
+
+  const rnd = makeRng(sp.seed ^ 0x517cc1b7);
+
+  // 2. Non-repeating full-sheet organic tonal clouds (subtle uneven paper density)
+  const cloudCount = 5 + Math.floor(rnd() * 4);
+  for (let i = 0; i < cloudCount; i++) {
+    const cx = rnd() * w, cy = rnd() * h;
+    const rad = Math.min(w, h) * (0.18 + rnd() * 0.28);
+    const warm = rnd() > 0.45;
+    const gr = ctx.createRadialGradient(cx, cy, 0, cx, cy, rad);
+    gr.addColorStop(0, warm ? 'rgba(128, 96, 58, 0.036)' : 'rgba(255, 250, 240, 0.048)');
+    gr.addColorStop(1, 'rgba(128, 96, 58, 0)');
+    ctx.fillStyle = gr;
+    ctx.fillRect(0, 0, w, h);
+  }
+
+  // 3. Unique non-repeating kraft flecks & long natural fibers scattered across sheet
+  const uniqueFlecks = Math.round((45 + rnd() * 40) * sp.fleckMul);
+  for (let i = 0; i < uniqueFlecks; i++) {
+    const x = rnd() * w, y = rnd() * h;
+    if (rnd() < 0.45) {
+      // Tiny curved fiber thread
+      const len = 4 + rnd() * 11, ang = rnd() * Math.PI * 2;
+      ctx.strokeStyle = rnd() > 0.3 ? 'rgba(104, 76, 44, 0.11)' : 'rgba(255, 251, 242, 0.13)';
+      ctx.lineWidth = 0.65 + rnd() * 0.45;
+      ctx.beginPath();
+      ctx.moveTo(x, y);
+      ctx.quadraticCurveTo(
+        x + Math.cos(ang + 0.4) * len * 0.5,
+        y + Math.sin(ang + 0.4) * len * 0.5,
+        x + Math.cos(ang) * len,
+        y + Math.sin(ang) * len
+      );
+      ctx.stroke();
+    } else {
+      // Natural tiny recycled wood-pulp fleck
+      ctx.fillStyle = `rgba(82, 58, 34, ${(0.09 + rnd() * 0.09).toFixed(3)})`;
+      ctx.beginPath();
+      ctx.ellipse(x, y, 0.7 + rnd() * 1.1, 0.5 + rnd() * 0.8, rnd() * Math.PI, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  // 4. Optional embossed café napkin rim border
+  if (sp.borderStyle !== 'none' && w > 120 && h > 120) {
+    const pad = sp.borderInset;
+    const bw = w - pad * 2, bh = h - pad * 2;
+    ctx.save();
+    if (sp.borderStyle === 'double') {
+      const drawRim = (inset, dx, dy, color) => {
+        ctx.strokeStyle = color; ctx.lineWidth = 1.0;
+        ctx.strokeRect(inset + dx, inset + dy, w - inset * 2, h - inset * 2);
+      };
+      drawRim(pad, 0, 0, 'rgba(102, 76, 46, 0.085)');
+      drawRim(pad, 1, 1, 'rgba(255, 250, 240, 0.12)');
+      drawRim(pad + 5, 0, 0, 'rgba(102, 76, 46, 0.065)');
+      drawRim(pad + 5, 1, 1, 'rgba(255, 250, 240, 0.095)');
+    } else if (sp.borderStyle === 'dotted') {
+      const step = 9;
+      for (let x = pad; x <= w - pad; x += step) {
+        for (const y of [pad, h - pad]) {
+          ctx.fillStyle = 'rgba(102, 76, 46, 0.11)'; ctx.fillRect(x, y, 2, 2);
+          ctx.fillStyle = 'rgba(255, 250, 240, 0.15)'; ctx.fillRect(x + 1, y + 1, 2, 2);
+        }
+      }
+      for (let y = pad + step; y < h - pad; y += step) {
+        for (const x of [pad, w - pad]) {
+          ctx.fillStyle = 'rgba(102, 76, 46, 0.11)'; ctx.fillRect(x, y, 2, 2);
+          ctx.fillStyle = 'rgba(255, 250, 240, 0.15)'; ctx.fillRect(x + 1, y + 1, 2, 2);
+        }
+      }
+    } else if (sp.borderStyle === 'stitch') {
+      ctx.setLineDash([4, 5]); ctx.lineWidth = 1.1;
+      ctx.strokeStyle = 'rgba(102, 76, 46, 0.095)';
+      ctx.strokeRect(pad, pad, bw, bh);
+      ctx.strokeStyle = 'rgba(255, 250, 240, 0.13)';
+      ctx.strokeRect(pad + 1, pad + 1, bw, bh);
+    }
+    ctx.restore();
+  }
+
+  // 5. Organic quarter-fold creases (slightly off-center & subtly tilted!)
+  const vx = w * sp.foldVPos, vTilt = Math.tan(sp.foldVAngle) * h * 0.5;
+  drawCreaseBand(ctx, vx - vTilt, -10, vx + vTilt, h + 10, sp.foldVWidth * 0.5, sp.foldVStrength, sp.foldVFlip);
+
+  const hy = h * sp.foldHPos, hTilt = Math.tan(sp.foldHAngle) * w * 0.5;
+  drawCreaseBand(ctx, -10, hy - hTilt, w + 10, hy + hTilt, sp.foldHWidth * 0.5, sp.foldHStrength, sp.foldHFlip);
+
+  // 6. Subtle diagonal corner/handling creases
+  for (const dc of sp.diagCreases) {
+    const s = Math.min(w, h) * dc.span;
+    const sk = s * dc.skew;
+    let x1, y1, x2, y2;
+    if (dc.corner === 0) { x1 = -10; y1 = s + sk; x2 = s - sk; y2 = -10; }
+    else if (dc.corner === 1) { x1 = w - s + sk; y1 = -10; x2 = w + 10; y2 = s + sk; }
+    else if (dc.corner === 2) { x1 = -10; y1 = h - s - sk; x2 = s + sk; y2 = h + 10; }
+    else { x1 = w - s - sk; y1 = h + 10; x2 = w + 10; y2 = h - s + sk; }
+    drawCreaseBand(ctx, x1, y1, x2, y2, 11, dc.alpha, dc.flip > 0);
+  }
+
+  // 7. Occasional whisper-faint coffee-cup ghost ring near an outer margin/corner
+  if (sp.cupRing) {
+    const cr = sp.cupRing;
+    const rx = cr.nx * w, ry = cr.ny * h, rad = cr.radius;
+    ctx.save();
+    ctx.translate(rx, ry);
+    ctx.rotate(cr.rot);
+    for (let pass = 0; pass < 3; pass++) {
+      ctx.beginPath();
+      const segs = 48;
+      for (let i = 0; i <= segs; i++) {
+        const a = (i / segs) * Math.PI * 2;
+        const wob = Math.sin(a * 3 + pass) * 1.4 + Math.cos(a * 5 - pass * 1.7) * 0.9;
+        const rNow = rad + (pass - 1) * 1.8 + wob;
+        const px = Math.cos(a) * rNow, py = Math.sin(a) * rNow * 0.96;
+        if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+      }
+      ctx.strokeStyle = `rgba(116, 74, 34, ${(cr.alpha * (pass === 1 ? 1.0 : 0.45)).toFixed(4)})`;
+      ctx.lineWidth = pass === 1 ? 2.4 : 4.6;
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  // 8. Soft off-center ambient paper vignette
+  const vig = ctx.createRadialGradient(
+    w * sp.lightX, h * sp.lightY, Math.min(w, h) * 0.30,
+    w * 0.5, h * 0.5, Math.max(w, h) * 0.80
+  );
+  vig.addColorStop(0, 'rgba(255, 249, 238, 0.045)');
+  vig.addColorStop(1, `rgba(108, 80, 48, ${sp.vigAlpha.toFixed(4)})`);
+  ctx.fillStyle = vig;
   ctx.fillRect(0, 0, w, h);
 
-  const midX = w * 0.5, midY = h * 0.5;
-  const gV = ctx.createLinearGradient(midX - 18, 0, midX + 18, 0);
-  gV.addColorStop(0, 'rgba(90, 68, 42, 0)');
-  gV.addColorStop(0.46, 'rgba(90, 68, 42, 0.045)');
-  gV.addColorStop(0.52, 'rgba(255, 250, 240, 0.055)');
-  gV.addColorStop(1, 'rgba(90, 68, 42, 0)');
-  ctx.fillStyle = gV; ctx.fillRect(midX - 18, 0, 36, h);
+  return off;
+}
 
-  const gH = ctx.createLinearGradient(0, midY - 16, 0, midY + 16);
-  gH.addColorStop(0, 'rgba(90, 68, 42, 0)');
-  gH.addColorStop(0.46, 'rgba(90, 68, 42, 0.04)');
-  gH.addColorStop(0.52, 'rgba(255, 250, 240, 0.05)');
-  gH.addColorStop(1, 'rgba(90, 68, 42, 0)');
-  ctx.fillStyle = gH; ctx.fillRect(0, midY - 16, w, 32);
-
-  const vig = ctx.createRadialGradient(w * 0.5, h * 0.5, Math.min(w, h) * 0.35, w * 0.5, h * 0.5, Math.max(w, h) * 0.78);
-  vig.addColorStop(0, 'rgba(255, 248, 236, 0.04)');
-  vig.addColorStop(1, 'rgba(110, 82, 50, 0.095)');
-  ctx.fillStyle = vig; ctx.fillRect(0, 0, w, h);
+function drawNapkinBackground(ctx, w, h) {
+  if (!napkinSpec) nextNapkin();
+  const dpr = window.devicePixelRatio || 1;
+  const cw = Math.round(w * dpr), ch = Math.round(h * dpr);
+  if (
+    !napkinBgCache ||
+    napkinBgCache.id !== napkinSpec.id ||
+    napkinBgCache.cw !== cw ||
+    napkinBgCache.ch !== ch
+  ) {
+    napkinBgCache = {
+      id: napkinSpec.id, cw, ch,
+      canvas: buildNapkinSheetCanvas(napkinSpec, w, h, dpr)
+    };
+  }
+  ctx.drawImage(napkinBgCache.canvas, 0, 0, w, h);
 }
 
 // ============================================================================
@@ -950,15 +1516,811 @@ function recognizeMultiStroke(rawList) {
 }
 
 // ============================================================================
-// 5. CRUMPLED NAPKIN BALL & THROW ANIMATION (3D FACETED AFFINE-TEXTURED MESH!)
+// 5. WEB AUDIO SFX ENGINE (CRUMPLE.MP3 + VELOCITY-MATCHED DRAWING SOUND BOARD)
+// ============================================================================
+const SOUND_PRESETS = [
+  {
+    id: 'ballpoint', name: 'Ballpoint Pen', desc: 'Smooth roll & napkin grit',
+    bodyFMin: 720, bodyFMax: 2150, bodyQ: 1.35, bodyGain: 0.24,
+    grainFMin: 1550, grainFMax: 3900, grainQ: 2.2, grainGain: 0.44, rateMin: 0.55, rateMax: 1.95,
+    tipType: 'bandpass', tipFMin: 3100, tipFMax: 6500, tipQ: 2.7, tipGain: 0.22,
+    tapFreq: 1450, tapDur: 0.014, tapGain: 0.16, curveBoost: 0.38, velScale: 1.0, squeak: 0
+  },
+  {
+    id: 'pencil', name: '2B Graphite Pencil', desc: 'Dry woody paper tooth',
+    bodyFMin: 500, bodyFMax: 1650, bodyQ: 1.5, bodyGain: 0.34,
+    grainFMin: 1300, grainFMax: 3450, grainQ: 2.5, grainGain: 0.62, rateMin: 0.45, rateMax: 1.85,
+    tipType: 'bandpass', tipFMin: 2550, tipFMax: 5600, tipQ: 2.0, tipGain: 0.34,
+    tapFreq: 880, tapDur: 0.018, tapGain: 0.15, curveBoost: 0.48, velScale: 1.05, squeak: 0
+  },
+  {
+    id: 'marker', name: 'Felt-Tip Marker', desc: 'Warm damp fiber + squeak',
+    bodyFMin: 320, bodyFMax: 1120, bodyQ: 1.2, bodyGain: 0.56,
+    grainFMin: 740, grainFMax: 1850, grainQ: 1.7, grainGain: 0.34, rateMin: 0.38, rateMax: 1.35,
+    tipType: 'bandpass', tipFMin: 1950, tipFMax: 3150, tipQ: 6.2, tipGain: 0.16,
+    tapFreq: 460, tapDur: 0.022, tapGain: 0.18, curveBoost: 0.25, velScale: 1.0, squeak: 0.22
+  },
+  {
+    id: 'fountain', name: 'Fountain Nib', desc: 'Crisp metallic scratch',
+    bodyFMin: 900, bodyFMax: 2450, bodyQ: 1.8, bodyGain: 0.18,
+    grainFMin: 2350, grainFMax: 5300, grainQ: 3.5, grainGain: 0.48, rateMin: 0.65, rateMax: 2.25,
+    tipType: 'bandpass', tipFMin: 4200, tipFMax: 7700, tipQ: 4.1, tipGain: 0.34,
+    tapFreq: 2600, tapDur: 0.011, tapGain: 0.18, curveBoost: 0.62, velScale: 0.88, squeak: 0
+  },
+  {
+    id: 'chalk', name: 'Chalk / Charcoal', desc: 'Coarse dusty grit',
+    bodyFMin: 260, bodyFMax: 940, bodyQ: 1.1, bodyGain: 0.50,
+    grainFMin: 1050, grainFMax: 3050, grainQ: 1.85, grainGain: 0.72, rateMin: 0.35, rateMax: 1.65,
+    tipType: 'highpass', tipFMin: 2100, tipFMax: 4400, tipQ: 0.9, tipGain: 0.22,
+    tapFreq: 600, tapDur: 0.024, tapGain: 0.20, curveBoost: 0.58, velScale: 0.95, squeak: 0
+  },
+  {
+    id: 'brush', name: 'Soft Ink Brush', desc: 'Silky whispery sweep',
+    bodyFMin: 400, bodyFMax: 1480, bodyQ: 0.82, bodyGain: 0.48,
+    grainFMin: 900, grainFMax: 2350, grainQ: 0.9, grainGain: 0.22, rateMin: 0.34, rateMax: 1.15,
+    tipType: 'bandpass', tipFMin: 1750, tipFMax: 3900, tipQ: 0.85, tipGain: 0.18,
+    tapFreq: 350, tapDur: 0.028, tapGain: 0.10, curveBoost: 0.15, velScale: 1.08, squeak: 0
+  },
+  {
+    id: 'mech', name: '0.5mm Mechanical', desc: 'Fine sharp lead edge',
+    bodyFMin: 1080, bodyFMax: 2800, bodyQ: 2.1, bodyGain: 0.16,
+    grainFMin: 2600, grainFMax: 5700, grainQ: 3.9, grainGain: 0.46, rateMin: 0.72, rateMax: 2.40,
+    tipType: 'bandpass', tipFMin: 4600, tipFMax: 8300, tipQ: 4.8, tipGain: 0.32,
+    tapFreq: 3150, tapDur: 0.010, tapGain: 0.19, curveBoost: 0.52, velScale: 0.85, squeak: 0
+  },
+  {
+    id: 'kraft', name: 'ASMR Kraft Napkin', desc: 'Deep embossed fiber rub',
+    bodyFMin: 220, bodyFMax: 860, bodyQ: 1.35, bodyGain: 0.58,
+    grainFMin: 1180, grainFMax: 3650, grainQ: 2.4, grainGain: 0.76, rateMin: 0.48, rateMax: 2.18,
+    tipType: 'bandpass', tipFMin: 2700, tipFMax: 5800, tipQ: 2.1, tipGain: 0.26,
+    tapFreq: 740, tapDur: 0.020, tapGain: 0.22, curveBoost: 0.55, velScale: 0.96, squeak: 0
+  }
+];
+
+const NapkinAudio = (() => {
+  const state = {
+    presetId: 'ballpoint',
+    muted: false,
+    drawVol: 0.75,
+    speedSens: 0.75,
+    crumpleVol: 0.85,
+    crumpleEnabled: true,
+    typingSfx: true
+  };
+
+  let actx = null;
+  let masterGain = null;
+  let compressor = null;
+  let buffers = null;
+  let voice = null;
+
+  // ./crumble.mp3 preloading + decoded Web Audio buffer + HTMLAudio fallback
+  let crumbleRawBytes = null;
+  let crumbleFetchPromise = null;
+  let crumbleBuffer = null;
+  let crumbleDecodePromise = null;
+  let activeCrumpleSource = null;
+  let fallbackCrumpleEl = null;
+
+  // Live drawing velocity tracking
+  let isDrawing = false;
+  let lastX = 0, lastY = 0, lastT = 0, lastAng = null;
+  let smoothedSpeed = 0;
+  let smoothedCurve = 0;
+  let decayRaf = null;
+
+  // Typing cadence tracking
+  let lastTypeTime = 0;
+  let typingPulseTimer = null;
+
+  // Sound Board demo stroke animation
+  let demoRaf = null;
+  let demoKind = null;
+
+  function getPreset() {
+    if (state.presetId === 'off') return null;
+    return SOUND_PRESETS.find(p => p.id === state.presetId) || SOUND_PRESETS[0];
+  }
+
+  function preloadCrumple() {
+    if (crumbleFetchPromise) return crumbleFetchPromise;
+    try {
+      fallbackCrumpleEl = new Audio('./crumble.mp3');
+      fallbackCrumpleEl.preload = 'auto';
+    } catch (_) {}
+    crumbleFetchPromise = fetch('./crumble.mp3')
+      .then(res => res.ok ? res.arrayBuffer() : null)
+      .then(buf => {
+        crumbleRawBytes = buf;
+        if (actx && buf && !crumbleBuffer) decodeCrumple();
+        return buf;
+      })
+      .catch(() => null);
+    return crumbleFetchPromise;
+  }
+
+  function decodeCrumple() {
+    if (crumbleBuffer) return Promise.resolve(crumbleBuffer);
+    if (crumbleDecodePromise) return crumbleDecodePromise;
+    if (!actx || !crumbleRawBytes) return Promise.resolve(null);
+    crumbleDecodePromise = actx.decodeAudioData(crumbleRawBytes.slice(0))
+      .then(decoded => { crumbleBuffer = decoded; return decoded; })
+      .catch(() => { crumbleDecodePromise = null; return null; });
+    return crumbleDecodePromise;
+  }
+
+  function buildTextureBuffers(ctx) {
+    const sr = ctx.sampleRate;
+    const len = Math.floor(sr * 3.0);
+
+    // 1. Pink (1/f) paper-body noise (Voss-McCartney 7-stage)
+    const pink = ctx.createBuffer(1, len, sr);
+    const pd = pink.getChannelData(0);
+    let b0 = 0, b1 = 0, b2 = 0, b3 = 0, b4 = 0, b5 = 0, b6 = 0;
+    for (let i = 0; i < len; i++) {
+      const w = Math.random() * 2 - 1;
+      b0 = 0.99886 * b0 + w * 0.0555179;
+      b1 = 0.99332 * b1 + w * 0.0750759;
+      b2 = 0.96900 * b2 + w * 0.1538520;
+      b3 = 0.86650 * b3 + w * 0.3104856;
+      b4 = 0.55000 * b4 + w * 0.5329522;
+      b5 = -0.7616 * b5 - w * 0.0168980;
+      pd[i] = (b0 + b1 + b2 + b3 + b4 + b5 + b6 + w * 0.5362) * 0.11;
+      b6 = w * 0.115926;
+    }
+
+    // 2. Fibrous embossed napkin grain buffer (micro-tooth impulses + slow texture envelope)
+    const grain = ctx.createBuffer(1, len, sr);
+    const gd = grain.getChannelData(0);
+    let env = 0.5, imp = 0;
+    for (let i = 0; i < len; i++) {
+      // Periodic + organic embossed dimple modulation (~28 Hz at 1.0x rate, scales with speed!)
+      const emboss = 0.65 + 0.35 * Math.sin(i * 0.0038 + Math.sin(i * 0.00043) * 2.5);
+      env += (Math.random() - 0.5) * 0.03;
+      env = Math.max(0.25, Math.min(1.0, env));
+      if (Math.random() < 0.018) imp += (Math.random() * 2 - 1) * 1.35;
+      imp *= 0.84;
+      const micro = (Math.random() * 2 - 1) * 0.35;
+      gd[i] = Math.max(-1, Math.min(1, (imp + micro) * env * emboss));
+    }
+
+    // 3. Fine crisp tip-scratch noise (high-frequency micro-grit + tiny sparkles)
+    const crisp = ctx.createBuffer(1, len, sr);
+    const cd = crisp.getChannelData(0);
+    let prev = 0;
+    for (let i = 0; i < len; i++) {
+      const w = Math.random() * 2 - 1;
+      const hp = (w - prev) * 0.52;
+      prev = w;
+      const sparkle = Math.random() < 0.006 ? (Math.random() * 2 - 1) * 0.9 : 0;
+      cd[i] = Math.max(-1, Math.min(1, hp + sparkle));
+    }
+
+    // Crossfade loop ends (10ms) to guarantee seamless zero-click looping
+    const fadeN = Math.floor(sr * 0.01);
+    for (const arr of [pd, gd, cd]) {
+      for (let i = 0; i < fadeN; i++) {
+        const k = i / fadeN;
+        arr[len - fadeN + i] = arr[len - fadeN + i] * (1 - k) + arr[i] * k;
+      }
+    }
+    return { pink, grain, crisp };
+  }
+
+  function ensureContext() {
+    if (!actx) {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) return null;
+      actx = new AC();
+      compressor = actx.createDynamicsCompressor();
+      compressor.threshold.value = -10;
+      compressor.knee.value = 18;
+      compressor.ratio.value = 4;
+      compressor.attack.value = 0.003;
+      compressor.release.value = 0.12;
+
+      masterGain = actx.createGain();
+      masterGain.gain.value = state.muted ? 0 : 1;
+      masterGain.connect(compressor);
+      compressor.connect(actx.destination);
+
+      buffers = buildTextureBuffers(actx);
+      if (crumbleRawBytes && !crumbleBuffer) decodeCrumple();
+    }
+    if (actx.state === 'suspended') {
+      actx.resume().catch(() => {});
+    }
+    return actx;
+  }
+
+  function ensureVoice() {
+    const ctx = ensureContext();
+    if (!ctx || !buffers) return null;
+    if (voice) return voice;
+
+    const outGain = ctx.createGain();
+    outGain.gain.value = 0;
+    outGain.connect(masterGain);
+
+    const makeLoop = (buf) => {
+      const src = ctx.createBufferSource();
+      src.buffer = buf;
+      src.loop = true;
+      src.start(0, Math.random() * 2.5);
+      return src;
+    };
+
+    const bodySrc = makeLoop(buffers.pink);
+    const bodyFlt = ctx.createBiquadFilter();
+    bodyFlt.type = 'bandpass';
+    const bodyGain = ctx.createGain();
+    bodySrc.connect(bodyFlt); bodyFlt.connect(bodyGain); bodyGain.connect(outGain);
+
+    const grainSrc = makeLoop(buffers.grain);
+    const grainFlt = ctx.createBiquadFilter();
+    grainFlt.type = 'bandpass';
+    const grainGain = ctx.createGain();
+    grainSrc.connect(grainFlt); grainFlt.connect(grainGain); grainGain.connect(outGain);
+
+    const tipSrc = makeLoop(buffers.crisp);
+    const tipFlt = ctx.createBiquadFilter();
+    tipFlt.type = 'bandpass';
+    const tipGain = ctx.createGain();
+    tipSrc.connect(tipFlt); tipFlt.connect(tipGain); tipGain.connect(outGain);
+
+    // Optional marker squeak narrow resonant peak (only active when preset.squeak > 0 & fast)
+    const sqOsc = ctx.createOscillator();
+    sqOsc.type = 'triangle';
+    sqOsc.frequency.value = 2350;
+    const sqFlt = ctx.createBiquadFilter();
+    sqFlt.type = 'bandpass'; sqFlt.Q.value = 10; sqFlt.frequency.value = 2350;
+    const sqGain = ctx.createGain();
+    sqGain.gain.value = 0;
+    sqOsc.connect(sqFlt); sqFlt.connect(sqGain); sqGain.connect(outGain);
+    sqOsc.start();
+
+    voice = {
+      outGain,
+      bodySrc, bodyFlt, bodyGain,
+      grainSrc, grainFlt, grainGain,
+      tipSrc, tipFlt, tipGain,
+      sqOsc, sqFlt, sqGain
+    };
+    configureVoiceForPreset();
+    return voice;
+  }
+
+  function configureVoiceForPreset() {
+    if (!voice || !actx) return;
+    const p = getPreset();
+    const now = actx.currentTime;
+    if (!p) {
+      voice.outGain.gain.setTargetAtTime(0, now, 0.02);
+      return;
+    }
+    voice.bodyFlt.Q.setTargetAtTime(p.bodyQ, now, 0.02);
+    voice.grainFlt.Q.setTargetAtTime(p.grainQ, now, 0.02);
+    voice.tipFlt.type = p.tipType || 'bandpass';
+    voice.tipFlt.Q.setTargetAtTime(p.tipQ, now, 0.02);
+    voice.bodyGain.gain.setTargetAtTime(p.bodyGain, now, 0.02);
+    voice.grainGain.gain.setTargetAtTime(p.grainGain, now, 0.02);
+    voice.tipGain.gain.setTargetAtTime(p.tipGain, now, 0.02);
+  }
+
+  function playPenTap(strength = 1.0) {
+    const p = getPreset();
+    if (!p || state.muted || state.drawVol <= 0.005) return;
+    const ctx = ensureContext();
+    if (!ctx || !buffers) return;
+    const now = ctx.currentTime;
+    const src = ctx.createBufferSource();
+    src.buffer = buffers.crisp;
+    const flt = ctx.createBiquadFilter();
+    flt.type = 'bandpass';
+    flt.frequency.value = p.tapFreq * (0.9 + Math.random() * 0.2);
+    flt.Q.value = 2.4;
+    const g = ctx.createGain();
+    const peak = p.tapGain * state.drawVol * strength * 0.65;
+    g.gain.setValueAtTime(0.0001, now);
+    g.gain.linearRampToValueAtTime(peak, now + 0.002);
+    g.gain.exponentialRampToValueAtTime(0.0001, now + p.tapDur);
+    src.connect(flt); flt.connect(g); g.connect(masterGain);
+    src.start(now, Math.random() * 2.0, p.tapDur + 0.01);
+  }
+
+  function applySpeedToVoice(speedPxPerSec, curveAccent = 0) {
+    updateSpeedMeterUI(speedPxPerSec);
+    const p = getPreset();
+    if (!p || state.muted || state.drawVol <= 0.005) {
+      if (voice && actx) voice.outGain.gain.setTargetAtTime(0, actx.currentTime, 0.02);
+      return;
+    }
+    const v = ensureVoice();
+    if (!v || !actx) return;
+    const now = actx.currentTime;
+
+    if (speedPxPerSec < 10) {
+      v.outGain.gain.setTargetAtTime(0, now, 0.026);
+      v.sqGain.gain.setTargetAtTime(0, now, 0.02);
+      return;
+    }
+
+    // Normalize velocity (10 .. 1350 px/s -> 0 .. 1) with Speed Curve sensitivity
+    const rawU = Math.max(0, Math.min(1, (speedPxPerSec - 10) / 1300));
+    const sens = state.speedSens; // 0 = gentle flat dynamics, 1 = wide expressive range
+    const pitchU = Math.pow(rawU, 0.72) * (0.28 + 0.72 * sens);
+    const gainU = Math.pow(rawU, 0.45 + 0.48 * sens);
+
+    const logLerp = (a, b, t) => a * Math.pow(b / a, Math.max(0, Math.min(1.15, t)));
+
+    // 1. Sweep resonant filters logarithmically with writing speed
+    v.bodyFlt.frequency.setTargetAtTime(logLerp(p.bodyFMin, p.bodyFMax, pitchU), now, 0.018);
+    v.grainFlt.frequency.setTargetAtTime(logLerp(p.grainFMin, p.grainFMax, pitchU), now, 0.016);
+    v.tipFlt.frequency.setTargetAtTime(logLerp(p.tipFMin, p.tipFMax, pitchU), now, 0.016);
+
+    // 2. Scale grain texture playbackRate with hand speed (spatial paper bumps pass faster!)
+    const gRate = p.rateMin + (p.rateMax - p.rateMin) * Math.pow(rawU, 0.78);
+    v.grainSrc.playbackRate.setTargetAtTime(Math.max(0.25, Math.min(3.2, gRate)), now, 0.02);
+    v.tipSrc.playbackRate.setTargetAtTime(0.75 + rawU * 0.85, now, 0.025);
+
+    // 3. Curvature accent briefly emphasizes paper tooth grain on sharp corners/loops
+    const grainBoost = 1 + curveAccent * p.curveBoost;
+    v.grainGain.gain.setTargetAtTime(p.grainGain * grainBoost, now, 0.015);
+
+    // 4. Optional subtle felt-marker harmonic squeak at higher velocities
+    if (p.squeak > 0 && rawU > 0.35) {
+      const sqLevel = p.squeak * Math.pow((rawU - 0.35) / 0.65, 1.4) * 0.14;
+      const sqFreq = 2050 + rawU * 880 + curveAccent * 160;
+      v.sqOsc.frequency.setTargetAtTime(sqFreq, now, 0.02);
+      v.sqFlt.frequency.setTargetAtTime(sqFreq, now, 0.02);
+      v.sqGain.gain.setTargetAtTime(sqLevel, now, 0.02);
+    } else {
+      v.sqGain.gain.setTargetAtTime(0, now, 0.02);
+    }
+
+    // 5. Overall loudness calibrated per preset & user draw volume
+    const targetGain = (0.07 + 0.68 * gainU) * state.drawVol * p.velScale;
+    v.outGain.gain.setTargetAtTime(Math.min(1.15, targetGain), now, 0.014);
+  }
+
+  function tickDecay() {
+    if (!isDrawing) { decayRaf = null; return; }
+    const idleMs = performance.now() - lastT;
+    if (idleMs > 28 && smoothedSpeed > 0) {
+      smoothedSpeed *= Math.pow(0.74, Math.min(8, idleMs / 16));
+      smoothedCurve *= 0.7;
+      if (smoothedSpeed < 8) smoothedSpeed = 0;
+      applySpeedToVoice(smoothedSpeed, smoothedCurve);
+    }
+    decayRaf = requestAnimationFrame(tickDecay);
+  }
+
+  function startDraw(x, y) {
+    cancelDemo();
+    ensureContext();
+    isDrawing = true;
+    lastX = x; lastY = y; lastT = performance.now(); lastAng = null;
+    smoothedSpeed = 0; smoothedCurve = 0;
+    playPenTap(1.0);
+    if (!decayRaf) decayRaf = requestAnimationFrame(tickDecay);
+  }
+
+  function updateDraw(x, y) {
+    if (!isDrawing) return;
+    const now = performance.now();
+    const dt = Math.max(4, now - lastT);
+    const dx = x - lastX, dy = y - lastY;
+    const dist = Math.hypot(dx, dy);
+    if (dist < 0.45) return;
+
+    const instSpeed = Math.min(2600, (dist / dt) * 1000);
+    const ang = Math.atan2(dy, dx);
+    let curve = 0;
+    if (lastAng !== null && dist > 1.5) {
+      const dAng = Math.abs(Math.atan2(Math.sin(ang - lastAng), Math.cos(ang - lastAng)));
+      curve = Math.min(1, dAng * 1.25);
+    }
+    const alpha = instSpeed > smoothedSpeed ? 0.46 : 0.28;
+    smoothedSpeed = smoothedSpeed * (1 - alpha) + instSpeed * alpha;
+    smoothedCurve = smoothedCurve * 0.65 + curve * 0.35;
+
+    lastX = x; lastY = y; lastT = now; lastAng = ang;
+    applySpeedToVoice(smoothedSpeed, smoothedCurve);
+  }
+
+  function stopDraw() {
+    if (!isDrawing) return;
+    isDrawing = false;
+    smoothedSpeed = 0;
+    smoothedCurve = 0;
+    if (decayRaf) { cancelAnimationFrame(decayRaf); decayRaf = null; }
+    applySpeedToVoice(0, 0);
+  }
+
+  // Subtle pen-stroke pulse synced to typing cadence
+  function triggerTypingPulse() {
+    if (!state.typingSfx || state.muted || state.presetId === 'off' || state.drawVol <= 0.005) return;
+    if (isDrawing || demoRaf) return;
+    const now = performance.now();
+    const dt = Math.max(45, Math.min(600, now - lastTypeTime));
+    lastTypeTime = now;
+    // Faster typing -> brisker, higher-velocity pen flick (280..920 px/s)
+    const speed = Math.max(240, Math.min(960, 145000 / dt));
+    const durMs = Math.max(58, Math.min(115, dt * 0.45));
+    ensureVoice();
+    playPenTap(0.55);
+    applySpeedToVoice(speed, 0.35);
+    if (typingPulseTimer) clearTimeout(typingPulseTimer);
+    typingPulseTimer = setTimeout(() => {
+      typingPulseTimer = null;
+      if (!isDrawing && !demoRaf) applySpeedToVoice(0, 0);
+    }, durMs);
+  }
+
+  // Crumple sound (./crumble.mp3) — pre-decoded Web Audio with exact 0ms latency!
+  async function prepareCrumple() {
+    if (state.muted || !state.crumpleEnabled) return;
+    ensureContext();
+    if (!crumbleRawBytes) await preloadCrumple();
+    if (actx && crumbleRawBytes && !crumbleBuffer) await decodeCrumple();
+    if (actx && actx.state === 'suspended') {
+      try { await actx.resume(); } catch (_) {}
+    }
+  }
+
+  function stopCrumple() {
+    if (activeCrumpleSource) {
+      try { activeCrumpleSource.stop(); } catch (_) {}
+      activeCrumpleSource = null;
+    }
+    if (fallbackCrumpleEl) {
+      try { fallbackCrumpleEl.pause(); fallbackCrumpleEl.currentTime = 0; } catch (_) {}
+    }
+  }
+
+  function playCrumple() {
+    stopCrumple();
+    if (state.muted || !state.crumpleEnabled || state.crumpleVol <= 0.005) return;
+    const ctx = ensureContext();
+    if (ctx && crumbleBuffer) {
+      const src = ctx.createBufferSource();
+      src.buffer = crumbleBuffer;
+      const g = ctx.createGain();
+      // crumble.mp3 peak is ~0.165 (-15.6 dBFS), so 3.4x boost brings it to a crisp tactile level
+      g.gain.value = state.crumpleVol * 3.4;
+      src.connect(g);
+      g.connect(masterGain);
+      src.onended = () => { if (activeCrumpleSource === src) activeCrumpleSource = null; };
+      activeCrumpleSource = src;
+      src.start(ctx.currentTime);
+      return;
+    }
+    if (fallbackCrumpleEl) {
+      fallbackCrumpleEl.currentTime = 0;
+      fallbackCrumpleEl.volume = Math.max(0, Math.min(1, state.crumpleVol));
+      fallbackCrumpleEl.play().catch(() => {});
+    }
+  }
+
+  async function testCrumple() {
+    await prepareCrumple();
+    playCrumple();
+  }
+
+  // ---- Sound Board UI, Live Speed Meter & Mini Test Scratchpad ----
+  let padCanvas = null;
+  let padCtx = null;
+  let padPattern = null;
+  let padStrokes = [];
+  let padActive = null;
+  let padRaf = null;
+
+  function updateSpeedMeterUI(speed) {
+    const fill = document.getElementById('sb-meter-fill');
+    const lbl = document.getElementById('sb-speed-val');
+    if (!fill || !lbl) return;
+    const pct = Math.min(100, (speed / 1200) * 100);
+    fill.style.width = pct.toFixed(1) + '%';
+    lbl.textContent = Math.round(speed) + ' px/s';
+  }
+
+  function renderSoundPad() {
+    if (!padCanvas) return;
+    const r = padCanvas.getBoundingClientRect();
+    if (!r.width || !r.height) return;
+    const dpr = window.devicePixelRatio || 1;
+    const cw = Math.round(r.width * dpr), ch = Math.round(r.height * dpr);
+    if (padCanvas.width !== cw || padCanvas.height !== ch) { padCanvas.width = cw; padCanvas.height = ch; }
+    padCtx = padCanvas.getContext('2d');
+    padCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+    if (!padPattern) padPattern = createNapkinPattern(padCtx);
+    padCtx.fillStyle = padPattern;
+    padCtx.fillRect(0, 0, r.width, r.height);
+
+    // Faint guide text when pad is empty
+    const now = performance.now();
+    padStrokes = padStrokes.filter(s => (now - s.tEnd) < 1300);
+
+    if (!padStrokes.length && !padActive) {
+      padCtx.save();
+      padCtx.fillStyle = 'rgba(110, 100, 87, 0.55)';
+      padCtx.font = '11px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+      padCtx.textAlign = 'center'; padCtx.textBaseline = 'middle';
+      padCtx.fillText('Scribble here at different speeds to test...', r.width * 0.5, r.height * 0.5);
+      padCtx.restore();
+      padRaf = null;
+      return;
+    }
+
+    const drawTrail = (pts, alpha) => {
+      if (pts.length < 2) return;
+      padCtx.save();
+      padCtx.globalCompositeOperation = 'multiply';
+      padCtx.strokeStyle = currentColor;
+      padCtx.lineCap = 'round'; padCtx.lineJoin = 'round';
+      for (let i = 1; i < pts.length; i++) {
+        const a = pts[i - 1], b = pts[i];
+        padCtx.globalAlpha = alpha * 0.85;
+        padCtx.lineWidth = Math.max(1.1, 2.3 - (b.sp || 0) * 0.0008);
+        padCtx.beginPath(); padCtx.moveTo(a.x, a.y); padCtx.lineTo(b.x, b.y); padCtx.stroke();
+      }
+      padCtx.restore();
+    };
+
+    for (const st of padStrokes) {
+      const age = Math.max(0, (now - st.tEnd) / 1300);
+      drawTrail(st.pts, Math.max(0, 1 - age * age));
+    }
+    if (padActive) drawTrail(padActive.pts, 1);
+
+    padRaf = requestAnimationFrame(renderSoundPad);
+  }
+
+  function kickPadRender() {
+    if (!padRaf) padRaf = requestAnimationFrame(renderSoundPad);
+  }
+
+  function cancelDemo() {
+    if (demoRaf) { cancelAnimationFrame(demoRaf); demoRaf = null; }
+    if (demoKind) {
+      document.querySelectorAll('.sb-test-btns button').forEach(b => b.classList.remove('playing'));
+      demoKind = null;
+      if (!isDrawing) applySpeedToVoice(0, 0);
+    }
+    if (padActive && padActive.isDemo) {
+      padActive.tEnd = performance.now();
+      padStrokes.push(padActive);
+      padActive = null;
+      kickPadRender();
+    }
+  }
+
+  function playDemoStroke(kind = 'medium', isQuickPreview = false) {
+    cancelDemo();
+    if (state.presetId === 'off' || state.muted) return;
+    ensureVoice();
+    demoKind = kind;
+    if (!isQuickPreview) {
+      const btnId = kind === 'slow' ? 'sb-demo-slow' : (kind === 'fast' ? 'sb-demo-fast' : 'sb-demo-med');
+      const btn = document.getElementById(btnId);
+      if (btn) btn.classList.add('playing');
+    }
+
+    const dur = isQuickPreview ? 320 : (kind === 'slow' ? 980 : (kind === 'fast' ? 680 : 880));
+    const t0 = performance.now();
+    playPenTap(0.9);
+
+    const padRect = padCanvas ? padCanvas.getBoundingClientRect() : { width: 280, height: 64 };
+    const pw = padRect.width || 280, ph = padRect.height || 64;
+    if (padRect.width > 0) {
+      padActive = { pts: [], tEnd: Infinity, isDemo: true };
+      kickPadRender();
+    }
+
+    function step(now) {
+      const t = Math.max(0, Math.min(1, (now - t0) / dur));
+      let speed = 0, curve = 0, px = 0, py = ph * 0.5;
+      const env = Math.sin(t * Math.PI);
+
+      if (kind === 'slow') {
+        speed = (95 + 85 * Math.sin(t * Math.PI * 2.5) * 0.35) * Math.pow(env, 0.35);
+        curve = 0.15 + 0.15 * Math.abs(Math.cos(t * Math.PI * 3));
+        px = 18 + (pw - 36) * t;
+        py = ph * 0.5 + Math.sin(t * Math.PI * 3) * 10;
+      } else if (kind === 'fast') {
+        // Energetic zig-zag sketch flicks (750..1280 px/s)
+        const flick = Math.abs(Math.sin(t * Math.PI * 4));
+        speed = (620 + 680 * flick) * Math.pow(env, 0.25);
+        curve = 0.35 + 0.65 * (1 - flick);
+        px = 14 + (pw - 28) * t;
+        py = ph * 0.5 + Math.sin(t * Math.PI * 8) * 18;
+      } else {
+        // Natural cursive writing cadence with rhythmic loops & micro-pauses (240..620 px/s)
+        const wordPulse = Math.max(0.08, Math.sin(t * Math.PI * 5) * 0.5 + 0.55);
+        speed = (220 + 420 * wordPulse) * Math.pow(env, 0.3);
+        curve = 0.25 + 0.55 * Math.abs(Math.cos(t * Math.PI * 7));
+        px = 16 + (pw - 32) * t;
+        py = ph * 0.52 + Math.sin(t * Math.PI * 10) * 13 * Math.cos(t * Math.PI * 2.5);
+      }
+
+      applySpeedToVoice(speed, curve);
+      if (padActive && padActive.isDemo) {
+        padActive.pts.push({ x: px, y: py, sp: speed });
+        kickPadRender();
+      }
+
+      if (t < 1) {
+        demoRaf = requestAnimationFrame(step);
+      } else {
+        cancelDemo();
+      }
+    }
+    demoRaf = requestAnimationFrame(step);
+  }
+
+  function syncUI() {
+    document.querySelectorAll('button.sb-preset').forEach(b => {
+      b.classList.toggle('active', b.dataset.preset === state.presetId);
+    });
+    const offBtn = document.getElementById('sb-off-btn');
+    if (offBtn) offBtn.classList.toggle('active', state.presetId === 'off');
+
+    const muteBtn = document.getElementById('sb-mute-btn');
+    if (muteBtn) {
+      muteBtn.classList.toggle('active', state.muted);
+      muteBtn.textContent = state.muted ? 'Muted' : 'Mute';
+    }
+    const tog = document.getElementById('sound-toggle');
+    if (tog) {
+      const isOff = state.muted || (state.presetId === 'off' && !state.crumpleEnabled);
+      tog.classList.toggle('muted', isOff);
+    }
+  }
+
+  function setPreset(id) {
+    state.presetId = id;
+    configureVoiceForPreset();
+    syncUI();
+    if (id !== 'off' && !state.muted) {
+      playDemoStroke('medium', true);
+    } else {
+      cancelDemo();
+      applySpeedToVoice(0, 0);
+    }
+  }
+
+  function toggleMute() {
+    state.muted = !state.muted;
+    if (masterGain && actx) {
+      masterGain.gain.setTargetAtTime(state.muted ? 0 : 1, actx.currentTime, 0.015);
+    }
+    if (state.muted) { cancelDemo(); stopCrumple(); }
+    syncUI();
+  }
+
+  function setDrawVolume(v) {
+    state.drawVol = Math.max(0, Math.min(1, v));
+    const el = document.getElementById('sb-draw-vol-val');
+    if (el) el.textContent = Math.round(state.drawVol * 100) + '%';
+  }
+
+  function setSpeedSens(v) {
+    state.speedSens = Math.max(0, Math.min(1, v));
+    const el = document.getElementById('sb-speed-sens-val');
+    if (el) el.textContent = Math.round(state.speedSens * 100) + '%';
+  }
+
+  function setCrumpleVolume(v) {
+    state.crumpleVol = Math.max(0, Math.min(1, v));
+    const el = document.getElementById('sb-crumple-vol-val');
+    if (el) el.textContent = Math.round(state.crumpleVol * 100) + '%';
+  }
+
+  function setTypingSfx(on) { state.typingSfx = !!on; }
+  function setCrumpleEnabled(on) { state.crumpleEnabled = !!on; syncUI(); }
+
+  function initUI() {
+    const grid = document.getElementById('sb-preset-grid');
+    if (grid) {
+      grid.innerHTML = SOUND_PRESETS.map(p => `
+        <button class="sb-preset${p.id === state.presetId ? ' active' : ''}" data-preset="${p.id}" onclick="NapkinAudio.setPreset('${p.id}')">
+          <span class="p-name">${p.name}</span>
+          <span class="p-desc">${p.desc}</span>
+        </button>
+      `).join('');
+    }
+
+    padCanvas = document.getElementById('sound-pad');
+    if (padCanvas) {
+      const padPos = e => {
+        const r = padCanvas.getBoundingClientRect();
+        return { x: e.clientX - r.left, y: e.clientY - r.top };
+      };
+      padCanvas.addEventListener('pointerdown', e => {
+        e.stopPropagation();
+        padCanvas.setPointerCapture(e.pointerId);
+        const pt = padPos(e);
+        startDraw(pt.x, pt.y);
+        padActive = { pts: [{ x: pt.x, y: pt.y, sp: 0 }], tEnd: Infinity, isDemo: false };
+        kickPadRender();
+      });
+      padCanvas.addEventListener('pointermove', e => {
+        if (!padActive || padActive.isDemo) return;
+        const pt = padPos(e);
+        updateDraw(pt.x, pt.y);
+        padActive.pts.push({ x: pt.x, y: pt.y, sp: smoothedSpeed });
+        kickPadRender();
+      });
+      const finishPad = () => {
+        if (!padActive || padActive.isDemo) return;
+        stopDraw();
+        padActive.tEnd = performance.now();
+        padStrokes.push(padActive);
+        padActive = null;
+        kickPadRender();
+      };
+      padCanvas.addEventListener('pointerup', finishPad);
+      padCanvas.addEventListener('pointercancel', finishPad);
+      padCanvas.addEventListener('lostpointercapture', finishPad);
+    }
+
+    // Unlock Web Audio + pre-decode ./crumble.mp3 on first user gesture anywhere
+    const unlockOnce = () => {
+      ensureContext();
+      if (crumbleRawBytes && !crumbleBuffer) decodeCrumple();
+    };
+    window.addEventListener('pointerdown', unlockOnce, { once: true, passive: true });
+    window.addEventListener('keydown', unlockOnce, { once: true, passive: true });
+
+    preloadCrumple();
+    syncUI();
+  }
+
+  return {
+    initUI,
+    renderSoundPad,
+    startDraw,
+    updateDraw,
+    stopDraw,
+    triggerTypingPulse,
+    prepareCrumple,
+    playCrumple,
+    stopCrumple,
+    testCrumple,
+    playDemoStroke,
+    setPreset,
+    toggleMute,
+    setDrawVolume,
+    setSpeedSens,
+    setCrumpleVolume,
+    setTypingSfx,
+    setCrumpleEnabled,
+    getState: () => ({ ...state, hasCrumpleBuffer: !!crumbleBuffer })
+  };
+})();
+
+function toggleSoundBoard(forceState) {
+  const panel = document.getElementById('sound-board');
+  const btn = document.getElementById('sound-toggle');
+  if (!panel) return;
+  const open = typeof forceState === 'boolean' ? forceState : !panel.classList.contains('open');
+  panel.classList.toggle('open', open);
+  if (btn) btn.classList.toggle('active', open);
+  if (open) requestAnimationFrame(() => NapkinAudio.renderSoundPad());
+}
+
+// ============================================================================
+// 6. CRUMPLED NAPKIN BALL & THROW ANIMATION (SYNCED TO ./crumble.mp3)
 // ============================================================================
 let crumpleRaf = null;
+let crumpleSeq = 0;
 
 function drawTexturedTriangle(ctx, img, u0, v0, u1, v1, u2, v2, x0, y0, x1, y1, x2, y2, shade) {
   const denom = (u0 * (v1 - v2) + u1 * (v2 - v0) + u2 * (v0 - v1));
   if (Math.abs(denom) < 1e-3) return;
 
-  // Slightly expand clip triangle by 0.7px from centroid to eliminate hairline seams
+  // Slightly expand clip triangle by 0.75px from centroid to eliminate hairline seams
   const cx = (x0 + x1 + x2) / 3, cy = (y0 + y1 + y2) / 3;
   const ex = (x, y) => {
     const dx = x - cx, dy = y - cy, l = Math.hypot(dx, dy) || 1;
@@ -989,23 +2351,33 @@ function drawTexturedTriangle(ctx, img, u0, v0, u1, v1, u2, v2, x0, y0, x1, y1, 
     ctx.beginPath();
     ctx.moveTo(px0, py0); ctx.lineTo(px1, py1); ctx.lineTo(px2, py2); ctx.closePath();
     ctx.fillStyle = shade > 0
-      ? `rgba(255, 249, 238, ${Math.min(0.42, shade * 0.42).toFixed(3)})`
-      : `rgba(74, 52, 28, ${Math.min(0.54, -shade * 0.54).toFixed(3)})`;
+      ? `rgba(255, 249, 238, ${Math.min(0.45, shade * 0.45).toFixed(3)})`
+      : `rgba(74, 52, 28, ${Math.min(0.56, -shade * 0.56).toFixed(3)})`;
     ctx.fill();
     ctx.restore();
   }
 }
 
-function clearAllWithCrumple() {
-  if (typingTarget) cancelTextBox();
+// Smoothstep helper for choreographing crumple phases to ./crumble.mp3 envelope
+function smoothstep(edge0, edge1, x) {
+  const t = Math.max(0, Math.min(1, (x - edge0) / Math.max(1e-6, edge1 - edge0)));
+  return t * t * (3 - 2 * t);
+}
+
+async function clearAllWithCrumple() {
+  const token = ++crumpleSeq;
+  if (typingTarget) commitTextBox();
   if (pendingTimer) { clearTimeout(pendingTimer); pendingTimer = null; }
   pendingStrokes = [];
+  activeRaw = null;
+  dragShape = null;
+  dragItem = null;
+  resizeState = null;
   selectedItem = null;
+  hoverItem = null;
+  NapkinAudio.stopDraw();
 
-  // If canvas is already blank, skip animation
-  if (!items.length) { scheduleRender(); return; }
-
-  // 1. Snapshot the current napkin + drawings before clearing!
+  // 1. Snapshot the current napkin (with OR without content!) before clearing
   render();
   const frameRect = document.getElementById('wrap').getBoundingClientRect();
   const snap = document.createElement('canvas');
@@ -1013,11 +2385,16 @@ function clearAllWithCrumple() {
   snap.height = Math.max(1, Math.round(frameRect.height));
   snap.getContext('2d').drawImage(canvas, 0, 0, snap.width, snap.height);
 
-  // 2. Clear the live napkin underneath immediately so a fresh napkin is waiting!
+  // 2. Clear the live napkin & generate a brand-new unique napkin sheet underneath!
   items = [];
+  nextNapkin();
   scheduleRender();
 
-  // 3. Prepare triangulated crumpled paper mesh (10 x 7 grid)
+  // 3. Ensure ./crumble.mp3 AudioBuffer is decoded & ready for exact 0ms sync
+  await NapkinAudio.prepareCrumple();
+  if (token !== crumpleSeq) return;
+
+  // 4. Prepare triangulated crumpled paper mesh (10 x 7 grid)
   if (crumpleRaf) { cancelAnimationFrame(crumpleRaf); crumpleRaf = null; }
   const overlay = document.getElementById('crumple-overlay');
   const dpr = window.devicePixelRatio || 1;
@@ -1027,11 +2404,11 @@ function clearAllWithCrumple() {
   const octx = overlay.getContext('2d');
 
   const cols = 10, rows = 7;
-  const ballR = Math.min(54, Math.min(frameRect.width, frameRect.height) * 0.13);
+  const ballR = Math.min(56, Math.min(frameRect.width, frameRect.height) * 0.135);
   const centerX = frameRect.left + frameRect.width * 0.5;
   const centerY = frameRect.top + frameRect.height * 0.5;
 
-  // Build vertices with deterministic organic crumpled-ball target positions & 3D z-depths
+  // Build vertices with organic crumpled-ball target positions & 3D z-depths
   const verts = [];
   for (let j = 0; j <= rows; j++) {
     for (let i = 0; i <= cols; i++) {
@@ -1039,18 +2416,23 @@ function clearAllWithCrumple() {
       const v = (j / rows) * snap.height;
       const sx = frameRect.left + u;
       const sy = frameRect.top + v;
-      // Angle & layered crumpled radius inside the paper ball
       const ang = Math.atan2(sy - centerY, sx - centerX) + (Math.random() - 0.5) * 0.85;
       const normDist = Math.hypot((i / cols) - 0.5, (j / rows) - 0.5) * 1.414;
       const foldR = ballR * (0.28 + 0.72 * Math.pow(normDist, 0.75) * (0.68 + Math.random() * 0.45));
       const bx = Math.cos(ang) * foldR + (Math.random() - 0.5) * ballR * 0.28;
       const by = Math.sin(ang) * foldR + (Math.random() - 0.5) * ballR * 0.28;
-      // Random 3D height for realistic facet lighting
-      const bz = (Math.random() - 0.45) * 2.0;
-      const creaseDelay = Math.random() * 0.22; // outer corners fold slightly staggered
-      verts.push({ u, v, sx, sy, bx, by, bz, delay: creaseDelay * (1 - normDist * 0.4) });
+      const bz = (Math.random() - 0.45) * 2.1;
+      const creaseDelay = Math.random() * 0.20;
+      verts.push({ u, v, sx, sy, bx, by, bz, delay: creaseDelay * (1 - normDist * 0.42), jitterPhase: Math.random() * Math.PI * 2 });
     }
   }
+
+  // Perimeter indices for crisp lifted-sheet drop shadow (makes blank kraft napkin pop!)
+  const borderIdx = [];
+  for (let i = 0; i <= cols; i++) borderIdx.push(i);
+  for (let j = 1; j <= rows; j++) borderIdx.push(j * (cols + 1) + cols);
+  for (let i = cols - 1; i >= 0; i--) borderIdx.push(rows * (cols + 1) + i);
+  for (let j = rows - 1; j >= 1; j--) borderIdx.push(j * (cols + 1));
 
   const tris = [];
   for (let j = 0; j < rows; j++) {
@@ -1064,51 +2446,105 @@ function clearAllWithCrumple() {
     }
   }
 
-  const totalDur = 880; // ms
+  // Exact acoustic choreography matched to ./crumble.mp3 (1.000s):
+  //   0..445ms: Squeeze 1 (initial sharp fold snap at 80ms peak, rolling folds at 225ms & 305ms)
+  // 445..555ms: Brief grip-reset lull (matches quiet valley 450..550ms in crumble.mp3)
+  // 555..940ms: Squeeze 2 (tight final crush hitting 725ms & 890ms peaks + throw wind-up)
+  // 920..1420ms: Parabolic toss away right as the final 940ms crinkle concludes!
+  const TOSS_START = 920;
+  const TOTAL_DUR = 1420;
+
+  // Fire ./crumble.mp3 and start clock on the exact same synchronous tick
+  NapkinAudio.playCrumple();
   const tStart = performance.now();
 
   function step(now) {
-    const t = Math.min(1, (now - tStart) / totalDur);
+    const ms = Math.max(0, now - tStart);
+    const t = Math.min(1, ms / TOTAL_DUR);
     octx.setTransform(dpr, 0, 0, dpr, 0, 0);
     octx.clearRect(0, 0, window.innerWidth, window.innerHeight);
 
-    // Phase 1 (0..0.48): crumple flat napkin into 3D paper ball
-    // Phase 2 (0.48..1.0): toss paper ball in parabolic arc up & off to upper-right!
-    const cPhase = Math.min(1, t / 0.48);
-    const tossPhase = Math.max(0, (t - 0.46) / 0.54);
+    // Two-squeeze crumple progress synced directly to ./crumble.mp3 peaks
+    let cPhase = 0;
+    if (ms < 445) {
+      // Fast snap on 80ms crack peak, then rolling gather through 445ms
+      const p1 = ms / 445;
+      const snap = 1 - Math.pow(1 - p1, 2.35);
+      cPhase = 0.72 * snap;
+    } else if (ms < 555) {
+      // Quiet regrip lull (445..555ms): subtle gentle settle
+      cPhase = 0.72 + 0.025 * smoothstep(445, 555, ms);
+    } else {
+      // Second tight squeeze (555..940ms): finishes tight ball right as audio finishes
+      cPhase = 0.745 + 0.255 * smoothstep(555, 935, ms);
+    }
 
-    // Ball center position + ballistic arc + spin + distance shrink
-    const recoilY = cPhase > 0.78 && tossPhase < 0.12 ? Math.sin(((cPhase - 0.78) / 0.22) * Math.PI) * 10 : 0;
-    const tx = tossPhase * (window.innerWidth * 0.58 + 160);
-    const ty = -Math.sin(tossPhase * Math.PI * 0.85) * 220 + tossPhase * tossPhase * 90 + recoilY;
+    // Secondary tight compaction + subtle twist during Squeeze 2 (555..940ms)
+    const squeeze2 = smoothstep(555, 920, ms);
+    // Micro-crunch tremor aligned to the 4 strongest acoustic peaks in crumble.mp3 (80, 225, 725, 890ms)
+    const pulse = (peakMs, width) => Math.exp(-Math.pow((ms - peakMs) / width, 2));
+    const crunchShake =
+      pulse(82, 24) * 4.2 +
+      pulse(228, 30) * 2.8 +
+      pulse(310, 28) * 2.0 +
+      pulse(728, 32) * 3.0 +
+      pulse(892, 24) * 2.4;
+
+    const tossPhase = Math.max(0, Math.min(1, (ms - TOSS_START) / (TOTAL_DUR - TOSS_START)));
+
+    // Brief downward wind-up dip right at the end of Squeeze 2 before launching
+    const windupY = ms > 820 && ms < 990 ? Math.sin(((ms - 820) / 170) * Math.PI) * 12 : 0;
+    const tx = tossPhase * (window.innerWidth * 0.60 + 175);
+    const ty = -Math.sin(tossPhase * Math.PI * 0.84) * 230 + tossPhase * tossPhase * 95 + windupY;
     const ballCx = centerX + tx;
     const ballCy = centerY + ty;
-    const spin = tossPhase * tossPhase * 7.8;
-    const scale = 1.0 - 0.72 * Math.pow(tossPhase, 1.15);
+
+    // Slight hand twist during second squeeze, then snappy spin during throw
+    const spin = squeeze2 * 0.42 + Math.pow(tossPhase, 1.55) * 9.2;
+    // Compress ball noticeably tighter during Squeeze 2 (1.14 -> 0.88), then shrink in flight
+    const crushScale = 1.14 - 0.26 * squeeze2;
+    const flightScale = 1.0 - 0.74 * Math.pow(tossPhase, 1.15);
+    const scale = crushScale * flightScale;
     const alpha = tossPhase > 0.78 ? Math.max(0, 1 - (tossPhase - 0.78) / 0.22) : 1;
 
     const cosS = Math.cos(spin), sinS = Math.sin(spin);
 
-    // Compute current screen positions & z for every vertex
     const cur = verts.map(vt => {
-      const lc = Math.max(0, Math.min(1, (cPhase - vt.delay) / Math.max(0.1, 1 - vt.delay)));
-      // Smooth ease-in-out cubic with crisp crinkle snap
+      const lc = Math.max(0, Math.min(1, (cPhase - vt.delay) / Math.max(0.12, 1 - vt.delay)));
       const ease = lc < 0.5 ? 4 * lc * lc * lc : 1 - Math.pow(-2 * lc + 2, 3) / 2;
       const rx = (vt.bx * cosS - vt.by * sinS) * scale;
       const ry = (vt.bx * sinS + vt.by * cosS) * scale;
-      const x = vt.sx * (1 - ease) + (ballCx + rx) * ease;
-      const y = vt.sy * (1 - ease) + (ballCy + ry) * ease;
-      return { u: vt.u, v: vt.v, x, y, z: vt.bz * ease };
+      const jx = Math.cos(vt.jitterPhase + ms * 0.04) * crunchShake * ease;
+      const jy = Math.sin(vt.jitterPhase + ms * 0.04) * crunchShake * ease;
+      const x = vt.sx * (1 - ease) + (ballCx + rx) * ease + jx;
+      const y = vt.sy * (1 - ease) + (ballCy + ry) * ease + jy;
+      return { u: vt.u, v: vt.v, x, y, z: vt.bz * ease * (0.85 + 0.35 * squeeze2) };
     });
 
-    // Soft cast shadow beneath crumpled ball (separates downward during throw!)
-    const shadowAlpha = (0.18 * Math.pow(cPhase, 1.5)) * (1 - tossPhase * 0.85);
+    // Lifted paper sheet shadow (visible during initial fold so even a blank napkin clearly detaches!)
+    const sheetShadowAlpha = Math.sin(Math.min(1, cPhase) * Math.PI) * 0.20 * (1 - tossPhase);
+    if (sheetShadowAlpha > 0.006) {
+      octx.save();
+      octx.fillStyle = `rgba(48, 34, 16, ${sheetShadowAlpha.toFixed(3)})`;
+      octx.beginPath();
+      borderIdx.forEach((vi, idx) => {
+        const pt = cur[vi];
+        if (idx === 0) octx.moveTo(pt.x + 8, pt.y + 12);
+        else octx.lineTo(pt.x + 8, pt.y + 12);
+      });
+      octx.closePath();
+      octx.fill();
+      octx.restore();
+    }
+
+    // Soft cast shadow beneath crumpled ball (separates downward during throw)
+    const shadowAlpha = (0.20 * Math.pow(cPhase, 1.35)) * (1 - tossPhase * 0.85);
     if (shadowAlpha > 0.005) {
       octx.save();
       octx.fillStyle = `rgba(50, 36, 18, ${shadowAlpha.toFixed(3)})`;
       octx.beginPath();
-      const sRad = ballR * (0.95 + (1 - cPhase) * 1.4) * scale;
-      octx.ellipse(ballCx + 10, ballCy + 18 + tossPhase * 85, sRad, sRad * 0.55, 0, 0, Math.PI * 2);
+      const sRad = ballR * (0.95 + (1 - cPhase) * 1.35) * scale;
+      octx.ellipse(ballCx + 10, ballCy + 18 + tossPhase * 90, sRad, sRad * 0.55, 0, 0, Math.PI * 2);
       octx.fill();
       octx.restore();
     }
@@ -1117,16 +2553,14 @@ function clearAllWithCrumple() {
     const sorted = tris.map(([i0, i1, i2]) => {
       const p0 = cur[i0], p1 = cur[i1], p2 = cur[i2];
       const avgZ = (p0.z + p1.z + p2.z) / 3;
-      // 3D facet normal for directional top-left lamp shading
-      const ux = p1.x - p0.x, uy = p1.y - p0.y, uz = (p1.z - p0.z) * 28;
-      const vx = p2.x - p0.x, vy = p2.y - p0.y, vz = (p2.z - p0.z) * 28;
+      const ux = p1.x - p0.x, uy = p1.y - p0.y, uz = (p1.z - p0.z) * 30;
+      const vx = p2.x - p0.x, vy = p2.y - p0.y, vz = (p2.z - p0.z) * 30;
       const nx = uy * vz - uz * vy;
       const ny = uz * vx - ux * vz;
       const nz = ux * vy - uy * vx;
       const nl = Math.hypot(nx, ny, nz) || 1;
-      // Light from upper-left (-0.5, -0.6, 0.62)
       const dot = (nx * -0.5 + ny * -0.6 + Math.abs(nz) * 0.62) / nl;
-      const shade = (dot - 0.52) * Math.min(1, cPhase * 1.4);
+      const shade = (dot - 0.50) * Math.min(1.15, cPhase * 1.55);
       return { p0, p1, p2, avgZ, shade };
     }).sort((a, b) => a.avgZ - b.avgZ);
 
@@ -1336,28 +2770,111 @@ function render() {
     if (it.textStrokes) for (const s of it.textStrokes) drawPStroke(ctx, s.pts, s.baseW, s.color, s.alpha);
   }
 
-  // Blinking ink caret directly on napkin while typing live
-  if (typingTarget && caretVisible) {
+  // Direct napkin-only text editing UI (no secondary input box!)
+  if (typingTarget) {
+    const val = inlineInput.value || '';
+    const len = val.length;
+    const selStart = Math.min(len, inlineInput.selectionStart ?? len);
+    const selEnd = Math.min(len, inlineInput.selectionEnd ?? len);
+    const trailingSpaces = (val.match(/\s+$/) || [''])[0].length;
+
+    let minX = typingTarget.x, maxX = typingTarget.x;
     let cx = typingTarget.x, cy = typingTarget.y, chH = 26, col = currentColor;
+
     if (typingTarget.shapeRef) {
       const sh = typingTarget.shapeRef;
-      col = sh.color; cy = sh.y + sh.h / 2;
+      col = sh.color;
+      cy = sh.y + sh.h / 2;
+      chH = Math.min(26, Math.max(16, sh.h * 0.48));
+
+      // Subtle paper-native focus highlight around the active shape
+      ctx.save();
+      ctx.strokeStyle = 'rgba(35, 32, 28, 0.30)';
+      ctx.lineWidth = 1.1;
+      ctx.setLineDash([4, 3]);
+      ctx.strokeRect(sh.x - 4, sh.y - 4, sh.w + 8, sh.h + 8);
+      ctx.restore();
+
       if (sh.textStrokes && sh.textStrokes.length) {
-        let maxX = sh.x + sh.w / 2;
-        for (const s of sh.textStrokes) for (const pt of s.pts) if (pt[0] > maxX) maxX = pt[0];
-        cx = maxX + 5;
-      } else cx = sh.x + sh.w / 2;
-      chH = Math.min(26, sh.h * 0.48);
+        minX = 1e9; maxX = -1e9;
+        for (const s of sh.textStrokes) {
+          for (const pt of s.pts) {
+            if (pt[0] < minX) minX = pt[0];
+            if (pt[0] > maxX) maxX = pt[0];
+          }
+        }
+        const effMaxX = maxX + trailingSpaces * 10;
+        if (selEnd >= len) cx = effMaxX + 5;
+        else cx = minX + (effMaxX - minX) * (selEnd / Math.max(1, len));
+      } else {
+        minX = sh.x + sh.w / 2;
+        maxX = minX + trailingSpaces * 10;
+        cx = maxX;
+        if (len === 0) {
+          ctx.save();
+          ctx.fillStyle = 'rgba(110, 100, 87, 0.42)';
+          ctx.font = 'italic 12px Georgia, "Times New Roman", serif';
+          ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+          ctx.fillText('Type label...', sh.x + sh.w / 2, cy);
+          ctx.restore();
+        }
+      }
     } else if (typingTarget.textItem) {
       const ti = typingTarget.textItem;
-      col = ti.color; cy = ti.anchorY;
-      cx = (ti.strokes && ti.strokes.length) ? (ti.x + ti.w + 6) : ti.anchorX;
+      col = ti.color;
+      cy = ti.anchorY;
       chH = 28;
+      minX = ti.anchorX;
+      const hasInk = ti.strokes && ti.strokes.length > 0;
+      const effMaxX = hasInk ? (ti.x + ti.w + trailingSpaces * 12) : (ti.anchorX + trailingSpaces * 12);
+      maxX = effMaxX;
+      if (selEnd >= len) cx = hasInk ? (effMaxX + 5) : effMaxX;
+      else cx = minX + (effMaxX - minX) * (selEnd / Math.max(1, len));
+
+      // Subtle napkin baseline guide directly beneath the text area
+      const lineEnd = Math.max(ti.anchorX + 116, effMaxX + 18);
+      ctx.save();
+      ctx.strokeStyle = 'rgba(92, 74, 52, 0.28)';
+      ctx.lineWidth = 1.1;
+      ctx.setLineDash([3, 3]);
+      ctx.beginPath();
+      ctx.moveTo(ti.anchorX - 3, cy + chH * 0.56);
+      ctx.lineTo(lineEnd, cy + chH * 0.56);
+      ctx.stroke();
+      ctx.restore();
+
+      if (len === 0) {
+        ctx.save();
+        ctx.fillStyle = 'rgba(110, 100, 87, 0.44)';
+        ctx.font = 'italic 14px Georgia, "Times New Roman", serif';
+        ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+        ctx.fillText('Type on napkin...', ti.anchorX + 7, cy);
+        ctx.restore();
+      }
     }
-    ctx.save();
-    ctx.strokeStyle = col; ctx.globalAlpha = 0.72; ctx.lineWidth = 1.6; ctx.lineCap = 'round';
-    ctx.beginPath(); ctx.moveTo(cx, cy - chH * 0.5); ctx.lineTo(cx, cy + chH * 0.5); ctx.stroke();
-    ctx.restore();
+
+    // Translucent highlight when user selects text (Ctrl+A / Shift+Arrows)
+    if (selStart !== selEnd && len > 0 && maxX > minX) {
+      const sx0 = minX + (maxX - minX) * (selStart / len);
+      const sx1 = minX + (maxX - minX) * (selEnd / len);
+      ctx.save();
+      ctx.fillStyle = col;
+      ctx.globalAlpha = 0.14;
+      ctx.fillRect(sx0 - 2, cy - chH * 0.55, Math.max(6, sx1 - sx0 + 4), chH * 1.1);
+      ctx.restore();
+    }
+
+    // Keep hidden IME focus proxy anchored right at the caret
+    inlineInput.style.left = Math.max(4, Math.min(r.width - 8, cx)) + 'px';
+    inlineInput.style.top = Math.max(4, Math.min(r.height - 30, cy - chH * 0.5)) + 'px';
+
+    // Blinking ink caret directly on napkin
+    if (caretVisible) {
+      ctx.save();
+      ctx.strokeStyle = col; ctx.globalAlpha = 0.78; ctx.lineWidth = 1.7; ctx.lineCap = 'round';
+      ctx.beginPath(); ctx.moveTo(cx, cy - chH * 0.5); ctx.lineTo(cx, cy + chH * 0.5); ctx.stroke();
+      ctx.restore();
+    }
   }
 
   // Selection box + 4 corner resize handles (in Select/Move mode)
@@ -1438,19 +2955,21 @@ function openTextBox(x, y, shapeRef = null, existingTextItem = null) {
     items.push(textItem);
   }
 
-  typingTarget = { x, y, shapeRef, textItem, wasNew, snapshot, openedAt: performance.now() };
+  typingTarget = { x, y, shapeRef, textItem, wasNew, snapshot, openedAt: performance.now(), lastLen: 0 };
 
+  // Keep #inline-text invisible at the napkin caret (only as a keyboard/IME focus proxy)
   const r = canvas.getBoundingClientRect();
-  const pillX = shapeRef ? (shapeRef.x + shapeRef.w / 2 - 75) : (textItem.anchorX - 8);
-  const pillY = shapeRef ? (shapeRef.y + shapeRef.h + 8) : (textItem.anchorY + 26);
-  inlineInput.style.left = Math.max(10, Math.min(r.width - 175, pillX)) + 'px';
-  inlineInput.style.top = Math.max(10, Math.min(r.height - 36, pillY)) + 'px';
+  const anchorX = shapeRef ? (shapeRef.x + shapeRef.w / 2) : textItem.anchorX;
+  const anchorY = shapeRef ? (shapeRef.y + shapeRef.h / 2) : textItem.anchorY;
+  inlineInput.style.left = Math.max(4, Math.min(r.width - 8, anchorX)) + 'px';
+  inlineInput.style.top = Math.max(4, Math.min(r.height - 30, anchorY - 14)) + 'px';
   inlineInput.style.display = 'block';
   inlineInput.value = shapeRef ? (shapeRef.label || '') : (textItem.text || '');
-  inlineInput.focus();
+  typingTarget.lastLen = inlineInput.value.length;
+  inlineInput.focus({ preventScroll: true });
   requestAnimationFrame(() => {
     if (!typingTarget) return;
-    inlineInput.focus();
+    inlineInput.focus({ preventScroll: true });
     inlineInput.setSelectionRange(inlineInput.value.length, inlineInput.value.length);
   });
 
@@ -1463,6 +2982,10 @@ function onLiveTextInput() {
   if (!typingTarget) return;
   caretVisible = true;
   const val = inlineInput.value;
+  if (val.length > typingTarget.lastLen && val.trim().length > 0) {
+    NapkinAudio.triggerTypingPulse();
+  }
+  typingTarget.lastLen = val.length;
   if (typingTarget.shapeRef) {
     const it = typingTarget.shapeRef;
     it.label = val;
@@ -1476,6 +2999,7 @@ function onLiveTextInput() {
     ti.styleKey = currentStyleKey;
     synthesizeCursiveStreaming(val, ti.anchorX, ti.anchorY, 32, 640, ti.color, null, ti, currentStyleKey, 'left');
   }
+  scheduleRender();
 }
 
 function commitTextBox() {
@@ -1484,6 +3008,7 @@ function commitTextBox() {
   typingTarget = null;
   stopCaretBlink();
   const val = inlineInput.value.trim();
+  inlineInput.blur();
   inlineInput.style.display = 'none';
 
   if (!val) {
@@ -1499,6 +3024,7 @@ function cancelTextBox() {
   const tgt = typingTarget;
   typingTarget = null;
   stopCaretBlink();
+  inlineInput.blur();
   inlineInput.style.display = 'none';
 
   if (tgt.wasNew && tgt.textItem) {
@@ -1516,14 +3042,32 @@ function cancelTextBox() {
   scheduleRender();
 }
 
+function isPointInsideTypingTarget(x, y) {
+  if (!typingTarget) return false;
+  if (typingTarget.shapeRef) {
+    const sh = typingTarget.shapeRef;
+    return x >= sh.x - 6 && x <= sh.x + sh.w + 6 && y >= sh.y - 6 && y <= sh.y + sh.h + 6;
+  }
+  if (typingTarget.textItem) {
+    const ti = typingTarget.textItem;
+    const w = Math.max(120, ti.w + 24);
+    return x >= ti.anchorX - 8 && x <= ti.anchorX + w && y >= ti.anchorY - 22 && y <= ti.anchorY + 22;
+  }
+  return false;
+}
+
 inlineInput.addEventListener('input', onLiveTextInput);
 inlineInput.addEventListener('keydown', e => {
-  if (e.key === 'Enter') { e.preventDefault(); commitTextBox(); }
-  if (e.key === 'Escape') { e.preventDefault(); cancelTextBox(); }
+  if (e.key === 'Enter') { e.preventDefault(); commitTextBox(); return; }
+  if (e.key === 'Escape') { e.preventDefault(); cancelTextBox(); return; }
+  caretVisible = true;
+  scheduleRender();
 });
+inlineInput.addEventListener('keyup', () => { if (typingTarget) { caretVisible = true; scheduleRender(); } });
+inlineInput.addEventListener('select', () => { if (typingTarget) scheduleRender(); });
 inlineInput.addEventListener('blur', () => {
   if (typingTarget && (performance.now() - typingTarget.openedAt) < 160) {
-    inlineInput.focus();
+    inlineInput.focus({ preventScroll: true });
     return;
   }
   commitTextBox();
@@ -1542,8 +3086,21 @@ function hitItem(x, y) {
 }
 
 canvas.addEventListener('pointerdown', e => {
-  if (typingTarget) { commitTextBox(); return; }
   const p = getPos(e);
+
+  if (typingTarget) {
+    // Clicking inside the active napkin text area keeps typing focus there
+    if (isPointInsideTypingTarget(p.x, p.y)) {
+      e.preventDefault();
+      inlineInput.focus({ preventScroll: true });
+      caretVisible = true;
+      scheduleRender();
+      return;
+    }
+    commitTextBox();
+    // In Text tool, clicking another spot seamlessly starts typing there
+    if (tool !== 'text') return;
+  }
 
   if (tool === 'text') {
     e.preventDefault();
@@ -1583,6 +3140,7 @@ canvas.addEventListener('pointerdown', e => {
   if (tool === 'box' || tool === 'oval' || tool === 'diamond' || tool === 'arrow') {
     flushPendingNow();
     dragShape = { x: p.x, y: p.y, cur: p };
+    NapkinAudio.startDraw(p.x, p.y);
     scheduleRender();
     return;
   }
@@ -1590,6 +3148,7 @@ canvas.addEventListener('pointerdown', e => {
   if (pendingTimer) { clearTimeout(pendingTimer); pendingTimer = null; }
   pendingMode = tool;
   activeRaw = [p];
+  NapkinAudio.startDraw(p.x, p.y);
   scheduleRender();
 });
 
@@ -1634,12 +3193,22 @@ canvas.addEventListener('pointermove', e => {
     return;
   }
 
-  if (dragShape) { dragShape.cur = p; scheduleRender(); return; }
-  if (activeRaw) { activeRaw.push(p); scheduleRender(); }
+  if (dragShape) {
+    dragShape.cur = p;
+    NapkinAudio.updateDraw(p.x, p.y);
+    scheduleRender();
+    return;
+  }
+  if (activeRaw) {
+    activeRaw.push(p);
+    NapkinAudio.updateDraw(p.x, p.y);
+    scheduleRender();
+  }
 });
 
 canvas.addEventListener('pointerup', e => {
   const p = getPos(e);
+  NapkinAudio.stopDraw();
 
   if (resizeState) {
     const it = resizeState.item;
@@ -1699,6 +3268,9 @@ canvas.addEventListener('pointerup', e => {
   }
 });
 
+canvas.addEventListener('pointercancel', () => { NapkinAudio.stopDraw(); activeRaw = null; dragShape = null; });
+canvas.addEventListener('lostpointercapture', () => { NapkinAudio.stopDraw(); });
+
 // Double-click in Select mode edits a shape's label or text object
 canvas.addEventListener('dblclick', e => {
   if (tool !== 'move') return;
@@ -1710,6 +3282,7 @@ canvas.addEventListener('dblclick', e => {
 // Keyboard shortcuts: Backspace/Delete deletes selected item; tool hotkeys; Ctrl/Cmd+Z undo
 window.addEventListener('keydown', e => {
   if (typingTarget) return;
+  if (e.target && /^(INPUT|SELECT|TEXTAREA)$/.test(e.target.tagName)) return;
   if ((e.key === 'Backspace' || e.key === 'Delete') && selectedItem) {
     e.preventDefault();
     const idx = items.indexOf(selectedItem);
@@ -1745,7 +3318,8 @@ function undo() {
 function exportSVG() {
   flushPendingNow();
   const r = canvas.getBoundingClientRect();
-  const lines = [`<rect width="${r.width.toFixed(0)}" height="${r.height.toFixed(0)}" fill="#e7dbc6"/>`];
+  const bgHex = napkinSpec ? napkinSpec.baseHex : '#e7dbc6';
+  const lines = [`<rect width="${r.width.toFixed(0)}" height="${r.height.toFixed(0)}" fill="${bgHex}"/>`];
   const emit = s => {
     for (let i = 1; i < s.pts.length; i++) {
       const [x0, y0, p0] = s.pts[i - 1], [x1, y1, p1] = s.pts[i];
@@ -1777,9 +3351,13 @@ async function loadStarterScene() {
   ]);
 }
 
-window.addEventListener('resize', scheduleRender);
+window.addEventListener('resize', () => {
+  scheduleRender();
+  if (document.getElementById('sound-board')?.classList.contains('open')) NapkinAudio.renderSoundPad();
+});
 
-// Frame-1 instant kraft napkin render + background cached model loading
+// Frame-1 instant kraft napkin render + Sound Board init + background cached model loading
+NapkinAudio.initUI();
 scheduleRender();
 cachedFetchJSON('../exports/opensketch_residual_vae.json').then(j => {
   VAE = j;
