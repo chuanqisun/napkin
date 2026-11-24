@@ -1,0 +1,846 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Napkin Sketch — Cup &amp; Stain VFX Board</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      padding: 16px 20px 36px;
+      max-width: 1180px;
+      font-family: system-ui, -apple-system, sans-serif;
+      font-size: 13px;
+      line-height: 1.4;
+      color: #111;
+      background: #fff;
+    }
+    header {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid #ddd;
+      margin-bottom: 16px;
+    }
+    h1 { margin: 0; font-size: 16px; font-weight: 600; }
+    h2 { margin: 0 0 8px; font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em; color: #555; }
+    p.note { margin: 0 0 8px; color: #666; font-size: 12px; }
+    a { color: #111; }
+
+    .row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+    .layout {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 310px;
+      gap: 20px;
+      align-items: start;
+    }
+    @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } }
+
+    button, select {
+      font: inherit;
+      padding: 5px 9px;
+      border: 1px solid #ccc;
+      background: #f7f7f7;
+      color: #111;
+      border-radius: 3px;
+      cursor: pointer;
+    }
+    button:hover { background: #eee; }
+    button.active { background: #111; color: #fff; border-color: #111; }
+
+    canvas#stage {
+      display: block;
+      width: 100%;
+      aspect-ratio: 16 / 10;
+      min-height: 360px;
+      border: 1px solid #ccc;
+      background: #e7dbc6;
+      cursor: crosshair;
+      touch-action: none;
+    }
+    canvas#stage.hover-cup { cursor: grab; }
+    canvas#stage.dragging-cup { cursor: grabbing; }
+
+    .status-line {
+      display: flex;
+      justify-content: space-between;
+      margin: 6px 0 14px;
+      font-size: 12px;
+      color: #555;
+      font-family: ui-monospace, monospace;
+    }
+
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+    .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+
+    .slider-row {
+      display: grid;
+      grid-template-columns: 78px 1fr 40px;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+      margin: 6px 0;
+    }
+    .slider-row span.val { text-align: right; font-family: ui-monospace, monospace; color: #555; }
+
+    hr { border: 0; border-top: 1px solid #e5e5e5; margin: 14px 0; }
+
+    .strips {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+      margin-top: 4px;
+    }
+    @media (max-width: 720px) { .strips { grid-template-columns: 1fr; } }
+
+    .thumb-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+    button.thumb {
+      padding: 4px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 3px;
+      background: #e7dbc6;
+      border: 1px solid #ccc;
+    }
+    button.thumb.active { border-color: #111; outline: 1px solid #111; background: #e7dbc6; color: #111; }
+    button.thumb img { display: block; width: 100%; height: auto; aspect-ratio: 1 / 1; object-fit: contain; }
+    button.thumb span { font-size: 11px; font-family: ui-monospace, monospace; }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="row">
+      <a href="../web/v7_napkin.html">&larr; v7_napkin.html</a>
+      <h1>Napkin VFX Board</h1>
+      <span style="color:#666; font-size:12px;">Top-down cup assets (Gemini + SAM 3.1) &amp; programmatic stains &middot; no audio</span>
+    </div>
+    <div class="row">
+      <button onclick="VFX.newNapkin()">New Napkin</button>
+      <button onclick="VFX.clearStains()">Clear Stains</button>
+    </div>
+  </header>
+
+  <div class="layout">
+    <div>
+      <canvas id="stage"></canvas>
+      <div class="status-line">
+        <span id="stage-info">Coffee Latte | 100% | Drag cup to move, click napkin to add stain</span>
+        <span id="stain-count">0 stains</span>
+      </div>
+
+      <div class="strips">
+        <div>
+          <h2>Same Cup — Decreasing Volume</h2>
+          <div class="thumb-grid" id="vol-thumbs"></div>
+        </div>
+        <div>
+          <h2>4 Drink Variants (at <span id="cmp-vol">100%</span>)</h2>
+          <div class="thumb-grid" id="drink-thumbs"></div>
+        </div>
+      </div>
+    </div>
+
+    <aside>
+      <h2>1. Drink Type</h2>
+      <div class="grid-2" id="drink-btns"></div>
+
+      <hr />
+      <h2>2. Drink Volume (Same Cup)</h2>
+      <div class="slider-row">
+        <span>Volume</span>
+        <input id="vol-slider" type="range" min="5" max="100" value="100" oninput="VFX.setVolume(this.value / 100)" />
+        <span id="vol-val" class="val">100%</span>
+      </div>
+      <div class="grid-4" id="vol-step-btns" style="margin:6px 0;"></div>
+      <div class="grid-2" style="margin-bottom:8px;">
+        <button onclick="VFX.takeSip()">Take a Sip</button>
+        <button onclick="VFX.refill()">Refill (100%)</button>
+      </div>
+      <div class="slider-row">
+        <span>Rotate</span>
+        <input id="rot-slider" type="range" min="-180" max="180" value="22" oninput="VFX.setRotation(this.value)" />
+        <span id="rot-val" class="val">22&deg;</span>
+      </div>
+      <div class="slider-row">
+        <span>Cup Size</span>
+        <input id="size-slider" type="range" min="110" max="240" value="175" oninput="VFX.setCupSize(this.value)" />
+        <span id="size-val" class="val">175px</span>
+      </div>
+      <label class="row" style="margin-top:6px; cursor:pointer; font-size:12px;">
+        <input id="chk-move-ring" type="checkbox" checked onchange="VFX.setMoveRing(this.checked)" />
+        <span>Leave damp cup ring when moved</span>
+      </label>
+
+      <hr />
+      <h2>3. Programmatic Drip Stains</h2>
+      <p class="note">Click anywhere on the napkin to drop a procedural stain.</p>
+      <div class="grid-2" style="margin-bottom:8px;">
+        <button class="active" data-mode="drip" onclick="VFX.setStainMode('drip', this)">Small Drip</button>
+        <button data-mode="blotch" onclick="VFX.setStainMode('blotch', this)">Heavy Blotch</button>
+        <button data-mode="ring" onclick="VFX.setStainMode('ring', this)">Cup Ring</button>
+        <button data-mode="trail" onclick="VFX.setStainMode('trail', this)">Sip Trail</button>
+      </div>
+      <div class="row" style="justify-content:space-between; margin-bottom:6px; font-size:12px;">
+        <span>Stain Pigment</span>
+        <select id="stain-pigment" onchange="VFX.setStainPigment(this.value)">
+          <option value="match">Match Active Drink</option>
+          <option value="black_coffee">Black Coffee</option>
+          <option value="coffee_latte">Coffee Latte</option>
+          <option value="matcha_pure">Matcha (Pure)</option>
+          <option value="matcha_latte">Matcha Latte</option>
+        </select>
+      </div>
+      <div class="slider-row">
+        <span>Bleed Size</span>
+        <input id="bleed-slider" type="range" min="60" max="160" value="100" oninput="VFX.setBleedScale(this.value / 100)" />
+        <span id="bleed-val" class="val">100%</span>
+      </div>
+      <div class="row" style="margin-top:8px;">
+        <button onclick="VFX.spawnNearCup('drip')">+ Drip</button>
+        <button onclick="VFX.spawnNearCup('trail')">+ Trail</button>
+        <button onclick="VFX.stampCupRingNow()">+ Cup Ring</button>
+      </div>
+    </aside>
+  </div>
+
+<script>
+// ============================================================================
+// 1. PRNG & SIMPLE TEXTURED KRAFT NAPKIN CANVAS
+// ============================================================================
+function makeRng(seed) {
+  let s = (seed >>> 0) || 1;
+  return () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; };
+}
+
+function buildNapkinCanvas(seed, w, h, dpr) {
+  const rnd = makeRng(seed);
+  const palettes = ['#e7dbc6', '#e2d4bc', '#ebe1cd', '#dfd1b8'];
+  const baseHex = palettes[Math.floor(rnd() * palettes.length)];
+
+  const S = 240;
+  const tile = document.createElement('canvas');
+  tile.width = S; tile.height = S;
+  const tctx = tile.getContext('2d');
+  tctx.fillStyle = baseHex;
+  tctx.fillRect(0, 0, S, S);
+
+  for (let y = 0; y < S; y += 8) {
+    const sh = ((y / 8) % 2) * 4;
+    for (let x = 0; x < S; x += 8) {
+      tctx.fillStyle = 'rgba(112, 86, 56, 0.042)';
+      tctx.fillRect((x + sh) % S, y, 2, 2);
+      tctx.fillStyle = 'rgba(255, 250, 240, 0.062)';
+      tctx.fillRect((x + sh + 1) % S, y + 1, 2, 2);
+    }
+  }
+  tctx.lineWidth = 0.7;
+  for (let i = 0; i < 300; i++) {
+    const x = rnd() * S, y = rnd() * S, len = 2 + rnd() * 7, a = rnd() * Math.PI * 2;
+    tctx.strokeStyle = rnd() > 0.4 ? 'rgba(118, 90, 58, 0.07)' : 'rgba(255, 252, 244, 0.085)';
+    tctx.beginPath(); tctx.moveTo(x, y); tctx.lineTo(x + Math.cos(a) * len, y + Math.sin(a) * len); tctx.stroke();
+  }
+  for (let i = 0; i < 180; i++) {
+    tctx.fillStyle = rnd() > 0.3 ? 'rgba(102, 74, 44, 0.085)' : 'rgba(72, 52, 32, 0.11)';
+    tctx.fillRect(rnd() * S, rnd() * S, 1.1, 1.1);
+  }
+
+  const off = document.createElement('canvas');
+  off.width = Math.max(1, Math.round(w * dpr));
+  off.height = Math.max(1, Math.round(h * dpr));
+  const ctx = off.getContext('2d');
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.fillStyle = ctx.createPattern(tile, 'repeat');
+  ctx.fillRect(0, 0, w, h);
+
+  // Subtle quarter-fold creases
+  const drawCrease = (x1, y1, x2, y2, hw, str) => {
+    const dx = x2 - x1, dy = y2 - y1, len = Math.hypot(dx, dy) || 1;
+    const nx = -dy / len, ny = dx / len, mx = (x1 + x2) * 0.5, my = (y1 + y2) * 0.5;
+    const g = ctx.createLinearGradient(mx - nx * hw, my - ny * hw, mx + nx * hw, my + ny * hw);
+    g.addColorStop(0, 'rgba(88, 65, 38, 0)');
+    g.addColorStop(0.46, `rgba(88, 65, 38, ${str})`);
+    g.addColorStop(0.54, `rgba(255, 250, 240, ${(str * 1.15).toFixed(4)})`);
+    g.addColorStop(1, 'rgba(88, 65, 38, 0)');
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.moveTo(x1 - nx * hw, y1 - ny * hw); ctx.lineTo(x2 - nx * hw, y2 - ny * hw);
+    ctx.lineTo(x2 + nx * hw, y2 + ny * hw); ctx.lineTo(x1 + nx * hw, y1 + ny * hw);
+    ctx.closePath(); ctx.fill();
+  };
+  const vx = w * (0.48 + (rnd() - 0.5) * 0.04);
+  const hy = h * (0.49 + (rnd() - 0.5) * 0.04);
+  drawCrease(vx - 3, -10, vx + 3, h + 10, 14, 0.04);
+  drawCrease(-10, hy - 3, w + 10, hy + 3, 14, 0.036);
+
+  return off;
+}
+
+// ============================================================================
+// 2. DRINK ASSETS (GEMINI NANO BANANA 2.1 + FAL.AI SAM 3.1 TRANSPARENT WEBP)
+// ============================================================================
+const VOLUME_STOPS = [
+  { key: '100', val: 1.00, label: '100%' },
+  { key: '65',  val: 0.65, label: '65%'  },
+  { key: '30',  val: 0.30, label: '30%'  },
+  { key: '05',  val: 0.05, label: '5%'   }
+];
+
+const DRINKS = {
+  black_coffee: {
+    id: 'black_coffee', name: 'Black Coffee', short: 'Black',
+    wash: [110, 60, 22], ring: [62, 30, 10], speck: [48, 22, 8], speckDensity: 0.16
+  },
+  coffee_latte: {
+    id: 'coffee_latte', name: 'Coffee Latte', short: 'Latte',
+    wash: [158, 114, 68], ring: [112, 72, 36], speck: [96, 60, 28], speckDensity: 0.10
+  },
+  matcha_pure: {
+    id: 'matcha_pure', name: 'Matcha (Pure)', short: 'Matcha',
+    wash: [96, 134, 44], ring: [54, 92, 24], speck: [38, 68, 16], speckDensity: 0.68
+  },
+  matcha_latte: {
+    id: 'matcha_latte', name: 'Matcha Latte', short: 'M. Latte',
+    wash: [130, 158, 88], ring: [84, 114, 48], speck: [66, 94, 34], speckDensity: 0.38
+  }
+};
+const DRINK_ORDER = ['black_coffee', 'coffee_latte', 'matcha_pure', 'matcha_latte'];
+
+function cupAssetUrl(drinkId, volKey) {
+  return `./vfx/cups/${drinkId}_${volKey}.webp`;
+}
+
+const cupImages = new Map();
+function preloadCupImages(onOneLoaded) {
+  for (const dId of DRINK_ORDER) {
+    for (const stop of VOLUME_STOPS) {
+      const key = `${dId}_${stop.key}`;
+      const img = new Image();
+      img.onload = () => { if (onOneLoaded) onOneLoaded(); };
+      img.src = cupAssetUrl(dId, stop.key);
+      cupImages.set(key, img);
+    }
+  }
+}
+
+function nearestVolKey(v) {
+  let best = VOLUME_STOPS[0], bestD = Infinity;
+  for (const s of VOLUME_STOPS) {
+    const d = Math.abs(s.val - v);
+    if (d < bestD) { bestD = d; best = s; }
+  }
+  return best.key;
+}
+
+// Draw aligned transparent SAM 3.1 cup cutout with soft realistic drop shadow
+// and seamless crossfade between adjacent volume frames!
+function drawCupSprite(ctx, cx, cy, sizePx, drinkId, volume, rotDeg, lift) {
+  const rad = (rotDeg * Math.PI) / 180;
+  const scale = 1 + lift * 0.04;
+  // In our 512x512 aligned asset (440px wide bbox = mug circle + right handle):
+  // mug circular bowl center sits at ~(-0.088 * sizePx, 0) from sprite center, bowl radius ~0.335 * sizePx
+  const bowlOffX = -sizePx * 0.088;
+  const bowlR = sizePx * 0.335;
+
+  // 1. Realistic soft directional cast shadow on the napkin (stays aligned with overhead lighting)
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.scale(scale, scale);
+  ctx.globalCompositeOperation = 'multiply';
+  const shDist = sizePx * (0.048 + lift * 0.085);
+  const shDx = shDist * 0.9, shDy = shDist * 0.95;
+
+  // Main mug bowl shadow (computed in rotated coords for bowl center)
+  const bx = Math.cos(rad) * bowlOffX;
+  const by = Math.sin(rad) * bowlOffX;
+
+  const penR = bowlR * (1.22 + lift * 0.16);
+  const pen = ctx.createRadialGradient(bx + shDx, by + shDy, bowlR * 0.55, bx + shDx, by + shDy, penR);
+  pen.addColorStop(0, `rgba(52, 36, 20, ${(0.28 - lift * 0.07).toFixed(3)})`);
+  pen.addColorStop(0.7, `rgba(66, 46, 26, ${(0.12 - lift * 0.03).toFixed(3)})`);
+  pen.addColorStop(1, 'rgba(66, 46, 26, 0)');
+  ctx.fillStyle = pen;
+  ctx.beginPath(); ctx.arc(bx + shDx, by + shDy, penR, 0, Math.PI * 2); ctx.fill();
+
+  // Tight contact occlusion shadow directly under the ceramic base
+  if (lift < 0.85) {
+    const occA = (1 - lift) * 0.28;
+    const occ = ctx.createRadialGradient(bx + shDx * 0.25, by + shDy * 0.25, bowlR * 0.72, bx + shDx * 0.25, by + shDy * 0.25, bowlR * 1.04);
+    occ.addColorStop(0, `rgba(38, 24, 12, ${occA.toFixed(3)})`);
+    occ.addColorStop(0.85, `rgba(48, 32, 18, ${(occA * 0.55).toFixed(3)})`);
+    occ.addColorStop(1, 'rgba(48, 32, 18, 0)');
+    ctx.fillStyle = occ;
+    ctx.beginPath(); ctx.arc(bx + shDx * 0.25, by + shDy * 0.25, bowlR * 1.04, 0, Math.PI * 2); ctx.fill();
+  }
+
+  // Handle shadow
+  ctx.save();
+  ctx.translate(shDx * 0.85, shDy * 0.9);
+  ctx.rotate(rad);
+  ctx.fillStyle = `rgba(52, 36, 20, ${(0.18 - lift * 0.05).toFixed(3)})`;
+  ctx.beginPath();
+  ctx.roundRect(sizePx * 0.21, -sizePx * 0.055, sizePx * 0.22, sizePx * 0.11, sizePx * 0.045);
+  ctx.fill();
+  ctx.restore();
+  ctx.restore();
+
+  // 2. Find bracketing volume stops for smooth same-cup crossfade
+  const v = Math.max(0.05, Math.min(1.0, volume));
+  let hi = VOLUME_STOPS[0], lo = VOLUME_STOPS[VOLUME_STOPS.length - 1];
+  for (let i = 0; i < VOLUME_STOPS.length - 1; i++) {
+    if (v <= VOLUME_STOPS[i].val && v >= VOLUME_STOPS[i + 1].val) {
+      hi = VOLUME_STOPS[i];
+      lo = VOLUME_STOPS[i + 1];
+      break;
+    }
+  }
+  const span = Math.max(0.001, hi.val - lo.val);
+  const t = Math.max(0, Math.min(1, (hi.val - v) / span)); // 0 = hi, 1 = lo
+
+  const imgHi = cupImages.get(`${drinkId}_${hi.key}`);
+  const imgLo = cupImages.get(`${drinkId}_${lo.key}`);
+
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.rotate(rad);
+  ctx.scale(scale, scale);
+  const half = sizePx * 0.5;
+  if (imgHi && imgHi.complete && imgHi.naturalWidth) {
+    ctx.globalAlpha = 1;
+    ctx.drawImage(imgHi, -half, -half, sizePx, sizePx);
+  }
+  if (t > 0.005 && imgLo && imgLo.complete && imgLo.naturalWidth) {
+    ctx.globalAlpha = t;
+    ctx.drawImage(imgLo, -half, -half, sizePx, sizePx);
+  }
+  ctx.restore();
+}
+
+// ============================================================================
+// 3. PROGRAMMATIC CAPILLARY COFFEE & MATCHA DRIP STAINS (MULTIPLY + RING DRY)
+// ============================================================================
+function buildBlobContour(cx, cy, baseR, seed, irr = 0.24, segs = 34) {
+  const rnd = makeRng(seed);
+  const p1 = rnd() * 6.28, p2 = rnd() * 6.28, p3 = rnd() * 6.28, p4 = rnd() * 6.28;
+  const a1 = (0.4 + rnd() * 0.6) * irr * 0.45, a2 = (0.4 + rnd() * 0.6) * irr * 0.35;
+  const a3 = (0.3 + rnd() * 0.7) * irr * 0.22, a4 = (0.3 + rnd() * 0.7) * irr * 0.14;
+  const ax = 0.88 + rnd() * 0.26, ay = 0.88 + rnd() * 0.26;
+  const rot = rnd() * 6.28, c = Math.cos(rot), s = Math.sin(rot);
+  const pts = [];
+  for (let i = 0; i < segs; i++) {
+    const th = (i / segs) * Math.PI * 2;
+    const w = 1 + a1 * Math.sin(th * 2 + p1) + a2 * Math.cos(th * 3 + p2) + a3 * Math.sin(th * 5 + p3) + a4 * Math.cos(th * 9 + p4);
+    const lx = Math.cos(th) * baseR * w * ax, ly = Math.sin(th) * baseR * w * ay;
+    pts.push({ x: cx + lx * c - ly * s, y: cy + lx * s + ly * c });
+  }
+  return pts;
+}
+
+function traceClosed(ctx, pts) {
+  const n = pts.length;
+  ctx.beginPath();
+  ctx.moveTo((pts[n - 1].x + pts[0].x) * 0.5, (pts[n - 1].y + pts[0].y) * 0.5);
+  for (let i = 0; i < n; i++) {
+    const p = pts[i], q = pts[(i + 1) % n];
+    ctx.quadraticCurveTo(p.x, p.y, (p.x + q.x) * 0.5, (p.y + q.y) * 0.5);
+  }
+  ctx.closePath();
+}
+
+function createStain(kind, x, y, drinkId, scale, instant, bowlRadius) {
+  const seed = (Math.floor(Math.random() * 0xffffffff) ^ (Date.now() & 0xffffffff)) >>> 0;
+  const rnd = makeRng(seed);
+  const now = performance.now();
+  const st = {
+    kind, x, y, drinkId, seed,
+    tStart: instant ? now - 2000 : now,
+    dryDur: kind === 'blotch' ? 980 : (kind === 'ring' ? 750 : 650),
+    blobs: [], satellites: [], ringSpec: null
+  };
+
+  if (kind === 'drip') {
+    const r = (9 + rnd() * 9) * scale;
+    st.blobs.push({ x, y, r, irr: 0.28, seed: seed ^ 0x111 });
+    const n = 2 + Math.floor(rnd() * 4);
+    for (let i = 0; i < n; i++) {
+      const a = rnd() * 6.28, d = r * (1.25 + rnd() * 1.45);
+      st.satellites.push({ x: x + Math.cos(a) * d, y: y + Math.sin(a) * d, r: (1.4 + rnd() * 2.8) * scale, seed: seed ^ (i * 919 + 55) });
+    }
+  } else if (kind === 'blotch') {
+    const r = (28 + rnd() * 22) * scale;
+    // Single unified multi-lobe organic perimeter (avoids intersecting inner ring strokes)
+    st.blobs.push({ x, y, r, irr: 0.56, seed: seed ^ 0x333 });
+    const n = 5 + Math.floor(rnd() * 6);
+    for (let i = 0; i < n; i++) {
+      const a = rnd() * 6.28, d = r * (1.18 + rnd() * 1.12);
+      st.satellites.push({ x: x + Math.cos(a) * d, y: y + Math.sin(a) * d, r: (1.8 + rnd() * 4.2) * scale, seed: seed ^ (i * 1337 + 77) });
+    }
+  } else if (kind === 'ring') {
+    st.ringSpec = {
+      radius: bowlRadius * 0.88,
+      rot: rnd() * 6.28,
+      heavyAngle: rnd() * 6.28,
+      gapAngle: rnd() * 6.28,
+      intensity: (0.72 + rnd() * 0.35) * Math.min(1.25, scale)
+    };
+    const ha = st.ringSpec.heavyAngle;
+    st.satellites.push({
+      x: x + Math.cos(ha) * (st.ringSpec.radius + 5),
+      y: y + Math.sin(ha) * (st.ringSpec.radius + 5),
+      r: (2.5 + rnd() * 2.8) * scale,
+      seed: seed ^ 0x9191
+    });
+  }
+  return st;
+}
+
+function renderStain(ctx, st, now) {
+  const d = DRINKS[st.drinkId] || DRINKS.black_coffee;
+  const rawT = Math.max(0, Math.min(1, (now - st.tStart) / st.dryDur));
+  const spread = 0.42 + 0.58 * (1 - Math.pow(1 - rawT, 3));
+  const ringDry = Math.pow(rawT, 0.7);
+  const [wr, wg, wb] = d.wash, [rr, rg, rb] = d.ring, [sr, sg, sb] = d.speck;
+
+  ctx.save();
+  ctx.globalCompositeOperation = 'multiply';
+
+  if (st.kind === 'ring' && st.ringSpec) {
+    const rs = st.ringSpec, rad = rs.radius * (0.97 + 0.03 * spread), segs = 72;
+    const rnd = makeRng(st.seed ^ 0x777);
+    for (let pass = 0; pass < 3; pass++) {
+      for (let i = 0; i < segs; i++) {
+        const a0 = (i / segs) * 6.2831853, a1 = ((i + 1.2) / segs) * 6.2831853;
+        const heavy = 0.5 + 0.5 * Math.cos(a0 - rs.heavyAngle);
+        const gap = Math.max(0, Math.cos(a0 - rs.gapAngle) - 0.55);
+        const strength = Math.max(0.08, (0.28 + 0.72 * Math.pow(heavy, 1.5)) - gap * 0.9) * rs.intensity;
+        const wob = Math.sin(a0 * 4 + pass * 1.4) * 1.4 + Math.cos(a0 * 7 - rs.rot) * 0.85;
+        const rNow = Math.max(2, rad + (pass - 1) * (1.8 * spread) + wob);
+        const isEdge = pass !== 1;
+        const cr = isEdge ? rr : wr, cg = isEdge ? rg : wg, cb = isEdge ? rb : wb;
+        const alpha = (isEdge ? (0.14 + 0.16 * ringDry) : 0.16) * strength;
+        ctx.strokeStyle = `rgba(${cr},${cg},${cb},${alpha.toFixed(3)})`;
+        ctx.lineWidth = (pass === 1 ? 4.2 : 2.0) * (0.65 + 0.55 * heavy);
+        ctx.lineCap = 'round';
+        ctx.beginPath(); ctx.arc(st.x, st.y, rNow, a0, a1); ctx.stroke();
+      }
+    }
+    const px = st.x + Math.cos(rs.heavyAngle) * rad, py = st.y + Math.sin(rs.heavyAngle) * rad;
+    const pool = ctx.createRadialGradient(px, py, 1, px, py, 14 * spread);
+    pool.addColorStop(0, `rgba(${rr},${rg},${rb},${(0.24 * rs.intensity).toFixed(3)})`);
+    pool.addColorStop(1, `rgba(${wr},${wg},${wb},0)`);
+    ctx.fillStyle = pool;
+    ctx.beginPath(); ctx.arc(px, py, 14 * spread, 0, 6.2831853); ctx.fill();
+
+    const speckN = Math.round(42 * d.speckDensity);
+    ctx.fillStyle = `rgba(${sr},${sg},${sb},${(0.32 * ringDry).toFixed(3)})`;
+    for (let i = 0; i < speckN; i++) {
+      const a = rnd() * 6.2831853, rj = rad + (rnd() - 0.5) * 6;
+      ctx.fillRect(st.x + Math.cos(a) * rj, st.y + Math.sin(a) * rj, 1.2, 1.2);
+    }
+  }
+
+  for (const b of st.blobs) {
+    const curR = Math.max(2, b.r * spread);
+    const pts = buildBlobContour(b.x, b.y, curR, b.seed, b.irr, 34);
+    traceClosed(ctx, buildBlobContour(b.x, b.y, curR * 1.12, b.seed ^ 0x55, b.irr * 1.1, 34));
+    ctx.fillStyle = `rgba(${wr},${wg},${wb},${(0.075 * spread).toFixed(3)})`;
+    ctx.fill();
+
+    traceClosed(ctx, pts);
+    const grad = ctx.createRadialGradient(b.x, b.y, curR * 0.12, b.x, b.y, curR * 1.15);
+    grad.addColorStop(0, `rgba(${wr},${wg},${wb},${(0.26 - 0.06 * ringDry).toFixed(3)})`);
+    grad.addColorStop(0.72, `rgba(${wr},${wg},${wb},${(0.30 + 0.04 * ringDry).toFixed(3)})`);
+    grad.addColorStop(1, `rgba(${rr},${rg},${rb},${(0.24 + 0.16 * ringDry).toFixed(3)})`);
+    ctx.fillStyle = grad; ctx.fill();
+
+    traceClosed(ctx, pts);
+    ctx.strokeStyle = `rgba(${rr},${rg},${rb},${(0.12 + 0.34 * ringDry).toFixed(3)})`;
+    ctx.lineWidth = Math.max(1.1, Math.min(2.8, curR * 0.085));
+    ctx.stroke();
+
+    if (b.r > 18) {
+      traceClosed(ctx, buildBlobContour(b.x, b.y, curR * 0.74, b.seed ^ 0xaa, b.irr * 0.85, 28));
+      ctx.strokeStyle = `rgba(${rr},${rg},${rb},${(0.09 * ringDry).toFixed(3)})`;
+      ctx.lineWidth = 1.0; ctx.stroke();
+    }
+
+    const speckN = Math.round(b.r * 1.3 * d.speckDensity);
+    if (speckN > 0) {
+      const sRnd = makeRng(b.seed ^ 0x4242);
+      ctx.fillStyle = `rgba(${sr},${sg},${sb},${(0.34 * ringDry).toFixed(3)})`;
+      for (let i = 0; i < speckN; i++) {
+        const a = sRnd() * 6.2831853, rr2 = curR * (0.55 + Math.pow(sRnd(), 0.45) * 0.43);
+        ctx.beginPath(); ctx.arc(b.x + Math.cos(a) * rr2, b.y + Math.sin(a) * rr2, 0.55 + sRnd() * 0.8, 0, 6.2831853); ctx.fill();
+      }
+    }
+  }
+
+  for (const s of st.satellites) {
+    const curR = Math.max(1, s.r * spread);
+    traceClosed(ctx, buildBlobContour(s.x, s.y, curR, s.seed, 0.22, 16));
+    ctx.fillStyle = `rgba(${wr},${wg},${wb},0.34)`; ctx.fill();
+    ctx.strokeStyle = `rgba(${rr},${rg},${rb},${(0.20 + 0.25 * ringDry).toFixed(3)})`;
+    ctx.lineWidth = 0.85; ctx.stroke();
+  }
+  ctx.restore();
+
+  // Brief wet glossy sheen right after droplet lands
+  if (rawT < 0.6 && st.blobs.length) {
+    const b0 = st.blobs[0], curR = b0.r * spread;
+    ctx.save();
+    ctx.fillStyle = `rgba(255, 252, 244, ${((1 - rawT / 0.6) * 0.28).toFixed(3)})`;
+    ctx.beginPath();
+    ctx.ellipse(b0.x - curR * 0.24, b0.y - curR * 0.26, curR * 0.28, curR * 0.14, -0.5, 0, 6.2831853);
+    ctx.fill();
+    ctx.restore();
+  }
+}
+
+// ============================================================================
+// 4. INTERACTIVE CONTROLLER
+// ============================================================================
+const VFX = (() => {
+  const state = {
+    drinkId: 'coffee_latte',
+    volume: 1.0,
+    targetVolume: 1.0,
+    rotDeg: 22,
+    cupSize: 175,
+    moveRing: true,
+    stainMode: 'drip',
+    stainPigment: 'match',
+    bleedScale: 1.0,
+    napkinSeed: 20261124,
+    cupNX: 0.74,
+    cupNY: 0.38,
+    lift: 0,
+    targetLift: 0,
+    stains: []
+  };
+
+  let canvas, ctx, W = 0, H = 0, dpr = 1, napkinCache = null;
+  let dragging = false, dragOffX = 0, dragOffY = 0, dragOriginX = 0, dragOriginY = 0, hoverCup = false;
+
+  function cupPos() {
+    const pad = state.cupSize * 0.45;
+    return {
+      x: Math.max(pad, Math.min(W - pad, state.cupNX * W)),
+      y: Math.max(pad, Math.min(H - pad, state.cupNY * H))
+    };
+  }
+  function cupBowlCenter(cx, cy) {
+    const rad = (state.rotDeg * Math.PI) / 180;
+    const off = -state.cupSize * 0.088;
+    return { x: cx + Math.cos(rad) * off, y: cy + Math.sin(rad) * off };
+  }
+
+  function resize() {
+    const r = canvas.getBoundingClientRect();
+    if (!r.width || !r.height) return;
+    W = r.width; H = r.height;
+    dpr = Math.min(2, window.devicePixelRatio || 1);
+    canvas.width = Math.round(W * dpr);
+    canvas.height = Math.round(H * dpr);
+    napkinCache = null;
+  }
+
+  function ensureNapkin() {
+    if (!napkinCache) napkinCache = buildNapkinCanvas(state.napkinSeed, W, H, dpr);
+    return napkinCache;
+  }
+
+  function activePigment() {
+    return state.stainPigment === 'match' ? state.drinkId : state.stainPigment;
+  }
+
+  function addStainAt(x, y, kind = state.stainMode, instant = false, drinkOverride = null) {
+    const dId = drinkOverride || activePigment();
+    const bowlR = state.cupSize * 0.335;
+    if (kind === 'trail') {
+      const ang = -0.35 + (Math.random() - 0.5) * 1.4;
+      for (let i = 0; i < 4; i++) {
+        const d = i * (20 + Math.random() * 14) * state.bleedScale;
+        const p = Math.sin(i * 1.1) * 9;
+        const st = createStain('drip', x + Math.cos(ang) * d - Math.sin(ang) * p, y + Math.sin(ang) * d + Math.cos(ang) * p, dId, state.bleedScale * (1.05 - i * 0.17), instant, bowlR);
+        if (!instant) st.tStart = performance.now() + i * 90;
+        state.stains.push(st);
+      }
+    } else {
+      state.stains.push(createStain(kind, x, y, dId, state.bleedScale, instant, bowlR));
+    }
+    if (state.stains.length > 60) state.stains = state.stains.slice(-60);
+    document.getElementById('stain-count').textContent = `${state.stains.length} stain${state.stains.length === 1 ? '' : 's'}`;
+  }
+
+  function seedStarterStains() {
+    state.stains = [];
+    const { x, y } = cupPos();
+    addStainAt(Math.max(85, x - state.cupSize * 1.3), Math.min(H - 75, y + state.cupSize * 0.55), 'ring', true, 'black_coffee');
+    addStainAt(Math.max(75, x - state.cupSize * 0.72), y + state.cupSize * 0.34, 'drip', true, 'coffee_latte');
+    addStainAt(Math.max(105, x - state.cupSize * 1.75), Math.max(85, y - state.cupSize * 0.18), 'drip', true, 'matcha_pure');
+  }
+
+  function syncUI() {
+    const pct = Math.round(state.targetVolume * 100);
+    const vKey = nearestVolKey(state.targetVolume);
+    document.getElementById('vol-slider').value = pct;
+    document.getElementById('vol-val').textContent = pct + '%';
+    document.getElementById('cmp-vol').textContent = pct + '%';
+    document.getElementById('stage-info').textContent = `${DRINKS[state.drinkId].name} | ${pct}% | Drag cup to move, click napkin to add stain`;
+
+    document.querySelectorAll('#drink-btns button').forEach(b => b.classList.toggle('active', b.dataset.drink === state.drinkId));
+    document.querySelectorAll('#vol-step-btns button').forEach(b => b.classList.toggle('active', b.dataset.vkey === vKey));
+
+    // Update Same-Cup Volume Thumbnails
+    document.querySelectorAll('#vol-thumbs button.thumb').forEach(b => {
+      const k = b.dataset.vkey;
+      b.classList.toggle('active', k === vKey);
+      const img = b.querySelector('img');
+      const url = cupAssetUrl(state.drinkId, k);
+      if (img && img.getAttribute('src') !== url) img.setAttribute('src', url);
+    });
+
+    // Update 4-Drink Comparison Thumbnails
+    document.querySelectorAll('#drink-thumbs button.thumb').forEach(b => {
+      const dId = b.dataset.drink;
+      b.classList.toggle('active', dId === state.drinkId);
+      const img = b.querySelector('img');
+      const url = cupAssetUrl(dId, vKey);
+      if (img && img.getAttribute('src') !== url) img.setAttribute('src', url);
+    });
+  }
+
+  function tick(now) {
+    state.volume += (state.targetVolume - state.volume) * 0.18;
+    if (Math.abs(state.targetVolume - state.volume) < 0.001) state.volume = state.targetVolume;
+    state.lift += (state.targetLift - state.lift) * 0.22;
+
+    if (W > 0 && H > 0) {
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.drawImage(ensureNapkin(), 0, 0, W, H);
+      for (const st of state.stains) if (now >= st.tStart) renderStain(ctx, st, now);
+      const { x, y } = cupPos();
+      drawCupSprite(ctx, x, y, state.cupSize, state.drinkId, state.volume, state.rotDeg, state.lift);
+    }
+    requestAnimationFrame(tick);
+  }
+
+  function setDrink(id) { state.drinkId = id; syncUI(); }
+  function setVolume(v) { state.targetVolume = Math.max(0.05, Math.min(1.0, v)); syncUI(); }
+  function takeSip() {
+    const idx = VOLUME_STOPS.findIndex(s => s.val <= state.targetVolume + 0.02);
+    const nextIdx = (idx === -1 || idx >= VOLUME_STOPS.length - 1) ? 0 : idx + 1;
+    setVolume(VOLUME_STOPS[nextIdx].val);
+  }
+  function refill() { setVolume(1.0); }
+  function setRotation(deg) { state.rotDeg = Number(deg) || 0; document.getElementById('rot-val').textContent = state.rotDeg + '\u00b0'; }
+  function setCupSize(px) { state.cupSize = Number(px) || 175; document.getElementById('size-val').textContent = state.cupSize + 'px'; }
+  function setMoveRing(on) { state.moveRing = !!on; }
+  function setStainMode(m) {
+    state.stainMode = m;
+    document.querySelectorAll('[data-mode]').forEach(b => b.classList.toggle('active', b.dataset.mode === m));
+  }
+  function setStainPigment(v) { state.stainPigment = v; }
+  function setBleedScale(v) { state.bleedScale = v; document.getElementById('bleed-val').textContent = Math.round(v * 100) + '%'; }
+  function spawnNearCup(kind) {
+    const { x, y } = cupPos();
+    const ang = Math.PI * (0.65 + Math.random() * 0.75);
+    const dist = state.cupSize * (0.55 + Math.random() * 0.5);
+    addStainAt(Math.max(40, Math.min(W - 40, x + Math.cos(ang) * dist)), Math.max(40, Math.min(H - 40, y + Math.sin(ang) * dist)), kind, false);
+  }
+  function stampCupRingNow() {
+    const { x, y } = cupPos();
+    const b = cupBowlCenter(x, y);
+    addStainAt(b.x, b.y, 'ring', false);
+  }
+  function clearStains() { state.stains = []; document.getElementById('stain-count').textContent = '0 stains'; }
+  function newNapkin() { state.napkinSeed = (state.napkinSeed * 1664525 + 1013904223) >>> 0; napkinCache = null; clearStains(); }
+
+  function init() {
+    document.getElementById('drink-btns').innerHTML = DRINK_ORDER.map(id =>
+      `<button data-drink="${id}" onclick="VFX.setDrink('${id}')">${DRINKS[id].name}</button>`
+    ).join('');
+    document.getElementById('vol-step-btns').innerHTML = VOLUME_STOPS.map(s =>
+      `<button data-vkey="${s.key}" onclick="VFX.setVolume(${s.val})">${s.label}</button>`
+    ).join('');
+    document.getElementById('vol-thumbs').innerHTML = VOLUME_STOPS.map(s => `
+      <button class="thumb" data-vkey="${s.key}" onclick="VFX.setVolume(${s.val})">
+        <img src="${cupAssetUrl(state.drinkId, s.key)}" alt="${s.label}" />
+        <span>${s.label}</span>
+      </button>
+    `).join('');
+    document.getElementById('drink-thumbs').innerHTML = DRINK_ORDER.map(id => `
+      <button class="thumb" data-drink="${id}" onclick="VFX.setDrink('${id}')">
+        <img src="${cupAssetUrl(id, '100')}" alt="${DRINKS[id].name}" />
+        <span>${DRINKS[id].short}</span>
+      </button>
+    `).join('');
+
+    canvas = document.getElementById('stage');
+    ctx = canvas.getContext('2d');
+    resize();
+
+    const pos = e => { const r = canvas.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; };
+    const hitsCup = (px, py) => {
+      const { x, y } = cupPos();
+      return Math.hypot(px - x, py - y) <= state.cupSize * 0.45;
+    };
+
+    canvas.addEventListener('pointerdown', e => {
+      const p = pos(e);
+      if (hitsCup(p.x, p.y)) {
+        const { x, y } = cupPos();
+        dragging = true; dragOffX = p.x - x; dragOffY = p.y - y;
+        const b = cupBowlCenter(x, y); dragOriginX = b.x; dragOriginY = b.y;
+        state.targetLift = 1;
+        canvas.classList.add('dragging-cup');
+        canvas.setPointerCapture(e.pointerId);
+      } else {
+        addStainAt(p.x, p.y, state.stainMode, false);
+      }
+    });
+    canvas.addEventListener('pointermove', e => {
+      const p = pos(e);
+      if (dragging) {
+        state.cupNX = Math.max(0.1, Math.min(0.9, (p.x - dragOffX) / Math.max(1, W)));
+        state.cupNY = Math.max(0.14, Math.min(0.86, (p.y - dragOffY) / Math.max(1, H)));
+      } else {
+        const over = hitsCup(p.x, p.y);
+        if (over !== hoverCup) { hoverCup = over; canvas.classList.toggle('hover-cup', over); }
+      }
+    });
+    const release = () => {
+      if (!dragging) return;
+      dragging = false; state.targetLift = 0;
+      canvas.classList.remove('dragging-cup');
+      const { x, y } = cupPos(), b = cupBowlCenter(x, y);
+      if (state.moveRing && Math.hypot(b.x - dragOriginX, b.y - dragOriginY) > 16) {
+        addStainAt(dragOriginX, dragOriginY, 'ring', false);
+      }
+    };
+    canvas.addEventListener('pointerup', release);
+    canvas.addEventListener('pointercancel', release);
+    canvas.addEventListener('lostpointercapture', release);
+
+    preloadCupImages();
+    seedStarterStains();
+    syncUI();
+    window.addEventListener('resize', resize);
+    requestAnimationFrame(tick);
+  }
+
+  return {
+    init, setDrink, setVolume, takeSip, refill, setRotation, setCupSize, setMoveRing,
+    setStainMode, setStainPigment, setBleedScale, spawnNearCup, stampCupRingNow, clearStains, newNapkin,
+    getState: () => ({ ...state, stainCount: state.stains.length, loadedCups: Array.from(cupImages.values()).filter(i => i.complete && i.naturalWidth > 0).length })
+  };
+})();
+
+VFX.init();
+</script>
+</body>
+</html>

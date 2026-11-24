@@ -128,162 +128,18 @@
       font-size: 16px;
     }
 
-    /* Collapsible Sound Board popover */
+    /* Single Sound On/Off toolbar toggle */
     button#sound-toggle { position: relative; }
     button#sound-toggle .snd-dot {
       width: 6px; height: 6px; border-radius: 50%;
       background: #15803d; display: inline-block;
-      transition: background 0.15s ease, transform 0.15s ease;
+      transition: background 0.15s ease;
     }
+    button#sound-toggle .snd-icon-off { display: none; }
+    button#sound-toggle.muted { color: var(--ink-muted); }
     button#sound-toggle.muted .snd-dot { background: #a89f91; }
-    button#sound-toggle.active .snd-dot { background: #4ade80; }
-
-    .sound-board {
-      position: absolute; top: 14px; right: 14px;
-      width: 336px; max-width: calc(100vw - 28px);
-      max-height: calc(100% - 28px);
-      overflow-y: auto;
-      background: rgba(248, 243, 234, 0.96);
-      border: 1px solid rgba(92, 74, 52, 0.24);
-      border-radius: 12px;
-      box-shadow: 0 12px 34px rgba(45, 32, 18, 0.20), 0 2px 6px rgba(45, 32, 18, 0.08);
-      backdrop-filter: blur(12px);
-      padding: 12px;
-      z-index: 35;
-      display: none;
-      flex-direction: column;
-      gap: 10px;
-      user-select: none;
-    }
-    .sound-board.open { display: flex; }
-
-    .sb-head {
-      display: flex; align-items: center; justify-content: space-between; gap: 8px;
-      padding-bottom: 8px; border-bottom: 1px solid var(--bar-border);
-    }
-    .sb-title {
-      display: flex; align-items: center; gap: 6px;
-      font-weight: 600; font-size: 13px; color: var(--ink-ui);
-    }
-    .sb-title svg {
-      width: 15px; height: 15px; stroke: currentColor; fill: none;
-      stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round;
-    }
-    .sb-actions { display: flex; align-items: center; gap: 4px; }
-    .sb-pill {
-      display: inline-flex; align-items: center; gap: 4px;
-      height: 25px; padding: 0 8px;
-      border: 1px solid var(--bar-border); border-radius: 6px;
-      background: rgba(255, 255, 255, 0.55); color: var(--ink-ui);
-      font-size: 11px; font-weight: 500; cursor: pointer;
-      transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease;
-    }
-    .sb-pill:hover { background: var(--hover-bg); }
-    .sb-pill.active { background: var(--active-bg); color: var(--active-fg); border-color: var(--active-bg); }
-    .sb-close {
-      width: 25px; height: 25px; padding: 0; justify-content: center;
-      font-size: 15px; line-height: 1;
-    }
-
-    .sb-section-lbl {
-      display: flex; align-items: center; justify-content: space-between;
-      font-size: 11px; font-weight: 600; text-transform: uppercase;
-      letter-spacing: 0.04em; color: var(--ink-muted);
-    }
-
-    .sb-grid {
-      display: grid; grid-template-columns: 1fr 1fr; gap: 5px;
-    }
-    button.sb-preset {
-      display: flex; flex-direction: column; align-items: flex-start; gap: 1px;
-      padding: 7px 8px; text-align: left;
-      border: 1px solid rgba(92, 74, 52, 0.18); border-radius: 8px;
-      background: rgba(255, 255, 255, 0.52); color: var(--ink-ui);
-      cursor: pointer;
-      transition: background 0.12s ease, border-color 0.12s ease, transform 0.08s ease;
-    }
-    button.sb-preset:hover {
-      background: rgba(255, 255, 255, 0.85);
-      border-color: rgba(92, 74, 52, 0.36);
-    }
-    button.sb-preset:active { transform: scale(0.98); }
-    button.sb-preset.active {
-      background: var(--active-bg); color: var(--active-fg);
-      border-color: var(--active-bg);
-    }
-    button.sb-preset .p-name { font-size: 12px; font-weight: 600; line-height: 1.25; }
-    button.sb-preset .p-desc {
-      font-size: 10.5px; color: var(--ink-muted); line-height: 1.2;
-    }
-    button.sb-preset.active .p-desc { color: rgba(248, 243, 234, 0.72); }
-
-    .sb-pad-wrap {
-      display: flex; flex-direction: column; gap: 6px;
-      padding: 8px; border-radius: 9px;
-      background: rgba(110, 86, 56, 0.07);
-      border: 1px solid rgba(92, 74, 52, 0.16);
-    }
-    .sb-meter-row {
-      display: flex; align-items: center; justify-content: space-between; gap: 8px;
-      font-size: 11px; color: var(--ink-muted);
-    }
-    .sb-speed-val {
-      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-      font-size: 11px; font-weight: 600; color: var(--ink-ui);
-    }
-    .sb-meter-track {
-      height: 5px; width: 100%; border-radius: 99px;
-      background: rgba(92, 74, 52, 0.15); overflow: hidden;
-    }
-    .sb-meter-fill {
-      height: 100%; width: 0%; border-radius: 99px;
-      background: linear-gradient(90deg, #6b5740 0%, #1b3d8f 65%, #b91c1c 100%);
-      transition: width 0.04s linear;
-    }
-    canvas#sound-pad {
-      display: block; width: 100%; height: 64px;
-      border-radius: 6px; cursor: crosshair; touch-action: none;
-      background: #e7dbc6;
-      box-shadow: inset 0 0 0 1px rgba(104, 82, 54, 0.25);
-    }
-    .sb-test-btns { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; }
-    .sb-test-btns button {
-      height: 26px; border-radius: 6px;
-      border: 1px solid rgba(92, 74, 52, 0.22);
-      background: rgba(255, 255, 255, 0.65); color: var(--ink-ui);
-      font-size: 11px; font-weight: 500; cursor: pointer;
-      transition: background 0.12s ease;
-    }
-    .sb-test-btns button:hover { background: rgba(255, 255, 255, 0.95); }
-    .sb-test-btns button.playing {
-      background: var(--active-bg); color: var(--active-fg); border-color: var(--active-bg);
-    }
-
-    .sb-controls {
-      display: flex; flex-direction: column; gap: 7px;
-      padding-top: 2px;
-    }
-    .sb-slider-row {
-      display: grid; grid-template-columns: 96px 1fr 34px; align-items: center; gap: 6px;
-      font-size: 11.5px; color: var(--ink-ui);
-    }
-    .sb-slider-row input[type="range"] {
-      width: 100%; margin: 0; accent-color: #23201c; cursor: pointer;
-    }
-    .sb-slider-row .val {
-      text-align: right;
-      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-      font-size: 11px; color: var(--ink-muted);
-    }
-    .sb-toggle-row {
-      display: flex; align-items: center; justify-content: space-between; gap: 8px;
-      font-size: 11.5px; color: var(--ink-ui);
-      padding-top: 6px; border-top: 1px solid var(--bar-border);
-    }
-    .sb-check {
-      display: inline-flex; align-items: center; gap: 5px; cursor: pointer;
-    }
-    .sb-check input { margin: 0; accent-color: #23201c; cursor: pointer; }
+    button#sound-toggle.muted .snd-icon-on { display: none; }
+    button#sound-toggle.muted .snd-icon-off { display: inline; }
 
     /* Compact Save format popover */
     .save-wrap { position: relative; display: inline-flex; align-items: center; }
@@ -403,9 +259,10 @@
 
       <div class="divider"></div>
 
-      <button id="sound-toggle" class="tool-btn" onclick="toggleSoundBoard()" title="Open Sound Board (Drawing & Crumple SFX)">
-        <svg viewBox="0 0 24 24"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg>
-        <span class="lbl">Sound</span>
+      <button id="sound-toggle" class="tool-btn" onclick="NapkinAudio.toggleMute()" aria-pressed="true" title="Sound On (click to mute)">
+        <svg class="snd-icon-on" viewBox="0 0 24 24"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg>
+        <svg class="snd-icon-off" viewBox="0 0 24 24"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/></svg>
+        <span class="lbl">Sound On</span>
         <span class="snd-dot"></span>
       </button>
 
@@ -441,69 +298,6 @@
       <canvas id="c"></canvas>
       <input id="inline-text" type="text" autocomplete="off" autocorrect="off" spellcheck="false" aria-label="Napkin text input" />
     </div>
-
-    <aside id="sound-board" class="sound-board" aria-label="Drawing & Crumple Sound Board">
-      <div class="sb-head">
-        <div class="sb-title">
-          <svg viewBox="0 0 24 24"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg>
-          Sound Board
-        </div>
-        <div class="sb-actions">
-          <button id="sb-mute-btn" class="sb-pill" onclick="NapkinAudio.toggleMute()">Mute</button>
-          <button class="sb-pill sb-close" onclick="toggleSoundBoard(false)" title="Close Sound Board">&times;</button>
-        </div>
-      </div>
-
-      <div class="sb-section-lbl">
-        <span>Drawing Surface Sound</span>
-        <button id="sb-off-btn" class="sb-pill" onclick="NapkinAudio.setPreset('off')">Off</button>
-      </div>
-      <div id="sb-preset-grid" class="sb-grid"></div>
-
-      <div class="sb-pad-wrap">
-        <div class="sb-meter-row">
-          <span>Speed Test Pad (drag slow &rarr; fast)</span>
-          <span id="sb-speed-val" class="sb-speed-val">0 px/s</span>
-        </div>
-        <div class="sb-meter-track"><div id="sb-meter-fill" class="sb-meter-fill"></div></div>
-        <canvas id="sound-pad"></canvas>
-        <div class="sb-test-btns">
-          <button id="sb-demo-slow" onclick="NapkinAudio.playDemoStroke('slow')">Slow Stroke</button>
-          <button id="sb-demo-med" onclick="NapkinAudio.playDemoStroke('medium')">Write Pace</button>
-          <button id="sb-demo-fast" onclick="NapkinAudio.playDemoStroke('fast')">Fast Sketch</button>
-        </div>
-      </div>
-
-      <div class="sb-controls">
-        <label class="sb-slider-row">
-          <span>Draw Volume</span>
-          <input id="sb-draw-vol" type="range" min="0" max="100" value="75" oninput="NapkinAudio.setDrawVolume(this.value / 100)" />
-          <span id="sb-draw-vol-val" class="val">75%</span>
-        </label>
-        <label class="sb-slider-row">
-          <span>Speed Curve</span>
-          <input id="sb-speed-sens" type="range" min="0" max="100" value="75" oninput="NapkinAudio.setSpeedSens(this.value / 100)" />
-          <span id="sb-speed-sens-val" class="val">75%</span>
-        </label>
-        <label class="sb-slider-row">
-          <span>Crumple Vol</span>
-          <input id="sb-crumple-vol" type="range" min="0" max="100" value="85" oninput="NapkinAudio.setCrumpleVolume(this.value / 100)" />
-          <span id="sb-crumple-vol-val" class="val">85%</span>
-        </label>
-      </div>
-
-      <div class="sb-toggle-row">
-        <label class="sb-check" title="Subtle pen strokes synced to live typing cadence">
-          <input id="sb-typing-sfx" type="checkbox" checked onchange="NapkinAudio.setTypingSfx(this.checked)" />
-          <span>Typing Pen SFX</span>
-        </label>
-        <label class="sb-check" title="Play ./crumble.mp3 when crumpling napkin">
-          <input id="sb-crumple-sfx" type="checkbox" checked onchange="NapkinAudio.setCrumpleEnabled(this.checked)" />
-          <span>Crumple</span>
-        </label>
-        <button class="sb-pill" onclick="NapkinAudio.testCrumple()" title="Audition ./crumble.mp3">&#9654; Crumple</button>
-      </div>
-    </aside>
   </main>
 </div>
 <canvas id="crumple-overlay"></canvas>
@@ -1561,77 +1355,21 @@ function recognizeMultiStroke(rawList) {
 }
 
 // ============================================================================
-// 5. WEB AUDIO SFX ENGINE (CRUMPLE.MP3 + VELOCITY-MATCHED DRAWING SOUND BOARD)
+// 5. WEB AUDIO SFX ENGINE (DEFAULT BALLPOINT + CRUMPLE.MP3, SINGLE ON/OFF)
 // ============================================================================
-const SOUND_PRESETS = [
-  {
-    id: 'ballpoint', name: 'Ballpoint Pen', desc: 'Smooth roll & napkin grit',
-    bodyFMin: 720, bodyFMax: 2150, bodyQ: 1.35, bodyGain: 0.24,
-    grainFMin: 1550, grainFMax: 3900, grainQ: 2.2, grainGain: 0.44, rateMin: 0.55, rateMax: 1.95,
-    tipType: 'bandpass', tipFMin: 3100, tipFMax: 6500, tipQ: 2.7, tipGain: 0.22,
-    tapFreq: 1450, tapDur: 0.014, tapGain: 0.16, curveBoost: 0.38, velScale: 1.0, squeak: 0
-  },
-  {
-    id: 'pencil', name: '2B Graphite Pencil', desc: 'Dry woody paper tooth',
-    bodyFMin: 500, bodyFMax: 1650, bodyQ: 1.5, bodyGain: 0.34,
-    grainFMin: 1300, grainFMax: 3450, grainQ: 2.5, grainGain: 0.62, rateMin: 0.45, rateMax: 1.85,
-    tipType: 'bandpass', tipFMin: 2550, tipFMax: 5600, tipQ: 2.0, tipGain: 0.34,
-    tapFreq: 880, tapDur: 0.018, tapGain: 0.15, curveBoost: 0.48, velScale: 1.05, squeak: 0
-  },
-  {
-    id: 'marker', name: 'Felt-Tip Marker', desc: 'Warm damp fiber + squeak',
-    bodyFMin: 320, bodyFMax: 1120, bodyQ: 1.2, bodyGain: 0.56,
-    grainFMin: 740, grainFMax: 1850, grainQ: 1.7, grainGain: 0.34, rateMin: 0.38, rateMax: 1.35,
-    tipType: 'bandpass', tipFMin: 1950, tipFMax: 3150, tipQ: 6.2, tipGain: 0.16,
-    tapFreq: 460, tapDur: 0.022, tapGain: 0.18, curveBoost: 0.25, velScale: 1.0, squeak: 0.22
-  },
-  {
-    id: 'fountain', name: 'Fountain Nib', desc: 'Crisp metallic scratch',
-    bodyFMin: 900, bodyFMax: 2450, bodyQ: 1.8, bodyGain: 0.18,
-    grainFMin: 2350, grainFMax: 5300, grainQ: 3.5, grainGain: 0.48, rateMin: 0.65, rateMax: 2.25,
-    tipType: 'bandpass', tipFMin: 4200, tipFMax: 7700, tipQ: 4.1, tipGain: 0.34,
-    tapFreq: 2600, tapDur: 0.011, tapGain: 0.18, curveBoost: 0.62, velScale: 0.88, squeak: 0
-  },
-  {
-    id: 'chalk', name: 'Chalk / Charcoal', desc: 'Coarse dusty grit',
-    bodyFMin: 260, bodyFMax: 940, bodyQ: 1.1, bodyGain: 0.50,
-    grainFMin: 1050, grainFMax: 3050, grainQ: 1.85, grainGain: 0.72, rateMin: 0.35, rateMax: 1.65,
-    tipType: 'highpass', tipFMin: 2100, tipFMax: 4400, tipQ: 0.9, tipGain: 0.22,
-    tapFreq: 600, tapDur: 0.024, tapGain: 0.20, curveBoost: 0.58, velScale: 0.95, squeak: 0
-  },
-  {
-    id: 'brush', name: 'Soft Ink Brush', desc: 'Silky whispery sweep',
-    bodyFMin: 400, bodyFMax: 1480, bodyQ: 0.82, bodyGain: 0.48,
-    grainFMin: 900, grainFMax: 2350, grainQ: 0.9, grainGain: 0.22, rateMin: 0.34, rateMax: 1.15,
-    tipType: 'bandpass', tipFMin: 1750, tipFMax: 3900, tipQ: 0.85, tipGain: 0.18,
-    tapFreq: 350, tapDur: 0.028, tapGain: 0.10, curveBoost: 0.15, velScale: 1.08, squeak: 0
-  },
-  {
-    id: 'mech', name: '0.5mm Mechanical', desc: 'Fine sharp lead edge',
-    bodyFMin: 1080, bodyFMax: 2800, bodyQ: 2.1, bodyGain: 0.16,
-    grainFMin: 2600, grainFMax: 5700, grainQ: 3.9, grainGain: 0.46, rateMin: 0.72, rateMax: 2.40,
-    tipType: 'bandpass', tipFMin: 4600, tipFMax: 8300, tipQ: 4.8, tipGain: 0.32,
-    tapFreq: 3150, tapDur: 0.010, tapGain: 0.19, curveBoost: 0.52, velScale: 0.85, squeak: 0
-  },
-  {
-    id: 'kraft', name: 'ASMR Kraft Napkin', desc: 'Deep embossed fiber rub',
-    bodyFMin: 220, bodyFMax: 860, bodyQ: 1.35, bodyGain: 0.58,
-    grainFMin: 1180, grainFMax: 3650, grainQ: 2.4, grainGain: 0.76, rateMin: 0.48, rateMax: 2.18,
-    tipType: 'bandpass', tipFMin: 2700, tipFMax: 5800, tipQ: 2.1, tipGain: 0.26,
-    tapFreq: 740, tapDur: 0.020, tapGain: 0.22, curveBoost: 0.55, velScale: 0.96, squeak: 0
-  }
-];
+const DEFAULT_DRAW_PRESET = {
+  id: 'ballpoint',
+  bodyFMin: 720, bodyFMax: 2150, bodyQ: 1.35, bodyGain: 0.24,
+  grainFMin: 1550, grainFMax: 3900, grainQ: 2.2, grainGain: 0.44, rateMin: 0.55, rateMax: 1.95,
+  tipType: 'bandpass', tipFMin: 3100, tipFMax: 6500, tipQ: 2.7, tipGain: 0.22,
+  tapFreq: 1450, tapDur: 0.014, tapGain: 0.16, curveBoost: 0.38, velScale: 1.0
+};
 
 const NapkinAudio = (() => {
-  const state = {
-    presetId: 'ballpoint',
-    muted: false,
-    drawVol: 0.75,
-    speedSens: 0.75,
-    crumpleVol: 0.85,
-    crumpleEnabled: true,
-    typingSfx: true
-  };
+  const DRAW_VOL = 0.75;
+  const SPEED_SENS = 0.75;
+  const CRUMPLE_VOL = 0.85;
+  let muted = false;
 
   let actx = null;
   let masterGain = null;
@@ -1657,15 +1395,6 @@ const NapkinAudio = (() => {
   // Typing cadence tracking
   let lastTypeTime = 0;
   let typingPulseTimer = null;
-
-  // Sound Board demo stroke animation
-  let demoRaf = null;
-  let demoKind = null;
-
-  function getPreset() {
-    if (state.presetId === 'off') return null;
-    return SOUND_PRESETS.find(p => p.id === state.presetId) || SOUND_PRESETS[0];
-  }
 
   function preloadCrumple() {
     if (crumbleFetchPromise) return crumbleFetchPromise;
@@ -1714,12 +1443,11 @@ const NapkinAudio = (() => {
       b6 = w * 0.115926;
     }
 
-    // 2. Fibrous embossed napkin grain buffer (micro-tooth impulses + slow texture envelope)
+    // 2. Fibrous embossed napkin grain buffer
     const grain = ctx.createBuffer(1, len, sr);
     const gd = grain.getChannelData(0);
     let env = 0.5, imp = 0;
     for (let i = 0; i < len; i++) {
-      // Periodic + organic embossed dimple modulation (~28 Hz at 1.0x rate, scales with speed!)
       const emboss = 0.65 + 0.35 * Math.sin(i * 0.0038 + Math.sin(i * 0.00043) * 2.5);
       env += (Math.random() - 0.5) * 0.03;
       env = Math.max(0.25, Math.min(1.0, env));
@@ -1729,7 +1457,7 @@ const NapkinAudio = (() => {
       gd[i] = Math.max(-1, Math.min(1, (imp + micro) * env * emboss));
     }
 
-    // 3. Fine crisp tip-scratch noise (high-frequency micro-grit + tiny sparkles)
+    // 3. Fine crisp tip-scratch noise
     const crisp = ctx.createBuffer(1, len, sr);
     const cd = crisp.getChannelData(0);
     let prev = 0;
@@ -1741,7 +1469,6 @@ const NapkinAudio = (() => {
       cd[i] = Math.max(-1, Math.min(1, hp + sparkle));
     }
 
-    // Crossfade loop ends (10ms) to guarantee seamless zero-click looping
     const fadeN = Math.floor(sr * 0.01);
     for (const arr of [pd, gd, cd]) {
       for (let i = 0; i < fadeN; i++) {
@@ -1765,7 +1492,7 @@ const NapkinAudio = (() => {
       compressor.release.value = 0.12;
 
       masterGain = actx.createGain();
-      masterGain.gain.value = state.muted ? 0 : 1;
+      masterGain.gain.value = muted ? 0 : 1;
       masterGain.connect(compressor);
       compressor.connect(actx.destination);
 
@@ -1783,6 +1510,7 @@ const NapkinAudio = (() => {
     if (!ctx || !buffers) return null;
     if (voice) return voice;
 
+    const p = DEFAULT_DRAW_PRESET;
     const outGain = ctx.createGain();
     outGain.gain.value = 0;
     outGain.connect(masterGain);
@@ -1797,66 +1525,34 @@ const NapkinAudio = (() => {
 
     const bodySrc = makeLoop(buffers.pink);
     const bodyFlt = ctx.createBiquadFilter();
-    bodyFlt.type = 'bandpass';
+    bodyFlt.type = 'bandpass'; bodyFlt.Q.value = p.bodyQ;
     const bodyGain = ctx.createGain();
+    bodyGain.gain.value = p.bodyGain;
     bodySrc.connect(bodyFlt); bodyFlt.connect(bodyGain); bodyGain.connect(outGain);
 
     const grainSrc = makeLoop(buffers.grain);
     const grainFlt = ctx.createBiquadFilter();
-    grainFlt.type = 'bandpass';
+    grainFlt.type = 'bandpass'; grainFlt.Q.value = p.grainQ;
     const grainGain = ctx.createGain();
+    grainGain.gain.value = p.grainGain;
     grainSrc.connect(grainFlt); grainFlt.connect(grainGain); grainGain.connect(outGain);
 
     const tipSrc = makeLoop(buffers.crisp);
     const tipFlt = ctx.createBiquadFilter();
-    tipFlt.type = 'bandpass';
+    tipFlt.type = p.tipType; tipFlt.Q.value = p.tipQ;
     const tipGain = ctx.createGain();
+    tipGain.gain.value = p.tipGain;
     tipSrc.connect(tipFlt); tipFlt.connect(tipGain); tipGain.connect(outGain);
 
-    // Optional marker squeak narrow resonant peak (only active when preset.squeak > 0 & fast)
-    const sqOsc = ctx.createOscillator();
-    sqOsc.type = 'triangle';
-    sqOsc.frequency.value = 2350;
-    const sqFlt = ctx.createBiquadFilter();
-    sqFlt.type = 'bandpass'; sqFlt.Q.value = 10; sqFlt.frequency.value = 2350;
-    const sqGain = ctx.createGain();
-    sqGain.gain.value = 0;
-    sqOsc.connect(sqFlt); sqFlt.connect(sqGain); sqGain.connect(outGain);
-    sqOsc.start();
-
-    voice = {
-      outGain,
-      bodySrc, bodyFlt, bodyGain,
-      grainSrc, grainFlt, grainGain,
-      tipSrc, tipFlt, tipGain,
-      sqOsc, sqFlt, sqGain
-    };
-    configureVoiceForPreset();
+    voice = { outGain, bodySrc, bodyFlt, bodyGain, grainSrc, grainFlt, grainGain, tipSrc, tipFlt, tipGain };
     return voice;
   }
 
-  function configureVoiceForPreset() {
-    if (!voice || !actx) return;
-    const p = getPreset();
-    const now = actx.currentTime;
-    if (!p) {
-      voice.outGain.gain.setTargetAtTime(0, now, 0.02);
-      return;
-    }
-    voice.bodyFlt.Q.setTargetAtTime(p.bodyQ, now, 0.02);
-    voice.grainFlt.Q.setTargetAtTime(p.grainQ, now, 0.02);
-    voice.tipFlt.type = p.tipType || 'bandpass';
-    voice.tipFlt.Q.setTargetAtTime(p.tipQ, now, 0.02);
-    voice.bodyGain.gain.setTargetAtTime(p.bodyGain, now, 0.02);
-    voice.grainGain.gain.setTargetAtTime(p.grainGain, now, 0.02);
-    voice.tipGain.gain.setTargetAtTime(p.tipGain, now, 0.02);
-  }
-
   function playPenTap(strength = 1.0) {
-    const p = getPreset();
-    if (!p || state.muted || state.drawVol <= 0.005) return;
+    if (muted) return;
     const ctx = ensureContext();
     if (!ctx || !buffers) return;
+    const p = DEFAULT_DRAW_PRESET;
     const now = ctx.currentTime;
     const src = ctx.createBufferSource();
     src.buffer = buffers.crisp;
@@ -1865,7 +1561,7 @@ const NapkinAudio = (() => {
     flt.frequency.value = p.tapFreq * (0.9 + Math.random() * 0.2);
     flt.Q.value = 2.4;
     const g = ctx.createGain();
-    const peak = p.tapGain * state.drawVol * strength * 0.65;
+    const peak = p.tapGain * DRAW_VOL * strength * 0.65;
     g.gain.setValueAtTime(0.0001, now);
     g.gain.linearRampToValueAtTime(peak, now + 0.002);
     g.gain.exponentialRampToValueAtTime(0.0001, now + p.tapDur);
@@ -1874,57 +1570,36 @@ const NapkinAudio = (() => {
   }
 
   function applySpeedToVoice(speedPxPerSec, curveAccent = 0) {
-    updateSpeedMeterUI(speedPxPerSec);
-    const p = getPreset();
-    if (!p || state.muted || state.drawVol <= 0.005) {
+    if (muted) {
       if (voice && actx) voice.outGain.gain.setTargetAtTime(0, actx.currentTime, 0.02);
       return;
     }
     const v = ensureVoice();
     if (!v || !actx) return;
+    const p = DEFAULT_DRAW_PRESET;
     const now = actx.currentTime;
 
     if (speedPxPerSec < 10) {
       v.outGain.gain.setTargetAtTime(0, now, 0.026);
-      v.sqGain.gain.setTargetAtTime(0, now, 0.02);
       return;
     }
 
-    // Normalize velocity (10 .. 1350 px/s -> 0 .. 1) with Speed Curve sensitivity
     const rawU = Math.max(0, Math.min(1, (speedPxPerSec - 10) / 1300));
-    const sens = state.speedSens; // 0 = gentle flat dynamics, 1 = wide expressive range
-    const pitchU = Math.pow(rawU, 0.72) * (0.28 + 0.72 * sens);
-    const gainU = Math.pow(rawU, 0.45 + 0.48 * sens);
-
+    const pitchU = Math.pow(rawU, 0.72) * (0.28 + 0.72 * SPEED_SENS);
+    const gainU = Math.pow(rawU, 0.45 + 0.48 * SPEED_SENS);
     const logLerp = (a, b, t) => a * Math.pow(b / a, Math.max(0, Math.min(1.15, t)));
 
-    // 1. Sweep resonant filters logarithmically with writing speed
     v.bodyFlt.frequency.setTargetAtTime(logLerp(p.bodyFMin, p.bodyFMax, pitchU), now, 0.018);
     v.grainFlt.frequency.setTargetAtTime(logLerp(p.grainFMin, p.grainFMax, pitchU), now, 0.016);
     v.tipFlt.frequency.setTargetAtTime(logLerp(p.tipFMin, p.tipFMax, pitchU), now, 0.016);
 
-    // 2. Scale grain texture playbackRate with hand speed (spatial paper bumps pass faster!)
     const gRate = p.rateMin + (p.rateMax - p.rateMin) * Math.pow(rawU, 0.78);
     v.grainSrc.playbackRate.setTargetAtTime(Math.max(0.25, Math.min(3.2, gRate)), now, 0.02);
     v.tipSrc.playbackRate.setTargetAtTime(0.75 + rawU * 0.85, now, 0.025);
 
-    // 3. Curvature accent briefly emphasizes paper tooth grain on sharp corners/loops
-    const grainBoost = 1 + curveAccent * p.curveBoost;
-    v.grainGain.gain.setTargetAtTime(p.grainGain * grainBoost, now, 0.015);
+    v.grainGain.gain.setTargetAtTime(p.grainGain * (1 + curveAccent * p.curveBoost), now, 0.015);
 
-    // 4. Optional subtle felt-marker harmonic squeak at higher velocities
-    if (p.squeak > 0 && rawU > 0.35) {
-      const sqLevel = p.squeak * Math.pow((rawU - 0.35) / 0.65, 1.4) * 0.14;
-      const sqFreq = 2050 + rawU * 880 + curveAccent * 160;
-      v.sqOsc.frequency.setTargetAtTime(sqFreq, now, 0.02);
-      v.sqFlt.frequency.setTargetAtTime(sqFreq, now, 0.02);
-      v.sqGain.gain.setTargetAtTime(sqLevel, now, 0.02);
-    } else {
-      v.sqGain.gain.setTargetAtTime(0, now, 0.02);
-    }
-
-    // 5. Overall loudness calibrated per preset & user draw volume
-    const targetGain = (0.07 + 0.68 * gainU) * state.drawVol * p.velScale;
+    const targetGain = (0.07 + 0.68 * gainU) * DRAW_VOL * p.velScale;
     v.outGain.gain.setTargetAtTime(Math.min(1.15, targetGain), now, 0.014);
   }
 
@@ -1941,7 +1616,6 @@ const NapkinAudio = (() => {
   }
 
   function startDraw(x, y) {
-    cancelDemo();
     ensureContext();
     isDrawing = true;
     lastX = x; lastY = y; lastT = performance.now(); lastAng = null;
@@ -1982,14 +1656,11 @@ const NapkinAudio = (() => {
     applySpeedToVoice(0, 0);
   }
 
-  // Subtle pen-stroke pulse synced to typing cadence
   function triggerTypingPulse() {
-    if (!state.typingSfx || state.muted || state.presetId === 'off' || state.drawVol <= 0.005) return;
-    if (isDrawing || demoRaf) return;
+    if (muted || isDrawing) return;
     const now = performance.now();
     const dt = Math.max(45, Math.min(600, now - lastTypeTime));
     lastTypeTime = now;
-    // Faster typing -> brisker, higher-velocity pen flick (280..920 px/s)
     const speed = Math.max(240, Math.min(960, 145000 / dt));
     const durMs = Math.max(58, Math.min(115, dt * 0.45));
     ensureVoice();
@@ -1998,13 +1669,12 @@ const NapkinAudio = (() => {
     if (typingPulseTimer) clearTimeout(typingPulseTimer);
     typingPulseTimer = setTimeout(() => {
       typingPulseTimer = null;
-      if (!isDrawing && !demoRaf) applySpeedToVoice(0, 0);
+      if (!isDrawing) applySpeedToVoice(0, 0);
     }, durMs);
   }
 
-  // Crumple sound (./crumble.mp3) — pre-decoded Web Audio with exact 0ms latency!
   async function prepareCrumple() {
-    if (state.muted || !state.crumpleEnabled) return;
+    if (muted) return;
     ensureContext();
     if (!crumbleRawBytes) await preloadCrumple();
     if (actx && crumbleRawBytes && !crumbleBuffer) await decodeCrumple();
@@ -2025,14 +1695,13 @@ const NapkinAudio = (() => {
 
   function playCrumple() {
     stopCrumple();
-    if (state.muted || !state.crumpleEnabled || state.crumpleVol <= 0.005) return;
+    if (muted) return;
     const ctx = ensureContext();
     if (ctx && crumbleBuffer) {
       const src = ctx.createBufferSource();
       src.buffer = crumbleBuffer;
       const g = ctx.createGain();
-      // crumble.mp3 peak is ~0.165 (-15.6 dBFS), so 3.4x boost brings it to a crisp tactile level
-      g.gain.value = state.crumpleVol * 3.4;
+      g.gain.value = CRUMPLE_VOL * 3.4;
       src.connect(g);
       g.connect(masterGain);
       src.onended = () => { if (activeCrumpleSource === src) activeCrumpleSource = null; };
@@ -2042,275 +1711,31 @@ const NapkinAudio = (() => {
     }
     if (fallbackCrumpleEl) {
       fallbackCrumpleEl.currentTime = 0;
-      fallbackCrumpleEl.volume = Math.max(0, Math.min(1, state.crumpleVol));
+      fallbackCrumpleEl.volume = CRUMPLE_VOL;
       fallbackCrumpleEl.play().catch(() => {});
     }
   }
 
-  async function testCrumple() {
-    await prepareCrumple();
-    playCrumple();
-  }
-
-  // ---- Sound Board UI, Live Speed Meter & Mini Test Scratchpad ----
-  let padCanvas = null;
-  let padCtx = null;
-  let padPattern = null;
-  let padStrokes = [];
-  let padActive = null;
-  let padRaf = null;
-
-  function updateSpeedMeterUI(speed) {
-    const fill = document.getElementById('sb-meter-fill');
-    const lbl = document.getElementById('sb-speed-val');
-    if (!fill || !lbl) return;
-    const pct = Math.min(100, (speed / 1200) * 100);
-    fill.style.width = pct.toFixed(1) + '%';
-    lbl.textContent = Math.round(speed) + ' px/s';
-  }
-
-  function renderSoundPad() {
-    if (!padCanvas) return;
-    const r = padCanvas.getBoundingClientRect();
-    if (!r.width || !r.height) return;
-    const dpr = window.devicePixelRatio || 1;
-    const cw = Math.round(r.width * dpr), ch = Math.round(r.height * dpr);
-    if (padCanvas.width !== cw || padCanvas.height !== ch) { padCanvas.width = cw; padCanvas.height = ch; }
-    padCtx = padCanvas.getContext('2d');
-    padCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
-
-    if (!padPattern) padPattern = createNapkinPattern(padCtx);
-    padCtx.fillStyle = padPattern;
-    padCtx.fillRect(0, 0, r.width, r.height);
-
-    // Faint guide text when pad is empty
-    const now = performance.now();
-    padStrokes = padStrokes.filter(s => (now - s.tEnd) < 1300);
-
-    if (!padStrokes.length && !padActive) {
-      padCtx.save();
-      padCtx.fillStyle = 'rgba(110, 100, 87, 0.55)';
-      padCtx.font = '11px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
-      padCtx.textAlign = 'center'; padCtx.textBaseline = 'middle';
-      padCtx.fillText('Scribble here at different speeds to test...', r.width * 0.5, r.height * 0.5);
-      padCtx.restore();
-      padRaf = null;
-      return;
-    }
-
-    const drawTrail = (pts, alpha) => {
-      if (pts.length < 2) return;
-      padCtx.save();
-      padCtx.globalCompositeOperation = 'multiply';
-      padCtx.strokeStyle = currentColor;
-      padCtx.lineCap = 'round'; padCtx.lineJoin = 'round';
-      for (let i = 1; i < pts.length; i++) {
-        const a = pts[i - 1], b = pts[i];
-        padCtx.globalAlpha = alpha * 0.85;
-        padCtx.lineWidth = Math.max(1.1, 2.3 - (b.sp || 0) * 0.0008);
-        padCtx.beginPath(); padCtx.moveTo(a.x, a.y); padCtx.lineTo(b.x, b.y); padCtx.stroke();
-      }
-      padCtx.restore();
-    };
-
-    for (const st of padStrokes) {
-      const age = Math.max(0, (now - st.tEnd) / 1300);
-      drawTrail(st.pts, Math.max(0, 1 - age * age));
-    }
-    if (padActive) drawTrail(padActive.pts, 1);
-
-    padRaf = requestAnimationFrame(renderSoundPad);
-  }
-
-  function kickPadRender() {
-    if (!padRaf) padRaf = requestAnimationFrame(renderSoundPad);
-  }
-
-  function cancelDemo() {
-    if (demoRaf) { cancelAnimationFrame(demoRaf); demoRaf = null; }
-    if (demoKind) {
-      document.querySelectorAll('.sb-test-btns button').forEach(b => b.classList.remove('playing'));
-      demoKind = null;
-      if (!isDrawing) applySpeedToVoice(0, 0);
-    }
-    if (padActive && padActive.isDemo) {
-      padActive.tEnd = performance.now();
-      padStrokes.push(padActive);
-      padActive = null;
-      kickPadRender();
-    }
-  }
-
-  function playDemoStroke(kind = 'medium', isQuickPreview = false) {
-    cancelDemo();
-    if (state.presetId === 'off' || state.muted) return;
-    ensureVoice();
-    demoKind = kind;
-    if (!isQuickPreview) {
-      const btnId = kind === 'slow' ? 'sb-demo-slow' : (kind === 'fast' ? 'sb-demo-fast' : 'sb-demo-med');
-      const btn = document.getElementById(btnId);
-      if (btn) btn.classList.add('playing');
-    }
-
-    const dur = isQuickPreview ? 320 : (kind === 'slow' ? 980 : (kind === 'fast' ? 680 : 880));
-    const t0 = performance.now();
-    playPenTap(0.9);
-
-    const padRect = padCanvas ? padCanvas.getBoundingClientRect() : { width: 280, height: 64 };
-    const pw = padRect.width || 280, ph = padRect.height || 64;
-    if (padRect.width > 0) {
-      padActive = { pts: [], tEnd: Infinity, isDemo: true };
-      kickPadRender();
-    }
-
-    function step(now) {
-      const t = Math.max(0, Math.min(1, (now - t0) / dur));
-      let speed = 0, curve = 0, px = 0, py = ph * 0.5;
-      const env = Math.sin(t * Math.PI);
-
-      if (kind === 'slow') {
-        speed = (95 + 85 * Math.sin(t * Math.PI * 2.5) * 0.35) * Math.pow(env, 0.35);
-        curve = 0.15 + 0.15 * Math.abs(Math.cos(t * Math.PI * 3));
-        px = 18 + (pw - 36) * t;
-        py = ph * 0.5 + Math.sin(t * Math.PI * 3) * 10;
-      } else if (kind === 'fast') {
-        // Energetic zig-zag sketch flicks (750..1280 px/s)
-        const flick = Math.abs(Math.sin(t * Math.PI * 4));
-        speed = (620 + 680 * flick) * Math.pow(env, 0.25);
-        curve = 0.35 + 0.65 * (1 - flick);
-        px = 14 + (pw - 28) * t;
-        py = ph * 0.5 + Math.sin(t * Math.PI * 8) * 18;
-      } else {
-        // Natural cursive writing cadence with rhythmic loops & micro-pauses (240..620 px/s)
-        const wordPulse = Math.max(0.08, Math.sin(t * Math.PI * 5) * 0.5 + 0.55);
-        speed = (220 + 420 * wordPulse) * Math.pow(env, 0.3);
-        curve = 0.25 + 0.55 * Math.abs(Math.cos(t * Math.PI * 7));
-        px = 16 + (pw - 32) * t;
-        py = ph * 0.52 + Math.sin(t * Math.PI * 10) * 13 * Math.cos(t * Math.PI * 2.5);
-      }
-
-      applySpeedToVoice(speed, curve);
-      if (padActive && padActive.isDemo) {
-        padActive.pts.push({ x: px, y: py, sp: speed });
-        kickPadRender();
-      }
-
-      if (t < 1) {
-        demoRaf = requestAnimationFrame(step);
-      } else {
-        cancelDemo();
-      }
-    }
-    demoRaf = requestAnimationFrame(step);
-  }
-
   function syncUI() {
-    document.querySelectorAll('button.sb-preset').forEach(b => {
-      b.classList.toggle('active', b.dataset.preset === state.presetId);
-    });
-    const offBtn = document.getElementById('sb-off-btn');
-    if (offBtn) offBtn.classList.toggle('active', state.presetId === 'off');
-
-    const muteBtn = document.getElementById('sb-mute-btn');
-    if (muteBtn) {
-      muteBtn.classList.toggle('active', state.muted);
-      muteBtn.textContent = state.muted ? 'Muted' : 'Mute';
-    }
     const tog = document.getElementById('sound-toggle');
-    if (tog) {
-      const isOff = state.muted || (state.presetId === 'off' && !state.crumpleEnabled);
-      tog.classList.toggle('muted', isOff);
-    }
-  }
-
-  function setPreset(id) {
-    state.presetId = id;
-    configureVoiceForPreset();
-    syncUI();
-    if (id !== 'off' && !state.muted) {
-      playDemoStroke('medium', true);
-    } else {
-      cancelDemo();
-      applySpeedToVoice(0, 0);
-    }
+    if (!tog) return;
+    tog.classList.toggle('muted', muted);
+    tog.setAttribute('aria-pressed', muted ? 'false' : 'true');
+    tog.title = muted ? 'Sound Off (click to unmute)' : 'Sound On (click to mute)';
+    const lbl = tog.querySelector('.lbl');
+    if (lbl) lbl.textContent = muted ? 'Sound Off' : 'Sound On';
   }
 
   function toggleMute() {
-    state.muted = !state.muted;
+    muted = !muted;
     if (masterGain && actx) {
-      masterGain.gain.setTargetAtTime(state.muted ? 0 : 1, actx.currentTime, 0.015);
+      masterGain.gain.setTargetAtTime(muted ? 0 : 1, actx.currentTime, 0.015);
     }
-    if (state.muted) { cancelDemo(); stopCrumple(); }
+    if (muted) stopCrumple();
     syncUI();
   }
 
-  function setDrawVolume(v) {
-    state.drawVol = Math.max(0, Math.min(1, v));
-    const el = document.getElementById('sb-draw-vol-val');
-    if (el) el.textContent = Math.round(state.drawVol * 100) + '%';
-  }
-
-  function setSpeedSens(v) {
-    state.speedSens = Math.max(0, Math.min(1, v));
-    const el = document.getElementById('sb-speed-sens-val');
-    if (el) el.textContent = Math.round(state.speedSens * 100) + '%';
-  }
-
-  function setCrumpleVolume(v) {
-    state.crumpleVol = Math.max(0, Math.min(1, v));
-    const el = document.getElementById('sb-crumple-vol-val');
-    if (el) el.textContent = Math.round(state.crumpleVol * 100) + '%';
-  }
-
-  function setTypingSfx(on) { state.typingSfx = !!on; }
-  function setCrumpleEnabled(on) { state.crumpleEnabled = !!on; syncUI(); }
-
   function initUI() {
-    const grid = document.getElementById('sb-preset-grid');
-    if (grid) {
-      grid.innerHTML = SOUND_PRESETS.map(p => `
-        <button class="sb-preset${p.id === state.presetId ? ' active' : ''}" data-preset="${p.id}" onclick="NapkinAudio.setPreset('${p.id}')">
-          <span class="p-name">${p.name}</span>
-          <span class="p-desc">${p.desc}</span>
-        </button>
-      `).join('');
-    }
-
-    padCanvas = document.getElementById('sound-pad');
-    if (padCanvas) {
-      const padPos = e => {
-        const r = padCanvas.getBoundingClientRect();
-        return { x: e.clientX - r.left, y: e.clientY - r.top };
-      };
-      padCanvas.addEventListener('pointerdown', e => {
-        e.stopPropagation();
-        padCanvas.setPointerCapture(e.pointerId);
-        const pt = padPos(e);
-        startDraw(pt.x, pt.y);
-        padActive = { pts: [{ x: pt.x, y: pt.y, sp: 0 }], tEnd: Infinity, isDemo: false };
-        kickPadRender();
-      });
-      padCanvas.addEventListener('pointermove', e => {
-        if (!padActive || padActive.isDemo) return;
-        const pt = padPos(e);
-        updateDraw(pt.x, pt.y);
-        padActive.pts.push({ x: pt.x, y: pt.y, sp: smoothedSpeed });
-        kickPadRender();
-      });
-      const finishPad = () => {
-        if (!padActive || padActive.isDemo) return;
-        stopDraw();
-        padActive.tEnd = performance.now();
-        padStrokes.push(padActive);
-        padActive = null;
-        kickPadRender();
-      };
-      padCanvas.addEventListener('pointerup', finishPad);
-      padCanvas.addEventListener('pointercancel', finishPad);
-      padCanvas.addEventListener('lostpointercapture', finishPad);
-    }
-
-    // Unlock Web Audio + pre-decode ./crumble.mp3 on first user gesture anywhere
     const unlockOnce = () => {
       ensureContext();
       if (crumbleRawBytes && !crumbleBuffer) decodeCrumple();
@@ -2324,7 +1749,6 @@ const NapkinAudio = (() => {
 
   return {
     initUI,
-    renderSoundPad,
     startDraw,
     updateDraw,
     stopDraw,
@@ -2332,28 +1756,10 @@ const NapkinAudio = (() => {
     prepareCrumple,
     playCrumple,
     stopCrumple,
-    testCrumple,
-    playDemoStroke,
-    setPreset,
     toggleMute,
-    setDrawVolume,
-    setSpeedSens,
-    setCrumpleVolume,
-    setTypingSfx,
-    setCrumpleEnabled,
-    getState: () => ({ ...state, hasCrumpleBuffer: !!crumbleBuffer })
+    getState: () => ({ muted, presetId: DEFAULT_DRAW_PRESET.id, hasCrumpleBuffer: !!crumbleBuffer })
   };
 })();
-
-function toggleSoundBoard(forceState) {
-  const panel = document.getElementById('sound-board');
-  const btn = document.getElementById('sound-toggle');
-  if (!panel) return;
-  const open = typeof forceState === 'boolean' ? forceState : !panel.classList.contains('open');
-  panel.classList.toggle('open', open);
-  if (btn) btn.classList.toggle('active', open);
-  if (open) requestAnimationFrame(() => NapkinAudio.renderSoundPad());
-}
 
 // ============================================================================
 // 6. CRUMPLED NAPKIN BALL & THROW ANIMATION (SYNCED TO ./crumble.mp3)
@@ -3478,10 +2884,9 @@ async function loadStarterScene() {
 
 window.addEventListener('resize', () => {
   scheduleRender();
-  if (document.getElementById('sound-board')?.classList.contains('open')) NapkinAudio.renderSoundPad();
 });
 
-// Frame-1 instant kraft napkin render + Sound Board init + background cached model loading
+// Frame-1 instant kraft napkin render + default SFX init + background cached model loading
 NapkinAudio.initUI();
 scheduleRender();
 cachedFetchJSON('../exports/opensketch_residual_vae.json').then(j => {

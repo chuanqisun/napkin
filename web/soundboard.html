@@ -1,0 +1,820 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Napkin Sketch — Soundboard</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      padding: 16px 20px 36px;
+      max-width: 1120px;
+      font-family: system-ui, -apple-system, sans-serif;
+      font-size: 13px;
+      line-height: 1.4;
+      color: #111;
+      background: #fff;
+    }
+    header {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid #ddd;
+      margin-bottom: 16px;
+    }
+    h1 { margin: 0; font-size: 16px; font-weight: 600; }
+    h2 { margin: 0 0 8px; font-size: 14px; font-weight: 600; }
+    h3 { margin: 14px 0 6px; font-size: 12px; font-weight: 600; color: #555; text-transform: uppercase; letter-spacing: 0.03em; }
+    p.note { margin: 0 0 10px; color: #666; font-size: 12px; }
+    a { color: #111; }
+
+    .row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+    .cols {
+      display: grid;
+      grid-template-columns: 360px minmax(0, 1fr);
+      gap: 24px;
+      align-items: start;
+    }
+    @media (max-width: 860px) { .cols { grid-template-columns: 1fr; } }
+
+    button {
+      font: inherit;
+      padding: 5px 10px;
+      border: 1px solid #ccc;
+      background: #f7f7f7;
+      color: #111;
+      border-radius: 3px;
+      cursor: pointer;
+    }
+    button:hover { background: #eee; }
+    button.active, button.playing {
+      background: #111;
+      color: #fff;
+      border-color: #111;
+    }
+
+    .preset-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px;
+      margin-bottom: 12px;
+    }
+    button.preset-card {
+      text-align: left;
+      padding: 6px 8px;
+      display: flex;
+      flex-direction: column;
+      gap: 1px;
+    }
+    button.preset-card small { font-size: 11px; opacity: 0.7; }
+
+    canvas#sound-pad {
+      display: block;
+      width: 100%;
+      height: 110px;
+      border: 1px solid #ccc;
+      background: #f5efe4;
+      cursor: crosshair;
+      touch-action: none;
+      margin: 6px 0 8px;
+    }
+    .meter {
+      display: flex;
+      justify-content: space-between;
+      font-size: 12px;
+      color: #555;
+      font-family: ui-monospace, monospace;
+    }
+    .sliders {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      margin: 10px 0;
+    }
+    .slider-row {
+      display: grid;
+      grid-template-columns: 96px 1fr 38px;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+    }
+    .slider-row span.val { text-align: right; font-family: ui-monospace, monospace; color: #555; }
+
+    .sfx-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+      gap: 6px;
+    }
+    button.sfx-pad {
+      text-align: left;
+      padding: 7px 9px;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    button.sfx-pad .top {
+      display: flex;
+      justify-content: space-between;
+      gap: 6px;
+      font-weight: 600;
+    }
+    button.sfx-pad .meta {
+      font-weight: 400;
+      font-size: 11px;
+      font-family: ui-monospace, monospace;
+      opacity: 0.7;
+    }
+    button.sfx-pad small { font-size: 11px; opacity: 0.75; }
+
+    hr { border: 0; border-top: 1px solid #e5e5e5; margin: 12px 0; }
+    code { font-family: ui-monospace, monospace; font-size: 12px; }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="row">
+      <a href="./v7_napkin.html">&larr; v7_napkin.html</a>
+      <h1>Soundboard</h1>
+      <span id="clip-status" style="color:#666; font-family:ui-monospace,monospace; font-size:12px;">loading...</span>
+    </div>
+    <div class="row">
+      <label class="row" style="gap:4px;">
+        <span>Master</span>
+        <input id="master-vol" type="range" min="0" max="150" value="100" oninput="SoundLab.setMasterVol(this.value / 100)" />
+        <span id="master-vol-val" style="min-width:34px; font-family:ui-monospace,monospace;">100%</span>
+      </label>
+      <button id="mute-btn" onclick="SoundLab.toggleMute()">Mute</button>
+      <button onclick="SoundLab.stopAll()">Stop All</button>
+    </div>
+  </header>
+
+  <div class="cols">
+    <!-- LEFT: PROCEDURAL DRAWING SURFACE VARIANTS -->
+    <section>
+      <div class="row" style="justify-content:space-between; margin-bottom:6px;">
+        <h2 style="margin:0;">Drawing Variants</h2>
+        <button id="sb-off-btn" onclick="DrawEngine.setPreset('off')">Off</button>
+      </div>
+      <div id="preset-grid" class="preset-grid"></div>
+
+      <div class="meter">
+        <span>Speed test pad (drag slow &rarr; fast)</span>
+        <span id="sb-speed-val">0 px/s</span>
+      </div>
+      <canvas id="sound-pad"></canvas>
+      <div class="row" style="margin-bottom:10px;">
+        <button id="sb-demo-slow" onclick="DrawEngine.playDemoStroke('slow')">Slow</button>
+        <button id="sb-demo-med" onclick="DrawEngine.playDemoStroke('medium')">Write</button>
+        <button id="sb-demo-fast" onclick="DrawEngine.playDemoStroke('fast')">Fast</button>
+      </div>
+
+      <div class="sliders">
+        <label class="slider-row">
+          <span>Draw Vol</span>
+          <input id="sb-draw-vol" type="range" min="0" max="100" value="75" oninput="DrawEngine.setDrawVolume(this.value / 100)" />
+          <span id="sb-draw-vol-val" class="val">75%</span>
+        </label>
+        <label class="slider-row">
+          <span>Speed Curve</span>
+          <input id="sb-speed-sens" type="range" min="0" max="100" value="75" oninput="DrawEngine.setSpeedSens(this.value / 100)" />
+          <span id="sb-speed-sens-val" class="val">75%</span>
+        </label>
+        <label class="slider-row">
+          <span>Crumple Vol</span>
+          <input id="sb-crumple-vol" type="range" min="0" max="100" value="85" oninput="DrawEngine.setCrumpleVolume(this.value / 100)" />
+          <span id="sb-crumple-vol-val" class="val">85%</span>
+        </label>
+      </div>
+
+      <hr />
+      <div class="row" style="justify-content:space-between;">
+        <label class="row" style="gap:5px; cursor:pointer;">
+          <input id="sb-typing-sfx" type="checkbox" checked onchange="DrawEngine.setTypingSfx(this.checked)" />
+          <span>Typing Pen SFX</span>
+        </label>
+        <div class="row" style="gap:6px;">
+          <button onclick="DrawEngine.testTypingBurst()">Test Typing</button>
+          <button onclick="DrawEngine.testCrumple()">Play Crumple</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- RIGHT: ELEVENLABS BRAINSTORMING & DRINK FOLEY -->
+    <section>
+      <h2>Brainstorming &amp; Drink SFX (ElevenLabs)</h2>
+      <p class="note">Exploratory clips in <code>./sfx/*.mp3</code> (middle-aged male brainstorming + coffee/matcha foley). Keys <code>1</code>&ndash;<code>9</code> trigger pads; <code>Esc</code> stops all.</p>
+
+      <div class="row" id="combo-btns" style="margin-bottom:8px;"></div>
+      <div id="sfx-categories"></div>
+
+      <hr />
+      <label class="row" style="gap:8px; font-size:12px;">
+        <span>Clip Gain</span>
+        <input id="clip-vol" type="range" min="25" max="160" value="100" oninput="ClipBoard.setClipScale(this.value / 100)" />
+        <span id="clip-vol-val" style="font-family:ui-monospace,monospace;">100%</span>
+      </label>
+    </section>
+  </div>
+
+<script>
+const SoundLab = (() => {
+  let actx = null, masterGain = null, compressor = null;
+  let muted = false, masterVol = 1.0;
+
+  function ensureContext() {
+    if (!actx) {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) return null;
+      actx = new AC();
+      compressor = actx.createDynamicsCompressor();
+      compressor.threshold.value = -10;
+      compressor.knee.value = 18;
+      compressor.ratio.value = 4;
+      compressor.attack.value = 0.003;
+      compressor.release.value = 0.14;
+
+      masterGain = actx.createGain();
+      masterGain.gain.value = muted ? 0 : masterVol;
+      masterGain.connect(compressor);
+      compressor.connect(actx.destination);
+    }
+    if (actx.state === 'suspended') actx.resume().catch(() => {});
+    return actx;
+  }
+
+  function applyGain() {
+    if (masterGain && actx) masterGain.gain.setTargetAtTime(muted ? 0 : masterVol, actx.currentTime, 0.015);
+  }
+
+  function toggleMute() {
+    muted = !muted;
+    applyGain();
+    if (muted) stopAll();
+    const btn = document.getElementById('mute-btn');
+    if (btn) { btn.classList.toggle('active', muted); btn.textContent = muted ? 'Muted' : 'Mute'; }
+  }
+
+  function setMasterVol(v) {
+    masterVol = Math.max(0, Math.min(1.5, v));
+    applyGain();
+    document.getElementById('master-vol-val').textContent = Math.round(masterVol * 100) + '%';
+  }
+
+  function stopAll() {
+    DrawEngine.cancelDemo();
+    DrawEngine.stopDraw();
+    DrawEngine.stopCrumple();
+    ClipBoard.stopAll();
+  }
+
+  return {
+    ensureContext,
+    getMasterGain: () => { ensureContext(); return masterGain; },
+    isMuted: () => muted,
+    toggleMute, setMasterVol, stopAll
+  };
+})();
+
+const SOUND_PRESETS = [
+  { id: 'ballpoint', name: 'Ballpoint Pen', desc: 'Default (v7)',
+    bodyFMin: 720, bodyFMax: 2150, bodyQ: 1.35, bodyGain: 0.24,
+    grainFMin: 1550, grainFMax: 3900, grainQ: 2.2, grainGain: 0.44, rateMin: 0.55, rateMax: 1.95,
+    tipType: 'bandpass', tipFMin: 3100, tipFMax: 6500, tipQ: 2.7, tipGain: 0.22,
+    tapFreq: 1450, tapDur: 0.014, tapGain: 0.16, curveBoost: 0.38, velScale: 1.0, squeak: 0 },
+  { id: 'pencil', name: '2B Graphite Pencil', desc: 'Dry woody tooth',
+    bodyFMin: 500, bodyFMax: 1650, bodyQ: 1.5, bodyGain: 0.34,
+    grainFMin: 1300, grainFMax: 3450, grainQ: 2.5, grainGain: 0.62, rateMin: 0.45, rateMax: 1.85,
+    tipType: 'bandpass', tipFMin: 2550, tipFMax: 5600, tipQ: 2.0, tipGain: 0.34,
+    tapFreq: 880, tapDur: 0.018, tapGain: 0.15, curveBoost: 0.48, velScale: 1.05, squeak: 0 },
+  { id: 'marker', name: 'Felt-Tip Marker', desc: 'Damp fiber + squeak',
+    bodyFMin: 320, bodyFMax: 1120, bodyQ: 1.2, bodyGain: 0.56,
+    grainFMin: 740, grainFMax: 1850, grainQ: 1.7, grainGain: 0.34, rateMin: 0.38, rateMax: 1.35,
+    tipType: 'bandpass', tipFMin: 1950, tipFMax: 3150, tipQ: 6.2, tipGain: 0.16,
+    tapFreq: 460, tapDur: 0.022, tapGain: 0.18, curveBoost: 0.25, velScale: 1.0, squeak: 0.22 },
+  { id: 'fountain', name: 'Fountain Nib', desc: 'Metallic scratch',
+    bodyFMin: 900, bodyFMax: 2450, bodyQ: 1.8, bodyGain: 0.18,
+    grainFMin: 2350, grainFMax: 5300, grainQ: 3.5, grainGain: 0.48, rateMin: 0.65, rateMax: 2.25,
+    tipType: 'bandpass', tipFMin: 4200, tipFMax: 7700, tipQ: 4.1, tipGain: 0.34,
+    tapFreq: 2600, tapDur: 0.011, tapGain: 0.18, curveBoost: 0.62, velScale: 0.88, squeak: 0 },
+  { id: 'chalk', name: 'Chalk / Charcoal', desc: 'Coarse dusty grit',
+    bodyFMin: 260, bodyFMax: 940, bodyQ: 1.1, bodyGain: 0.50,
+    grainFMin: 1050, grainFMax: 3050, grainQ: 1.85, grainGain: 0.72, rateMin: 0.35, rateMax: 1.65,
+    tipType: 'highpass', tipFMin: 2100, tipFMax: 4400, tipQ: 0.9, tipGain: 0.22,
+    tapFreq: 600, tapDur: 0.024, tapGain: 0.20, curveBoost: 0.58, velScale: 0.95, squeak: 0 },
+  { id: 'brush', name: 'Soft Ink Brush', desc: 'Silky whisper sweep',
+    bodyFMin: 400, bodyFMax: 1480, bodyQ: 0.82, bodyGain: 0.48,
+    grainFMin: 900, grainFMax: 2350, grainQ: 0.9, grainGain: 0.22, rateMin: 0.34, rateMax: 1.15,
+    tipType: 'bandpass', tipFMin: 1750, tipFMax: 3900, tipQ: 0.85, tipGain: 0.18,
+    tapFreq: 350, tapDur: 0.028, tapGain: 0.10, curveBoost: 0.15, velScale: 1.08, squeak: 0 },
+  { id: 'mech', name: '0.5mm Mechanical', desc: 'Sharp lead edge',
+    bodyFMin: 1080, bodyFMax: 2800, bodyQ: 2.1, bodyGain: 0.16,
+    grainFMin: 2600, grainFMax: 5700, grainQ: 3.9, grainGain: 0.46, rateMin: 0.72, rateMax: 2.40,
+    tipType: 'bandpass', tipFMin: 4600, tipFMax: 8300, tipQ: 4.8, tipGain: 0.32,
+    tapFreq: 3150, tapDur: 0.010, tapGain: 0.19, curveBoost: 0.52, velScale: 0.85, squeak: 0 },
+  { id: 'kraft', name: 'ASMR Kraft Napkin', desc: 'Embossed fiber rub',
+    bodyFMin: 220, bodyFMax: 860, bodyQ: 1.35, bodyGain: 0.58,
+    grainFMin: 1180, grainFMax: 3650, grainQ: 2.4, grainGain: 0.76, rateMin: 0.48, rateMax: 2.18,
+    tipType: 'bandpass', tipFMin: 2700, tipFMax: 5800, tipQ: 2.1, tipGain: 0.26,
+    tapFreq: 740, tapDur: 0.020, tapGain: 0.22, curveBoost: 0.55, velScale: 0.96, squeak: 0 }
+];
+
+const DrawEngine = (() => {
+  const state = { presetId: 'ballpoint', drawVol: 0.75, speedSens: 0.75, crumpleVol: 0.85, typingSfx: true };
+  let buffers = null, voice = null, isDrawing = false;
+  let lastX = 0, lastY = 0, lastT = 0, lastAng = null, smoothedSpeed = 0, smoothedCurve = 0;
+  let decayRaf = null, demoRaf = null, demoKind = null, typingTimers = [], activeCrumpleSource = null;
+  let padCanvas = null, padCtx = null, padStrokes = [], padActive = null, padRaf = null;
+
+  function getPreset() {
+    return state.presetId === 'off' ? null : (SOUND_PRESETS.find(p => p.id === state.presetId) || SOUND_PRESETS[0]);
+  }
+
+  function buildTextureBuffers(ctx) {
+    const sr = ctx.sampleRate, len = Math.floor(sr * 3.0);
+    const pink = ctx.createBuffer(1, len, sr), pd = pink.getChannelData(0);
+    let b0 = 0, b1 = 0, b2 = 0, b3 = 0, b4 = 0, b5 = 0, b6 = 0;
+    for (let i = 0; i < len; i++) {
+      const w = Math.random() * 2 - 1;
+      b0 = 0.99886 * b0 + w * 0.0555179; b1 = 0.99332 * b1 + w * 0.0750759;
+      b2 = 0.96900 * b2 + w * 0.1538520; b3 = 0.86650 * b3 + w * 0.3104856;
+      b4 = 0.55000 * b4 + w * 0.5329522; b5 = -0.7616 * b5 - w * 0.0168980;
+      pd[i] = (b0 + b1 + b2 + b3 + b4 + b5 + b6 + w * 0.5362) * 0.11;
+      b6 = w * 0.115926;
+    }
+    const grain = ctx.createBuffer(1, len, sr), gd = grain.getChannelData(0);
+    let env = 0.5, imp = 0;
+    for (let i = 0; i < len; i++) {
+      const emboss = 0.65 + 0.35 * Math.sin(i * 0.0038 + Math.sin(i * 0.00043) * 2.5);
+      env = Math.max(0.25, Math.min(1.0, env + (Math.random() - 0.5) * 0.03));
+      if (Math.random() < 0.018) imp += (Math.random() * 2 - 1) * 1.35;
+      imp *= 0.84;
+      gd[i] = Math.max(-1, Math.min(1, (imp + (Math.random() * 2 - 1) * 0.35) * env * emboss));
+    }
+    const crisp = ctx.createBuffer(1, len, sr), cd = crisp.getChannelData(0);
+    let prev = 0;
+    for (let i = 0; i < len; i++) {
+      const w = Math.random() * 2 - 1;
+      const hp = (w - prev) * 0.52; prev = w;
+      const sp = Math.random() < 0.006 ? (Math.random() * 2 - 1) * 0.9 : 0;
+      cd[i] = Math.max(-1, Math.min(1, hp + sp));
+    }
+    const fadeN = Math.floor(sr * 0.01);
+    for (const arr of [pd, gd, cd]) {
+      for (let i = 0; i < fadeN; i++) {
+        const k = i / fadeN;
+        arr[len - fadeN + i] = arr[len - fadeN + i] * (1 - k) + arr[i] * k;
+      }
+    }
+    return { pink, grain, crisp };
+  }
+
+  function ensureVoice() {
+    const ctx = SoundLab.ensureContext();
+    if (!ctx) return null;
+    if (!buffers) buffers = buildTextureBuffers(ctx);
+    if (voice) return voice;
+    const outGain = ctx.createGain(); outGain.gain.value = 0; outGain.connect(SoundLab.getMasterGain());
+    const makeLoop = buf => { const s = ctx.createBufferSource(); s.buffer = buf; s.loop = true; s.start(0, Math.random() * 2.5); return s; };
+    const bodySrc = makeLoop(buffers.pink), bodyFlt = ctx.createBiquadFilter(), bodyGain = ctx.createGain();
+    bodyFlt.type = 'bandpass'; bodySrc.connect(bodyFlt); bodyFlt.connect(bodyGain); bodyGain.connect(outGain);
+    const grainSrc = makeLoop(buffers.grain), grainFlt = ctx.createBiquadFilter(), grainGain = ctx.createGain();
+    grainFlt.type = 'bandpass'; grainSrc.connect(grainFlt); grainFlt.connect(grainGain); grainGain.connect(outGain);
+    const tipSrc = makeLoop(buffers.crisp), tipFlt = ctx.createBiquadFilter(), tipGain = ctx.createGain();
+    tipFlt.type = 'bandpass'; tipSrc.connect(tipFlt); tipFlt.connect(tipGain); tipGain.connect(outGain);
+    const sqOsc = ctx.createOscillator(), sqFlt = ctx.createBiquadFilter(), sqGain = ctx.createGain();
+    sqOsc.type = 'triangle'; sqOsc.frequency.value = 2350;
+    sqFlt.type = 'bandpass'; sqFlt.Q.value = 10; sqFlt.frequency.value = 2350; sqGain.gain.value = 0;
+    sqOsc.connect(sqFlt); sqFlt.connect(sqGain); sqGain.connect(outGain); sqOsc.start();
+    voice = { outGain, bodySrc, bodyFlt, bodyGain, grainSrc, grainFlt, grainGain, tipSrc, tipFlt, tipGain, sqOsc, sqFlt, sqGain };
+    configureVoice();
+    return voice;
+  }
+
+  function configureVoice() {
+    const ctx = SoundLab.ensureContext();
+    if (!voice || !ctx) return;
+    const p = getPreset(), now = ctx.currentTime;
+    if (!p) { voice.outGain.gain.setTargetAtTime(0, now, 0.02); return; }
+    voice.bodyFlt.Q.setTargetAtTime(p.bodyQ, now, 0.02);
+    voice.grainFlt.Q.setTargetAtTime(p.grainQ, now, 0.02);
+    voice.tipFlt.type = p.tipType || 'bandpass';
+    voice.tipFlt.Q.setTargetAtTime(p.tipQ, now, 0.02);
+    voice.bodyGain.gain.setTargetAtTime(p.bodyGain, now, 0.02);
+    voice.grainGain.gain.setTargetAtTime(p.grainGain, now, 0.02);
+    voice.tipGain.gain.setTargetAtTime(p.tipGain, now, 0.02);
+  }
+
+  function playPenTap(strength = 1.0) {
+    const p = getPreset();
+    if (!p || SoundLab.isMuted() || state.drawVol <= 0.005) return;
+    const ctx = SoundLab.ensureContext();
+    if (!ctx) return;
+    if (!buffers) buffers = buildTextureBuffers(ctx);
+    const now = ctx.currentTime;
+    const src = ctx.createBufferSource(); src.buffer = buffers.crisp;
+    const flt = ctx.createBiquadFilter(); flt.type = 'bandpass';
+    flt.frequency.value = p.tapFreq * (0.9 + Math.random() * 0.2); flt.Q.value = 2.4;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, now);
+    g.gain.linearRampToValueAtTime(p.tapGain * state.drawVol * strength * 0.65, now + 0.002);
+    g.gain.exponentialRampToValueAtTime(0.0001, now + p.tapDur);
+    src.connect(flt); flt.connect(g); g.connect(SoundLab.getMasterGain());
+    src.start(now, Math.random() * 2.0, p.tapDur + 0.01);
+  }
+
+  function applySpeed(speed, curve = 0) {
+    const lbl = document.getElementById('sb-speed-val');
+    if (lbl) lbl.textContent = Math.round(speed) + ' px/s';
+    const p = getPreset(), ctx = SoundLab.ensureContext();
+    if (!p || SoundLab.isMuted() || state.drawVol <= 0.005) {
+      if (voice && ctx) voice.outGain.gain.setTargetAtTime(0, ctx.currentTime, 0.02);
+      return;
+    }
+    const v = ensureVoice();
+    if (!v || !ctx) return;
+    const now = ctx.currentTime;
+    if (speed < 10) { v.outGain.gain.setTargetAtTime(0, now, 0.026); v.sqGain.gain.setTargetAtTime(0, now, 0.02); return; }
+    const rawU = Math.max(0, Math.min(1, (speed - 10) / 1300));
+    const pitchU = Math.pow(rawU, 0.72) * (0.28 + 0.72 * state.speedSens);
+    const gainU = Math.pow(rawU, 0.45 + 0.48 * state.speedSens);
+    const logLerp = (a, b, t) => a * Math.pow(b / a, Math.max(0, Math.min(1.15, t)));
+    v.bodyFlt.frequency.setTargetAtTime(logLerp(p.bodyFMin, p.bodyFMax, pitchU), now, 0.018);
+    v.grainFlt.frequency.setTargetAtTime(logLerp(p.grainFMin, p.grainFMax, pitchU), now, 0.016);
+    v.tipFlt.frequency.setTargetAtTime(logLerp(p.tipFMin, p.tipFMax, pitchU), now, 0.016);
+    v.grainSrc.playbackRate.setTargetAtTime(Math.max(0.25, Math.min(3.2, p.rateMin + (p.rateMax - p.rateMin) * Math.pow(rawU, 0.78))), now, 0.02);
+    v.tipSrc.playbackRate.setTargetAtTime(0.75 + rawU * 0.85, now, 0.025);
+    v.grainGain.gain.setTargetAtTime(p.grainGain * (1 + curve * p.curveBoost), now, 0.015);
+    if (p.squeak > 0 && rawU > 0.35) {
+      const sqFreq = 2050 + rawU * 880 + curve * 160;
+      v.sqOsc.frequency.setTargetAtTime(sqFreq, now, 0.02);
+      v.sqFlt.frequency.setTargetAtTime(sqFreq, now, 0.02);
+      v.sqGain.gain.setTargetAtTime(p.squeak * Math.pow((rawU - 0.35) / 0.65, 1.4) * 0.14, now, 0.02);
+    } else v.sqGain.gain.setTargetAtTime(0, now, 0.02);
+    v.outGain.gain.setTargetAtTime(Math.min(1.15, (0.07 + 0.68 * gainU) * state.drawVol * p.velScale), now, 0.014);
+  }
+
+  function tickDecay() {
+    if (!isDrawing) { decayRaf = null; return; }
+    const idleMs = performance.now() - lastT;
+    if (idleMs > 28 && smoothedSpeed > 0) {
+      smoothedSpeed *= Math.pow(0.74, Math.min(8, idleMs / 16));
+      smoothedCurve *= 0.7;
+      if (smoothedSpeed < 8) smoothedSpeed = 0;
+      applySpeed(smoothedSpeed, smoothedCurve);
+    }
+    decayRaf = requestAnimationFrame(tickDecay);
+  }
+
+  function startDraw(x, y) {
+    cancelDemo(); SoundLab.ensureContext();
+    isDrawing = true; lastX = x; lastY = y; lastT = performance.now(); lastAng = null;
+    smoothedSpeed = 0; smoothedCurve = 0; playPenTap(1.0);
+    if (!decayRaf) decayRaf = requestAnimationFrame(tickDecay);
+  }
+  function updateDraw(x, y) {
+    if (!isDrawing) return;
+    const now = performance.now(), dt = Math.max(4, now - lastT);
+    const dx = x - lastX, dy = y - lastY, dist = Math.hypot(dx, dy);
+    if (dist < 0.45) return;
+    const inst = Math.min(2600, (dist / dt) * 1000), ang = Math.atan2(dy, dx);
+    let curve = 0;
+    if (lastAng !== null && dist > 1.5) curve = Math.min(1, Math.abs(Math.atan2(Math.sin(ang - lastAng), Math.cos(ang - lastAng))) * 1.25);
+    const a = inst > smoothedSpeed ? 0.46 : 0.28;
+    smoothedSpeed = smoothedSpeed * (1 - a) + inst * a;
+    smoothedCurve = smoothedCurve * 0.65 + curve * 0.35;
+    lastX = x; lastY = y; lastT = now; lastAng = ang;
+    applySpeed(smoothedSpeed, smoothedCurve);
+  }
+  function stopDraw() {
+    if (!isDrawing) return;
+    isDrawing = false; smoothedSpeed = 0; smoothedCurve = 0;
+    if (decayRaf) { cancelAnimationFrame(decayRaf); decayRaf = null; }
+    applySpeed(0, 0);
+  }
+
+  function renderPad() {
+    if (!padCanvas) return;
+    const r = padCanvas.getBoundingClientRect();
+    if (!r.width || !r.height) return;
+    const dpr = window.devicePixelRatio || 1;
+    const cw = Math.round(r.width * dpr), ch = Math.round(r.height * dpr);
+    if (padCanvas.width !== cw || padCanvas.height !== ch) { padCanvas.width = cw; padCanvas.height = ch; }
+    padCtx = padCanvas.getContext('2d');
+    padCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    padCtx.fillStyle = '#f5efe4';
+    padCtx.fillRect(0, 0, r.width, r.height);
+    const now = performance.now();
+    padStrokes = padStrokes.filter(s => (now - s.tEnd) < 1200);
+    if (!padStrokes.length && !padActive) { padRaf = null; return; }
+    const drawTrail = (pts, alpha) => {
+      if (pts.length < 2) return;
+      padCtx.save(); padCtx.strokeStyle = '#1b3d8f'; padCtx.lineCap = 'round'; padCtx.lineJoin = 'round';
+      for (let i = 1; i < pts.length; i++) {
+        padCtx.globalAlpha = alpha * 0.85;
+        padCtx.lineWidth = Math.max(1.1, 2.3 - (pts[i].sp || 0) * 0.0008);
+        padCtx.beginPath(); padCtx.moveTo(pts[i - 1].x, pts[i - 1].y); padCtx.lineTo(pts[i].x, pts[i].y); padCtx.stroke();
+      }
+      padCtx.restore();
+    };
+    for (const st of padStrokes) drawTrail(st.pts, Math.max(0, 1 - Math.pow((now - st.tEnd) / 1200, 2)));
+    if (padActive) drawTrail(padActive.pts, 1);
+    padRaf = requestAnimationFrame(renderPad);
+  }
+  function kickPad() { if (!padRaf) padRaf = requestAnimationFrame(renderPad); }
+
+  function cancelDemo() {
+    if (demoRaf) { cancelAnimationFrame(demoRaf); demoRaf = null; }
+    typingTimers.forEach(t => clearTimeout(t)); typingTimers = [];
+    if (demoKind) {
+      document.querySelectorAll('#sb-demo-slow,#sb-demo-med,#sb-demo-fast').forEach(b => b.classList.remove('playing'));
+      demoKind = null;
+      if (!isDrawing) applySpeed(0, 0);
+    }
+    if (padActive && padActive.isDemo) { padActive.tEnd = performance.now(); padStrokes.push(padActive); padActive = null; kickPad(); }
+  }
+
+  function playDemoStroke(kind = 'medium', isQuick = false) {
+    cancelDemo();
+    if (state.presetId === 'off' || SoundLab.isMuted()) return;
+    ensureVoice(); demoKind = kind;
+    if (!isQuick) document.getElementById(kind === 'slow' ? 'sb-demo-slow' : (kind === 'fast' ? 'sb-demo-fast' : 'sb-demo-med'))?.classList.add('playing');
+    const dur = isQuick ? 320 : (kind === 'slow' ? 980 : (kind === 'fast' ? 680 : 880));
+    const t0 = performance.now(); playPenTap(0.9);
+    const r = padCanvas.getBoundingClientRect();
+    const pw = r.width || 300, ph = r.height || 110;
+    padActive = { pts: [], tEnd: Infinity, isDemo: true }; kickPad();
+    function step(now) {
+      const t = Math.max(0, Math.min(1, (now - t0) / dur)), env = Math.sin(t * Math.PI);
+      let speed, curve, px = 16 + (pw - 32) * t, py = ph * 0.5;
+      if (kind === 'slow') {
+        speed = (95 + 85 * Math.sin(t * Math.PI * 2.5) * 0.35) * Math.pow(env, 0.35);
+        curve = 0.15 + 0.15 * Math.abs(Math.cos(t * Math.PI * 3));
+        py = ph * 0.5 + Math.sin(t * Math.PI * 3) * 18;
+      } else if (kind === 'fast') {
+        const fl = Math.abs(Math.sin(t * Math.PI * 4));
+        speed = (640 + 680 * fl) * Math.pow(env, 0.25);
+        curve = 0.35 + 0.65 * (1 - fl);
+        py = ph * 0.5 + Math.sin(t * Math.PI * 8) * 30;
+      } else {
+        const wp = Math.max(0.08, Math.sin(t * Math.PI * 5) * 0.5 + 0.55);
+        speed = (220 + 420 * wp) * Math.pow(env, 0.3);
+        curve = 0.25 + 0.55 * Math.abs(Math.cos(t * Math.PI * 7));
+        py = ph * 0.52 + Math.sin(t * Math.PI * 10) * 22 * Math.cos(t * Math.PI * 2.5);
+      }
+      applySpeed(speed, curve);
+      if (padActive && padActive.isDemo) { padActive.pts.push({ x: px, y: py, sp: speed }); kickPad(); }
+      if (t < 1) demoRaf = requestAnimationFrame(step); else cancelDemo();
+    }
+    demoRaf = requestAnimationFrame(step);
+  }
+
+  function testTypingBurst() {
+    cancelDemo();
+    if (!state.typingSfx || state.presetId === 'off' || SoundLab.isMuted()) return;
+    ensureVoice();
+    [0, 115, 220, 360, 470, 585].forEach((d, idx) => {
+      typingTimers.push(
+        setTimeout(() => { playPenTap(0.58); applySpeed(380 + (idx % 3) * 145, 0.38); }, d),
+        setTimeout(() => { if (!isDrawing && !demoRaf) applySpeed(0, 0); }, d + 72)
+      );
+    });
+  }
+
+  function stopCrumple() {
+    if (activeCrumpleSource) { try { activeCrumpleSource.stop(); } catch (_) {} activeCrumpleSource = null; }
+  }
+  async function testCrumple() {
+    stopCrumple();
+    if (SoundLab.isMuted() || state.crumpleVol <= 0.005) return;
+    const buf = await ClipBoard.getBuffer('crumble'), ctx = SoundLab.ensureContext();
+    if (!ctx || !buf) return;
+    const src = ctx.createBufferSource(); src.buffer = buf;
+    const g = ctx.createGain(); g.gain.value = state.crumpleVol * 3.4;
+    src.connect(g); g.connect(SoundLab.getMasterGain());
+    src.onended = () => { if (activeCrumpleSource === src) activeCrumpleSource = null; };
+    activeCrumpleSource = src; src.start(ctx.currentTime);
+  }
+
+  function syncUI() {
+    document.querySelectorAll('button.preset-card').forEach(b => b.classList.toggle('active', b.dataset.preset === state.presetId));
+    document.getElementById('sb-off-btn')?.classList.toggle('active', state.presetId === 'off');
+  }
+  function setPreset(id) {
+    state.presetId = id; configureVoice(); syncUI();
+    if (id !== 'off' && !SoundLab.isMuted()) playDemoStroke('medium', true);
+    else { cancelDemo(); applySpeed(0, 0); }
+  }
+  function setDrawVolume(v) { state.drawVol = v; document.getElementById('sb-draw-vol-val').textContent = Math.round(v * 100) + '%'; }
+  function setSpeedSens(v) { state.speedSens = v; document.getElementById('sb-speed-sens-val').textContent = Math.round(v * 100) + '%'; }
+  function setCrumpleVolume(v) { state.crumpleVol = v; document.getElementById('sb-crumple-vol-val').textContent = Math.round(v * 100) + '%'; }
+  function setTypingSfx(on) { state.typingSfx = !!on; }
+
+  function init() {
+    document.getElementById('preset-grid').innerHTML = SOUND_PRESETS.map(p => `
+      <button class="preset-card${p.id === state.presetId ? ' active' : ''}" data-preset="${p.id}" onclick="DrawEngine.setPreset('${p.id}')">
+        <span>${p.name}</span><small>${p.desc}</small>
+      </button>
+    `).join('');
+    padCanvas = document.getElementById('sound-pad');
+    const pos = e => { const r = padCanvas.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; };
+    padCanvas.addEventListener('pointerdown', e => {
+      padCanvas.setPointerCapture(e.pointerId);
+      const pt = pos(e); startDraw(pt.x, pt.y);
+      padActive = { pts: [{ x: pt.x, y: pt.y, sp: 0 }], tEnd: Infinity, isDemo: false }; kickPad();
+    });
+    padCanvas.addEventListener('pointermove', e => {
+      if (!padActive || padActive.isDemo) return;
+      const pt = pos(e); updateDraw(pt.x, pt.y); padActive.pts.push({ x: pt.x, y: pt.y, sp: smoothedSpeed }); kickPad();
+    });
+    const finish = () => {
+      if (!padActive || padActive.isDemo) return;
+      stopDraw(); padActive.tEnd = performance.now(); padStrokes.push(padActive); padActive = null; kickPad();
+    };
+    padCanvas.addEventListener('pointerup', finish);
+    padCanvas.addEventListener('pointercancel', finish);
+    padCanvas.addEventListener('lostpointercapture', finish);
+    window.addEventListener('resize', renderPad);
+    renderPad(); syncUI();
+  }
+
+  return { init, setPreset, setDrawVolume, setSpeedSens, setCrumpleVolume, setTypingSfx, playDemoStroke, cancelDemo, stopDraw, testTypingBurst, testCrumple, stopCrumple };
+})();
+
+const SFX_CATEGORIES = [
+  {
+    title: 'Coffee / Matcha Sipping & Cup Foley',
+    clips: [
+      { id: 'sip_coffee',     file: './sfx/sip_coffee.mp3',     title: 'Sip Coffee',          event: 'Take a Sip',          dur: 2.00, gain: 2.45, key: '1' },
+      { id: 'swallow_liquid', file: './sfx/swallow_liquid.mp3', title: 'Swallow Liquid',      event: 'Post-Sip Swallow',    dur: 1.76, gain: 2.55, key: '2' },
+      { id: 'sip_ahhh',       file: './sfx/sip_ahhh.mp3',       title: 'Sip + "Ahhh"',        event: 'Drink Refresh',       dur: 2.48, gain: 1.85, key: '3' },
+      { id: 'cup_setdown',    file: './sfx/cup_setdown.mp3',    title: 'Mug Setdown',         event: 'Place Cup',           dur: 1.20, gain: 0.82 },
+      { id: 'coffee_drip',    file: './sfx/coffee_drip.mp3',    title: 'Liquid Drip',         event: 'New Drip Stain',      dur: 1.08, gain: 4.10 }
+    ]
+  },
+  {
+    title: 'Pausing & Creative Block',
+    clips: [
+      { id: 'hmm_pause',  file: './sfx/hmm_pause.mp3',  title: '"Hmmm..." Pause',     event: 'Idle Pause',     dur: 1.76, gain: 0.78, key: '4' },
+      { id: 'mm_ponder',  file: './sfx/mm_ponder.mp3',  title: '"Mm-hmm" Ponder',     event: 'Contemplating',  dur: 2.00, gain: 1.55 },
+      { id: 'sigh_block', file: './sfx/sigh_block.mp3', title: 'Thoughtful Sigh',     event: 'Creative Block', dur: 2.00, gain: 0.96 }
+    ]
+  },
+  {
+    title: 'Finishing a Shape & Breakthroughs',
+    clips: [
+      { id: 'ooo_intrigued', file: './sfx/ooo_intrigued.mp3', title: '"Oooo..." Spark',   event: 'Shape Snapped',   dur: 1.48, gain: 0.42, key: '5' },
+      { id: 'aha_spark',     file: './sfx/aha_spark.mp3',     title: '"Aha!"',            event: 'Node Connected',  dur: 1.36, gain: 0.58, key: '6' },
+      { id: 'eureka_win',    file: './sfx/eureka_win.mp3',    title: '"Eureka!"',         event: 'Breakthrough',    dur: 1.76, gain: 0.56, key: '7' },
+      { id: 'ahhhh_relief',  file: './sfx/ahhhh_relief.mp3',  title: '"Ahhhh..." Relief', event: 'Save / Finished', dur: 2.00, gain: 0.56, key: '8' }
+    ]
+  },
+  {
+    title: 'Oops, Drip & Slip',
+    clips: [
+      { id: 'oops_drip', file: './sfx/oops_drip.mp3', title: '"Oops!"',      event: 'Accidental Drip', dur: 1.28, gain: 0.86, key: '9' },
+      { id: 'uhoh_slip', file: './sfx/uhoh_slip.mp3', title: '"Uh-oh"',      event: 'Undo / Slip',     dur: 1.36, gain: 1.05 }
+    ]
+  },
+  {
+    title: 'Starting on a New Napkin',
+    clips: [
+      { id: 'fresh_napkin', file: './sfx/fresh_napkin.mp3', title: 'Fresh Napkin Smooth', event: 'New Sheet Ready', dur: 2.00, gain: 3.80 },
+      { id: 'crumble',      file: './crumble.mp3',          title: 'Crumple Toss',        event: 'Crumple Sheet',   dur: 1.80, gain: 2.85 }
+    ]
+  }
+];
+
+const EVENT_COMBOS = [
+  { id: 'c1', label: 'Pause -> Sip -> Aha!', steps: [{ delay: 0, clipId: 'hmm_pause' }, { delay: 1450, clipId: 'sip_coffee' }, { delay: 3300, clipId: 'aha_spark' }] },
+  { id: 'c2', label: 'Drip -> Oops!',        steps: [{ delay: 0, clipId: 'coffee_drip' }, { delay: 420, clipId: 'oops_drip' }] },
+  { id: 'c3', label: 'Draw -> Oooo -> Eureka!', steps: [{ delay: 0, demoStroke: 'medium' }, { delay: 900, clipId: 'ooo_intrigued' }, { delay: 2200, clipId: 'eureka_win' }] },
+  { id: 'c4', label: 'Sip -> Swallow -> Set Cup', steps: [{ delay: 0, clipId: 'sip_coffee' }, { delay: 1400, clipId: 'swallow_liquid' }, { delay: 2850, clipId: 'cup_setdown' }] },
+  { id: 'c5', label: 'Crumple -> Fresh Napkin', steps: [{ delay: 0, clipId: 'crumble' }, { delay: 1450, clipId: 'fresh_napkin' }] }
+];
+
+const ClipBoard = (() => {
+  const clipMap = new Map(), rawBytes = new Map(), decodedBuffers = new Map(), activePlays = new Map();
+  let comboTimers = [], activeComboId = null, clipScale = 1.0, loadedCount = 0;
+  for (const cat of SFX_CATEGORIES) for (const c of cat.clips) clipMap.set(c.id, c);
+
+  function updateStatus() {
+    document.getElementById('clip-status').textContent = `${loadedCount}/${clipMap.size} clips ready`;
+  }
+  async function prefetchAll() {
+    await Promise.all(Array.from(clipMap.values()).map(async c => {
+      try {
+        const res = await fetch(c.file);
+        if (!res.ok) return;
+        rawBytes.set(c.id, await res.arrayBuffer());
+        loadedCount++; updateStatus();
+      } catch (_) {}
+    }));
+  }
+  async function getBuffer(id) {
+    if (decodedBuffers.has(id)) return decodedBuffers.get(id);
+    const clip = clipMap.get(id), ctx = SoundLab.ensureContext();
+    if (!clip || !ctx) return null;
+    if (!rawBytes.has(id)) {
+      const res = await fetch(clip.file);
+      if (!res.ok) return null;
+      rawBytes.set(id, await res.arrayBuffer());
+    }
+    const decoded = await ctx.decodeAudioData(rawBytes.get(id).slice(0));
+    decodedBuffers.set(id, decoded);
+    return decoded;
+  }
+  function stopClip(id) {
+    const src = activePlays.get(id);
+    if (!src) return;
+    try { src.stop(); } catch (_) {}
+    activePlays.delete(id);
+    document.querySelector(`button.sfx-pad[data-clip="${id}"]`)?.classList.remove('playing');
+  }
+  function stopCombo() {
+    comboTimers.forEach(t => clearTimeout(t)); comboTimers = [];
+    if (activeComboId) {
+      document.querySelector(`button[data-combo="${activeComboId}"]`)?.classList.remove('playing');
+      activeComboId = null;
+    }
+  }
+  function stopAll() {
+    stopCombo();
+    for (const id of Array.from(activePlays.keys())) stopClip(id);
+  }
+  async function playClip(id) {
+    if (SoundLab.isMuted()) return;
+    const clip = clipMap.get(id); if (!clip) return;
+    stopClip(id);
+    const ctx = SoundLab.ensureContext(), buf = await getBuffer(id);
+    if (!ctx || !buf) return;
+    const src = ctx.createBufferSource(); src.buffer = buf;
+    const g = ctx.createGain(); g.gain.value = clip.gain * clipScale;
+    src.connect(g); g.connect(SoundLab.getMasterGain());
+    activePlays.set(id, src);
+    document.querySelector(`button.sfx-pad[data-clip="${id}"]`)?.classList.add('playing');
+    src.onended = () => {
+      if (activePlays.get(id) === src) {
+        activePlays.delete(id);
+        document.querySelector(`button.sfx-pad[data-clip="${id}"]`)?.classList.remove('playing');
+      }
+    };
+    src.start(ctx.currentTime);
+  }
+  function playCombo(cid) {
+    stopCombo();
+    if (SoundLab.isMuted()) return;
+    const combo = EVENT_COMBOS.find(c => c.id === cid); if (!combo) return;
+    activeComboId = cid;
+    document.querySelector(`button[data-combo="${cid}"]`)?.classList.add('playing');
+    let maxEnd = 0;
+    for (const st of combo.steps) {
+      const len = st.demoStroke ? 950 : ((clipMap.get(st.clipId)?.dur || 1.5) * 1000);
+      maxEnd = Math.max(maxEnd, st.delay + len);
+      comboTimers.push(setTimeout(() => {
+        if (st.demoStroke) DrawEngine.playDemoStroke(st.demoStroke);
+        else playClip(st.clipId);
+      }, st.delay));
+    }
+    comboTimers.push(setTimeout(stopCombo, maxEnd + 150));
+  }
+  function setClipScale(v) {
+    clipScale = v;
+    document.getElementById('clip-vol-val').textContent = Math.round(v * 100) + '%';
+  }
+  function init() {
+    document.getElementById('combo-btns').innerHTML = EVENT_COMBOS.map(c =>
+      `<button data-combo="${c.id}" onclick="ClipBoard.playCombo('${c.id}')">&#9654; ${c.label}</button>`
+    ).join('');
+    document.getElementById('sfx-categories').innerHTML = SFX_CATEGORIES.map(cat => `
+      <h3>${cat.title}</h3>
+      <div class="sfx-grid">
+        ${cat.clips.map(c => `
+          <button class="sfx-pad" data-clip="${c.id}" onclick="ClipBoard.playClip('${c.id}')">
+            <span class="top">
+              <span>${c.title}</span>
+              <span class="meta">${c.dur.toFixed(1)}s${c.key ? ' [' + c.key + ']' : ''}</span>
+            </span>
+            <small>${c.event}</small>
+          </button>
+        `).join('')}
+      </div>
+    `).join('');
+    window.addEventListener('keydown', e => {
+      if (e.target && ['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) return;
+      if (e.key === 'Escape') { SoundLab.stopAll(); return; }
+      for (const c of clipMap.values()) if (c.key === e.key) { playClip(c.id); break; }
+    });
+    prefetchAll();
+  }
+  return { init, playClip, playCombo, stopAll, getBuffer, setClipScale, getClipCount: () => clipMap.size, getLoadedCount: () => loadedCount };
+})();
+
+DrawEngine.init();
+ClipBoard.init();
+</script>
+</body>
+</html>
