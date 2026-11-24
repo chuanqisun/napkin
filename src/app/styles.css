@@ -35,6 +35,13 @@ body {
   flex-direction: column;
   height: 100dvh;
   width: 100vw;
+}
+
+header.toolbar,
+canvas#c,
+canvas#cup-layer,
+.sel-actions,
+.reset-view-btn {
   -webkit-user-select: none;
   user-select: none;
   -webkit-touch-callout: none;
@@ -568,14 +575,14 @@ canvas#cup-layer {
   z-index: 15;
 }
 
-/* Invisible focus/IME proxy — the napkin canvas itself is the only visible text box */
+/* Invisible focus/IME proxy — always mounted so mobile browsers can focus & open soft keyboard synchronously */
 #inline-text {
   position: absolute;
-  display: none;
+  display: block;
   left: 0;
   top: 0;
-  width: 2px;
-  height: 28px;
+  width: 1px;
+  height: 1px;
   padding: 0;
   margin: 0;
   border: 0;
@@ -583,11 +590,18 @@ canvas#cup-layer {
   background: transparent;
   color: transparent;
   caret-color: transparent;
-  opacity: 0;
+  opacity: 0.001;
   pointer-events: none;
   font-size: 16px;
+  line-height: 1.2;
   -webkit-user-select: text;
   user-select: text;
+  z-index: 5;
+}
+
+#inline-text.active {
+  width: 160px;
+  height: 32px;
 }
 
 /* Touch contextual action bar for selected item (hidden on desktop mouse) */

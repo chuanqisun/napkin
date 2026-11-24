@@ -159,6 +159,7 @@ let typingTarget: TypingTarget | null = null;
 let caretVisible = true;
 let caretTimer: ReturnType<typeof setInterval> | null = null;
 let renderQueued = false;
+let refocusingInlineInput = false;
 
 const stylePreviewBufs: Partial<Record<StyleKey, number[]>> = {};
 
@@ -808,7 +809,13 @@ function stopCaretBlink(): void {
   }
 }
 
-function openTextBox(x: number, y: number, shapeRef: ShapeItem | null = null, existingTextItem: TextItem | null = null): void {
+function openTextBox(
+  x: number,
+  y: number,
+  shapeRef: ShapeItem | null = null,
+  existingTextItem: TextItem | null = null,
+  opts: { deferFocus?: boolean } = {},
+): void {
   flushPendingNow();
   stopCaretBlink();
   selectedItem = null;
@@ -857,17 +864,33 @@ function openTextBox(x: number, y: number, shapeRef: ShapeItem | null = null, ex
   const anchorX = shapeRef ? shapeRef.x + shapeRef.w / 2 : textItem!.anchorX;
   const anchorY = shapeRef ? shapeRef.y + shapeRef.h / 2 : textItem!.anchorY;
   const anchorScr = worldToScreen(anchorX, anchorY - 14);
-  inlineInput.style.left = Math.max(4, Math.min(r.width - 8, anchorScr.x)) + 'px';
-  inlineInput.style.top = Math.max(4, Math.min(r.height - 30, anchorScr.y)) + 'px';
-  inlineInput.style.display = 'block';
+  inlineInput.style.left = Math.max(4, Math.min(r.width - 40, anchorScr.x)) + 'px';
+  inlineInput.style.top = Math.max(4, Math.min(r.height - 34, anchorScr.y)) + 'px';
+  inlineInput.classList.add('active');
+  inlineInput.tabIndex = 0;
+  inlineInput.removeAttribute('aria-hidden');
   inlineInput.value = shapeRef ? shapeRef.label || '' : textItem!.text || '';
   typingTarget.lastLen = inlineInput.value.length;
-  inlineInput.focus({ preventScroll: true });
-  requestAnimationFrame(() => {
-    if (!typingTarget) return;
+
+  if (!opts.deferFocus) {
     inlineInput.focus({ preventScroll: true });
-    inlineInput.setSelectionRange(inlineInput.value.length, inlineInput.value.length);
-  });
+    try {
+      inlineInput.setSelectionRange(inlineInput.value.length, inlineInput.value.length);
+    } catch {
+      // Ignore selection errors on unsupported inputs
+    }
+    requestAnimationFrame(() => {
+      if (!typingTarget) return;
+      if (document.activeElement !== inlineInput) {
+        inlineInput.focus({ preventScroll: true });
+      }
+      try {
+        inlineInput.setSelectionRange(inlineInput.value.length, inlineInput.value.length);
+      } catch {
+        // Ignore selection errors
+      }
+    });
+  }
 
   caretVisible = true;
   caretTimer = setInterval(() => {
@@ -927,14 +950,20 @@ function onLiveTextInput(): void {
   scheduleRender();
 }
 
+function deactivateInlineInput(): void {
+  inlineInput.classList.remove('active');
+  inlineInput.tabIndex = -1;
+  inlineInput.setAttribute('aria-hidden', 'true');
+  inlineInput.blur();
+}
+
 function commitTextBox(): void {
   if (!typingTarget) return;
   const tgt = typingTarget;
   typingTarget = null;
   stopCaretBlink();
   const val = inlineInput.value.trim();
-  inlineInput.blur();
-  inlineInput.style.display = 'none';
+  deactivateInlineInput();
 
   if (!val) {
     if (tgt.shapeRef) {
@@ -960,8 +989,7 @@ function cancelTextBox(): void {
   const tgt = typingTarget;
   typingTarget = null;
   stopCaretBlink();
-  inlineInput.blur();
-  inlineInput.style.display = 'none';
+  deactivateInlineInput();
 
   if (tgt.wasNew && tgt.textItem) {
     tgt.textItem.latestReqId = handwriting.nextReqId();
@@ -1306,6 +1334,7 @@ function deleteSelectedItem(): void {
 
 // ---- Wire DOM Listeners ----
 inlineInput.addEventListener('input', onLiveTextInput);
+inlineInput.addEventListener('compositionupdate', onLiveTextInput);
 inlineInput.addEventListener('keydown', e => {
   if (e.key === 'Enter') {
     e.preventDefault();
@@ -1330,11 +1359,31 @@ inlineInput.addEventListener('select', () => {
   if (typingTarget) scheduleRender();
 });
 inlineInput.addEventListener('blur', () => {
-  if (typingTarget && performance.now() - typingTarget.openedAt < 160) {
+  if (refocusingInlineInput) return;
+  if (typingTarget && performance.now() - typingTarget.openedAt < 350) {
     inlineInput.focus({ preventScroll: true });
     return;
   }
   commitTextBox();
+});
+
+// Focus inline input synchronously inside native `click` on mobile so iOS Safari / Android Chrome summon the soft keyboard
+canvas.addEventListener('mousedown', e => {
+  if (typingTarget) e.preventDefault();
+});
+canvas.addEventListener('click', () => {
+  if (!typingTarget) return;
+  if (document.activeElement === inlineInput && lastPointerType === 'touch') {
+    refocusingInlineInput = true;
+    inlineInput.blur();
+    refocusingInlineInput = false;
+  }
+  inlineInput.focus({ preventScroll: true });
+  try {
+    inlineInput.setSelectionRange(inlineInput.value.length, inlineInput.value.length);
+  } catch {
+    // Ignore selection errors
+  }
 });
 
 canvas.addEventListener('pointerdown', e => {
@@ -1362,7 +1411,7 @@ canvas.addEventListener('pointerdown', e => {
 
   if (typingTarget) {
     if (isPointInsideTypingTarget(p.x, p.y)) {
-      e.preventDefault();
+      if (!isTouch) e.preventDefault();
       inlineInput.focus({ preventScroll: true });
       caretVisible = true;
       scheduleRender();
@@ -1578,17 +1627,24 @@ canvas.addEventListener('pointerup', e => {
   if (pendingTextTap && e.pointerId === pendingTextTap.pointerId) {
     const tap = pendingTextTap;
     pendingTextTap = null;
-    if (Math.hypot(p.x - tap.x, p.y - tap.y) <= 14) {
+    if (Math.hypot(p.x - tap.x, p.y - tap.y) <= 14 / viewScale) {
       const hit = hitItem(p.x, p.y, true);
-      if (hit && hit.kind === 'shape') openTextBox(hit.x + hit.w / 2, hit.y + hit.h / 2, hit, null);
-      else if (hit && hit.kind === 'text') openTextBox(hit.anchorX, hit.anchorY, null, hit);
-      else openTextBox(p.x, p.y, null, null);
+      if (hit && hit.kind === 'shape') openTextBox(hit.x + hit.w / 2, hit.y + hit.h / 2, hit, null, { deferFocus: true });
+      else if (hit && hit.kind === 'text') openTextBox(hit.anchorX, hit.anchorY, null, hit, { deferFocus: true });
+      else openTextBox(p.x, p.y, null, null, { deferFocus: true });
     }
     return;
   }
 
   if (activePointerId !== null && e.pointerId !== activePointerId) return;
   activePointerId = null;
+  if (canvas.hasPointerCapture(e.pointerId)) {
+    try {
+      canvas.releasePointerCapture(e.pointerId);
+    } catch {
+      // Ignore release errors
+    }
+  }
   audio.stopDraw();
 
   if (resizeState) {
@@ -1613,8 +1669,8 @@ canvas.addEventListener('pointerup', e => {
         Math.hypot(p.x - lastMoveTap.x, p.y - lastMoveTap.y) < 32
       ) {
         lastMoveTap = null;
-        if (movedIt.kind === 'shape') openTextBox(movedIt.x + movedIt.w / 2, movedIt.y + movedIt.h / 2, movedIt, null);
-        else if (movedIt.kind === 'text') openTextBox(movedIt.anchorX, movedIt.anchorY, null, movedIt);
+        if (movedIt.kind === 'shape') openTextBox(movedIt.x + movedIt.w / 2, movedIt.y + movedIt.h / 2, movedIt, null, { deferFocus: true });
+        else if (movedIt.kind === 'text') openTextBox(movedIt.anchorX, movedIt.anchorY, null, movedIt, { deferFocus: true });
         return;
       }
       lastMoveTap = { time: now, x: p.x, y: p.y, item: movedIt };
@@ -1637,9 +1693,9 @@ canvas.addEventListener('pointerup', e => {
     const dist = Math.hypot(x2 - x1, y2 - y1);
     if (dist < tapThresh) {
       const hit = hitItem(p.x, p.y, isTouch);
-      if (hit && hit.kind === 'shape') openTextBox(hit.x + hit.w / 2, hit.y + hit.h / 2, hit, null);
-      else if (hit && hit.kind === 'text') openTextBox(hit.anchorX, hit.anchorY, null, hit);
-      else openTextBox(p.x, p.y, null, null);
+      if (hit && hit.kind === 'shape') openTextBox(hit.x + hit.w / 2, hit.y + hit.h / 2, hit, null, { deferFocus: isTouch });
+      else if (hit && hit.kind === 'text') openTextBox(hit.anchorX, hit.anchorY, null, hit, { deferFocus: isTouch });
+      else openTextBox(p.x, p.y, null, null, { deferFocus: isTouch });
     } else if (ds.tool === 'arrow' && dist > 16) {
       items.push(buildArrowItem(x1, y1, x2, y2, ds.color, ds.penId, ds.seed));
       cup.onActivity('arrow');
@@ -1675,9 +1731,9 @@ canvas.addEventListener('pointerup', e => {
     const tapThreshWorld = tapThresh / viewScale;
     if (!pendingStrokes.length && arc < tapThreshWorld) {
       const hit = hitItem(p.x, p.y, isTouch);
-      if (hit && hit.kind === 'shape') openTextBox(hit.x + hit.w / 2, hit.y + hit.h / 2, hit, null);
-      else if (hit && hit.kind === 'text') openTextBox(hit.anchorX, hit.anchorY, null, hit);
-      else openTextBox(p.x, p.y, null, null);
+      if (hit && hit.kind === 'shape') openTextBox(hit.x + hit.w / 2, hit.y + hit.h / 2, hit, null, { deferFocus: isTouch });
+      else if (hit && hit.kind === 'text') openTextBox(hit.anchorX, hit.anchorY, null, hit, { deferFocus: isTouch });
+      else openTextBox(p.x, p.y, null, null, { deferFocus: isTouch });
       scheduleRender();
       return;
     }
