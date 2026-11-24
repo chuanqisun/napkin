@@ -1,0 +1,903 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>v4 Interactive Napkin — Method A vs Method B (Glyph-VAE) vs Method C (WASM SIMD Cursive)</title>
+  <style>
+    body { font-family: monospace; font-size: 13px; margin: 10px; background: #fff; color: #111; }
+    .bar { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-bottom: 6px; padding-bottom: 6px; border-bottom: 1px solid #ccc; }
+    button, input, select { font-family: monospace; font-size: 12px; }
+    button.active { background: #111; color: #fff; border: 1px solid #111; }
+    #wrap { position: relative; border: 1px solid #bbb; background: #fcfbf7; }
+    canvas#c { display: block; width: 100%; height: 500px; touch-action: none; }
+    #inline-text {
+      position: absolute; display: none; font-family: monospace; font-size: 14px;
+      border: 1px dashed #666; background: rgba(255,255,255,0.9); padding: 2px 6px; outline: none;
+    }
+    #status { color: #555; margin-left: auto; }
+    #bench-box { margin-top: 8px; border: 1px solid #ccc; padding: 8px; background: #fafafa; }
+    canvas#bench-c { display: block; width: 100%; height: 215px; border: 1px solid #ddd; background: #fcfbf7; margin-top: 6px; }
+    .tag { display: inline-block; padding: 1px 5px; border: 1px solid #999; background: #f3f3f3; font-size: 11px; }
+  </style>
+</head>
+<body>
+  <div class="bar">
+    <strong>v4 Napkin</strong>
+    <button id="t-smart" class="active" onclick="setTool('smart')">Smart Sketch</button>
+    <button id="t-free" onclick="setTool('free')">Freehand</button>
+    <button id="t-box" onclick="setTool('box')">Box</button>
+    <button id="t-oval" onclick="setTool('oval')">Oval</button>
+    <button id="t-diamond" onclick="setTool('diamond')">Diamond</button>
+    <button id="t-arrow" onclick="setTool('arrow')">Arrow</button>
+    <button id="t-text" onclick="setTool('text')">Type</button>
+    <button id="t-move" onclick="setTool('move')">Move</button>
+    <span id="status">Loading models...</span>
+  </div>
+
+  <div class="bar">
+    <label><strong>Text Engine:</strong>
+      <select id="engine-sel" onchange="onEngineChange()">
+        <option value="B" selected>Method B: Per-Char Glyph-VAE (~1ms)</option>
+        <option value="C">Method C: WASM SIMD128 Cursive (Worker)</option>
+        <option value="A">Method A: v3 OpenSketch-Ink (&lt;1ms)</option>
+      </select>
+    </label>
+    <label id="style-wrap">Style:
+      <select id="style-sel" onchange="rerenderAllText()"></select>
+    </label>
+    <button onclick="rerenderAllText()">Apply Engine to Scene</button>
+    <label>Pres: <input id="pres-sl" type="range" min="0" max="1" step="0.1" value="0.7" style="width:60px;" /></label>
+    <label>τ: <input id="tau-sl" type="range" min="0.1" max="1.4" step="0.1" value="0.7" style="width:60px;" /></label>
+    <label><input id="under-cb" type="checkbox" checked /> Under-sketch</label>
+    <select id="color-sel">
+      <option value="#1b2430">Graphite</option>
+      <option value="#1d4ed8">Blue</option>
+      <option value="#b45309">Sepia</option>
+      <option value="#b91c1c">Red</option>
+    </select>
+    <button onclick="loadDemoScene()">Demo</button>
+    <button onclick="undo()">Undo</button>
+    <button onclick="clearAll()">Clear</button>
+    <button onclick="exportSVG()">SVG</button>
+  </div>
+
+  <div id="wrap">
+    <canvas id="c"></canvas>
+    <input id="inline-text" type="text" placeholder="Type & press Enter..." />
+  </div>
+
+  <div id="bench-box">
+    <div style="display:flex; flex-wrap:wrap; gap:8px; align-items:center;">
+      <strong>A vs B vs C Live Comparison:</strong>
+      <input id="bench-input" type="text" value="Sketch on Napkin" style="width:220px;" />
+      <button onclick="runComparison()">Run Benchmark</button>
+      <span id="bench-stats" style="color:#444;"></span>
+    </div>
+    <canvas id="bench-c"></canvas>
+  </div>
+
+<script>
+// ============================================================================
+// 1. OPENSKETCH (dx, dy, pressure) RESIDUAL VAE DECODER (<0.2ms / stroke)
+// ============================================================================
+let VAE = null;
+let GLYPH_VAE = null;
+let GLYPH_CHAR_MAP = new Map();
+
+function randn() {
+  let u = 0, v = 0;
+  while (!u) u = Math.random();
+  while (!v) v = Math.random();
+  return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
+}
+function silu(x) { return x / (1 + Math.exp(-x)); }
+function sigmoid(x) { return 1 / (1 + Math.exp(-Math.max(-20, Math.min(20, x)))); }
+
+function decodeResidual(isCurved, isPres, chordLen, tau = 0.7) {
+  if (!VAE) {
+    return Array.from({ length: 16 }, (_, i) => [0, 0, 0.25 + 0.55 * Math.sin((i / 15) * Math.PI)]);
+  }
+  const nll = Math.max(-1.5, Math.min(1.5, (Math.log(Math.max(chordLen, 25)) - Math.log(140)) / 1.2));
+  let h = [];
+  for (let i = 0; i < VAE.latent_dim; i++) h.push(randn() * tau);
+  h.push(isCurved, isPres, nll);
+  for (let li = 0; li < VAE.layers.length; li++) {
+    const { w, b } = VAE.layers[li];
+    const out = new Array(b.length);
+    for (let i = 0; i < b.length; i++) {
+      let sum = b[i];
+      const row = w[i];
+      for (let j = 0; j < row.length; j++) sum += row[j] * h[j];
+      out[i] = li < VAE.layers.length - 1 ? silu(sum) : sum;
+    }
+    h = out;
+  }
+  const K = VAE.k, sc = VAE.res_scale, out = [];
+  for (let i = 0; i < K; i++) out.push([h[i * 3] * sc, h[i * 3 + 1] * sc, sigmoid(h[i * 3 + 2])]);
+  return out;
+}
+
+function designerLine(x1, y1, x2, y2, isPres, tau, ov = 3) {
+  const dx = x2 - x1, dy = y2 - y1, len = Math.hypot(dx, dy) || 1;
+  const ux = dx / len, uy = dy / len, nx = -uy, ny = ux;
+  const sx = x1 - ux * ov * Math.random(), sy = y1 - uy * ov * Math.random();
+  const ex = x2 + ux * ov * Math.random(), ey = y2 + uy * ov * Math.random();
+  const res = decodeResidual(0, isPres, len, tau);
+  const K = res.length;
+  return res.map(([ru, rv, p], i) => {
+    const t = i / (K - 1);
+    return [sx + (ex - sx) * (t + ru) + nx * rv * len, sy + (ey - sy) * (t + ru) + ny * rv * len, p];
+  });
+}
+
+function designerBezier(x0, y0, cx, cy, x2, y2, isPres, tau) {
+  const chord = Math.hypot(x2 - x0, y2 - y0) || 1;
+  const ux = (x2 - x0) / chord, uy = (y2 - y0) / chord, nx = -uy, ny = ux;
+  const res = decodeResidual(1, isPres, chord, tau);
+  const K = res.length;
+  return res.map(([ru, rv, p], i) => {
+    const t = i / (K - 1), mt = 1 - t, env = Math.sin(t * Math.PI);
+    const bx = mt * mt * x0 + 2 * mt * t * cx + t * t * x2;
+    const by = mt * mt * y0 + 2 * mt * t * cy + t * t * y2;
+    return [bx + (ux * ru + nx * rv) * chord * env, by + (uy * ru + ny * rv) * chord * env, p];
+  });
+}
+
+// ============================================================================
+// 2. METHOD A: v3 INSTANT (<1ms) OPENSKETCH-INK HANDWRITING (BASELINE)
+// ============================================================================
+const HAND_GLYPHS = {
+  a: [[[3.4,2.6],[2.3,2.0],[1.0,2.4],[0.3,3.7],[0.4,5.2],[1.4,6.0],[2.7,5.7],[3.4,4.4]], [[3.5,2.2],[3.4,5.1],[3.8,6.0]]],
+  b: [[[0.6,0.0],[0.5,5.9]], [[0.6,3.2],[1.8,2.1],[3.1,2.4],[3.7,3.8],[3.2,5.4],[1.8,6.0],[0.5,5.4]]],
+  c: [[[3.5,2.7],[2.5,2.0],[1.1,2.4],[0.3,3.8],[0.6,5.3],[1.8,6.0],[3.4,5.4]]],
+  d: [[[3.4,2.8],[2.2,2.0],[0.9,2.5],[0.3,4.0],[0.8,5.5],[2.1,6.0],[3.4,4.9]], [[3.6,0.0],[3.4,5.2],[3.8,6.0]]],
+  e: [[[0.5,4.1],[3.4,3.8],[3.3,2.6],[2.2,2.0],[0.9,2.5],[0.3,4.0],[0.8,5.5],[2.1,6.0],[3.5,5.4]]],
+  f: [[[3.2,0.5],[2.3,0.0],[1.5,0.7],[1.4,5.9]], [[0.4,2.6],[3.0,2.5]]],
+  g: [[[3.4,2.6],[2.2,2.0],[0.9,2.5],[0.3,4.0],[0.9,5.4],[2.2,5.8],[3.4,4.7]], [[3.5,2.2],[3.3,6.7],[2.5,7.9],[1.1,8.0],[0.4,7.3]]],
+  h: [[[0.6,0.0],[0.5,6.0]], [[0.6,3.4],[1.6,2.1],[2.8,2.2],[3.4,3.2],[3.4,5.9]]],
+  i: [[[1.6,2.2],[1.5,5.9]], [[1.6,0.7],[1.7,1.0]]],
+  j: [[[2.2,2.2],[2.0,6.8],[1.2,7.9],[0.3,7.6]], [[2.2,0.7],[2.3,1.0]]],
+  k: [[[0.6,0.0],[0.5,6.0]], [[3.3,2.1],[0.7,4.2]], [[1.5,3.5],[3.5,6.0]]],
+  l: [[[1.5,0.0],[1.4,5.4],[2.1,6.0]]],
+  m: [[[0.3,2.2],[0.3,6.0]], [[0.4,3.2],[1.2,2.1],[2.0,2.3],[2.2,3.4],[2.2,5.9]], [[2.2,3.2],[3.1,2.1],[3.9,2.4],[4.1,3.5],[4.1,6.0]]],
+  n: [[[0.5,2.2],[0.5,6.0]], [[0.6,3.3],[1.6,2.1],[2.9,2.3],[3.4,3.4],[3.4,6.0]]],
+  o: [[[2.0,2.0],[0.8,2.5],[0.3,4.0],[0.9,5.5],[2.1,6.0],[3.4,5.3],[3.7,3.7],[3.1,2.4],[1.9,2.0]]],
+  p: [[[0.6,2.1],[0.5,8.0]], [[0.6,3.0],[1.9,2.0],[3.2,2.5],[3.6,4.0],[3.0,5.5],[1.7,5.9],[0.6,5.2]]],
+  q: [[[3.4,2.6],[2.1,2.0],[0.8,2.6],[0.4,4.1],[1.0,5.5],[2.3,5.9],[3.4,4.9]], [[3.5,2.1],[3.4,8.0]]],
+  r: [[[0.7,2.2],[0.7,6.0]], [[0.8,3.4],[1.7,2.2],[2.8,2.1],[3.4,2.5]]],
+  s: [[[3.2,2.5],[2.2,2.0],[1.0,2.2],[0.5,2.9],[1.0,3.6],[2.6,4.1],[3.4,4.9],[2.9,5.8],[1.6,6.0],[0.5,5.5]]],
+  t: [[[1.6,0.5],[1.5,5.2],[2.1,6.0],[3.0,5.8]], [[0.5,2.3],[2.9,2.2]]],
+  u: [[[0.5,2.2],[0.6,5.0],[1.5,5.9],[2.7,5.7],[3.4,4.6]], [[3.4,2.2],[3.5,6.0]]],
+  v: [[[0.4,2.2],[1.9,6.0],[3.5,2.2]]],
+  w: [[[0.2,2.2],[1.1,6.0],[2.1,3.3],[3.1,6.0],[4.1,2.2]]],
+  x: [[[0.5,2.2],[3.4,6.0]], [[3.4,2.2],[0.5,6.0]]],
+  y: [[[0.5,2.2],[1.9,5.7]], [[3.5,2.2],[1.5,7.9],[0.5,8.0]]],
+  z: [[[0.5,2.2],[3.4,2.2],[0.5,5.9],[3.5,5.9]]],
+  A: [[[0.2,6.0],[2.0,0.0],[3.9,6.0]], [[0.8,4.0],[3.2,3.9]]],
+  B: [[[0.4,0.0],[0.4,6.0]], [[0.4,0.1],[2.7,0.1],[3.5,1.0],[3.4,2.2],[2.5,2.9],[0.4,3.0]], [[2.5,2.9],[3.7,3.8],[3.7,5.1],[2.6,6.0],[0.4,6.0]]],
+  C: [[[3.8,1.1],[2.7,0.0],[1.1,0.3],[0.3,1.8],[0.3,4.4],[1.2,5.8],[2.8,6.0],[3.8,5.0]]],
+  D: [[[0.4,0.0],[0.4,6.0]], [[0.4,0.1],[2.4,0.2],[3.7,1.5],[3.7,4.5],[2.4,5.9],[0.4,6.0]]],
+  E: [[[3.5,0.1],[0.4,0.1],[0.4,6.0],[3.6,5.9]], [[0.5,3.0],[2.8,2.9]]],
+  F: [[[3.5,0.1],[0.4,0.1],[0.4,6.0]], [[0.5,3.0],[2.7,2.9]]],
+  G: [[[3.8,1.1],[2.7,0.0],[1.1,0.3],[0.3,1.8],[0.3,4.5],[1.3,5.9],[2.9,5.9],[3.8,4.8],[3.8,3.2],[2.1,3.2]]],
+  H: [[[0.4,0.0],[0.4,6.0]], [[3.6,0.0],[3.6,6.0]], [[0.4,3.0],[3.6,2.9]]],
+  I: [[[1.8,0.0],[1.8,6.0]], [[0.8,0.1],[2.9,0.1]], [[0.8,6.0],[2.9,6.0]]],
+  J: [[[3.2,0.0],[3.1,4.6],[2.2,5.9],[0.9,5.9],[0.3,4.9]]],
+  K: [[[0.4,0.0],[0.4,6.0]], [[3.6,0.1],[0.5,3.4]], [[1.4,2.4],[3.7,6.0]]],
+  L: [[[0.5,0.0],[0.5,6.0],[3.5,5.9]]],
+  M: [[[0.3,6.0],[0.4,0.0],[2.1,3.6],[3.8,0.0],[3.9,6.0]]],
+  N: [[[0.4,6.0],[0.4,0.0],[3.6,6.0],[3.6,0.0]]],
+  O: [[[2.0,0.0],[0.7,0.8],[0.2,3.0],[0.7,5.2],[2.0,6.0],[3.4,5.2],[3.9,3.0],[3.4,0.8],[2.0,0.0]]],
+  P: [[[0.4,6.0],[0.4,0.0],[2.7,0.1],[3.6,1.1],[3.6,2.4],[2.6,3.3],[0.4,3.3]]],
+  Q: [[[2.0,0.0],[0.7,0.8],[0.2,3.0],[0.7,5.2],[2.0,6.0],[3.4,5.2],[3.9,3.0],[3.4,0.8],[2.0,0.0]], [[2.4,4.5],[4.1,6.5]]],
+  R: [[[0.4,6.0],[0.4,0.0],[2.7,0.1],[3.6,1.0],[3.5,2.4],[2.5,3.2],[0.4,3.2]], [[2.1,3.2],[3.8,6.0]]],
+  S: [[[3.6,0.9],[2.6,0.0],[1.1,0.1],[0.3,1.0],[0.5,2.2],[2.8,3.3],[3.7,4.3],[3.4,5.5],[2.1,6.0],[0.7,5.7],[0.2,5.0]]],
+  T: [[[0.2,0.1],[3.9,0.0]], [[2.0,0.1],[2.0,6.0]]],
+  U: [[[0.4,0.0],[0.4,4.5],[1.3,5.9],[2.7,5.9],[3.6,4.5],[3.6,0.0]]],
+  V: [[[0.3,0.0],[2.0,6.0],[3.8,0.0]]],
+  W: [[[0.1,0.0],[1.0,6.0],[2.1,2.5],[3.1,6.0],[4.1,0.0]]],
+  X: [[[0.4,0.0],[3.7,6.0]], [[3.7,0.0],[0.4,6.0]]],
+  Y: [[[0.3,0.0],[2.0,3.1],[3.8,0.0]], [[2.0,3.1],[2.0,6.0]]],
+  Z: [[[0.4,0.1],[3.7,0.1],[0.4,6.0],[3.8,5.9]]],
+  '0': [[[2.0,0.0],[0.7,1.0],[0.4,3.1],[0.8,5.2],[2.0,6.0],[3.3,5.1],[3.6,3.0],[3.2,1.0],[2.0,0.0]]],
+  '1': [[[1.0,1.2],[2.1,0.0],[2.1,6.0]], [[1.0,6.0],[3.2,6.0]]],
+  '2': [[[0.4,1.3],[1.3,0.1],[2.8,0.1],[3.6,1.1],[3.4,2.4],[0.4,6.0],[3.7,5.9]]],
+  '3': [[[0.5,0.9],[1.4,0.0],[2.8,0.1],[3.5,1.1],[3.2,2.3],[2.0,2.9]], [[2.0,2.9],[3.4,3.7],[3.6,5.0],[2.6,6.0],[1.1,6.0],[0.3,5.2]]],
+  '4': [[[2.9,0.1],[0.4,4.0],[3.8,3.9]], [[2.9,0.0],[2.9,6.0]]],
+  '5': [[[3.5,0.1],[0.7,0.1],[0.5,2.7],[2.5,2.4],[3.6,3.5],[3.5,5.0],[2.4,6.0],[1.0,5.9],[0.3,5.1]]],
+  '6': [[[3.3,0.7],[2.2,0.0],[1.0,0.5],[0.4,2.5],[0.4,4.8],[1.4,6.0],[2.8,5.9],[3.6,4.7],[3.3,3.3],[2.1,2.8],[0.6,3.4]]],
+  '7': [[[0.4,0.1],[3.7,0.1],[1.5,6.0]]],
+  '8': [[[2.0,2.9],[0.8,2.1],[0.7,0.9],[1.8,0.0],[3.0,0.5],[3.3,1.8],[2.0,2.9],[0.6,4.0],[0.6,5.2],[1.8,6.0],[3.2,5.4],[3.4,4.1],[2.0,2.9]]],
+  '9': [[[3.5,2.3],[2.3,3.1],[1.0,2.9],[0.4,1.8],[0.8,0.6],[2.0,0.0],[3.3,0.7],[3.6,2.6],[3.2,5.0],[2.1,6.0],[0.9,5.7]]],
+  '?': [[[0.5,1.2],[1.4,0.1],[2.8,0.1],[3.5,1.1],[3.2,2.2],[1.9,3.2],[1.9,4.4]], [[1.9,5.6],[2.0,6.0]]],
+  '!': [[[1.9,0.0],[1.9,4.3]], [[1.9,5.6],[2.0,6.0]]],
+  '.': [[[1.6,5.5],[1.9,6.0]]],
+  ',': [[[1.9,5.4],[1.3,6.9]]],
+  ':': [[[1.8,2.2],[1.9,2.6]], [[1.8,5.4],[1.9,5.8]]],
+  '-': [[[0.6,3.6],[3.3,3.5]]],
+  '+': [[[2.0,1.8],[2.0,5.2]], [[0.5,3.5],[3.5,3.5]]],
+  '/': [[[3.4,0.2],[0.6,6.0]]],
+  '(': [[[2.7,0.0],[1.3,1.6],[1.3,4.6],[2.7,6.2]]],
+  ')': [[[1.2,0.0],[2.6,1.6],[2.6,4.6],[1.2,6.2]]],
+  ' ': []
+};
+
+function chaikin(pts, iters = 1) {
+  let cur = pts;
+  for (let k = 0; k < iters; k++) {
+    if (cur.length < 3) break;
+    const next = [cur[0]];
+    for (let i = 0; i < cur.length - 1; i++) {
+      const a = cur[i], b = cur[i + 1];
+      next.push([0.75 * a[0] + 0.25 * b[0], 0.75 * a[1] + 0.25 * b[1]]);
+      next.push([0.25 * a[0] + 0.75 * b[0], 0.25 * a[1] + 0.75 * b[1]]);
+    }
+    next.push(cur[cur.length - 1]);
+    cur = next;
+  }
+  return cur;
+}
+
+function synthMethodA(text, xCenter, yCenter, fontSize = 18, tau = 0.7) {
+  const sc = fontSize / 6.0, strokes = [], slant = -0.14;
+  const widths = [...text].map(ch => ch === ' ' ? 2.4 : ('il!.,:|'.includes(ch) ? 2.2 : ('mwMW'.includes(ch) ? 4.9 : 4.1)));
+  const totalW = widths.reduce((a, b) => a + b, 0) * sc;
+  let curX = xCenter - totalW / 2;
+  const baseY = yCenter - 3.0 * sc;
+  const wordRes = decodeResidual(0, 0.85, Math.max(40, totalW), tau * 0.65);
+
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    const glyph = HAND_GLYPHS[ch] || HAND_GLYPHS[ch.toLowerCase()] || [];
+    const wIdx = Math.min(wordRes.length - 1, Math.floor((i / Math.max(1, text.length)) * wordRes.length));
+    const yWave = wordRes[wIdx][1] * fontSize * 1.4 + (Math.random() - 0.5) * tau * 0.9;
+    const chScale = sc * (1 + (Math.random() - 0.5) * 0.05 * tau);
+    const chSlant = slant + (Math.random() - 0.5) * 0.05 * tau;
+    for (const seg of glyph) {
+      const smooth = chaikin(seg, 1);
+      const res = decodeResidual(1, 0.85, 45, tau * 0.55);
+      strokes.push(smooth.map(([gx, gy], idx) => {
+        const rIdx = Math.min(res.length - 1, Math.floor((idx / Math.max(1, smooth.length - 1)) * (res.length - 1)));
+        const [ru, rv, p] = res[rIdx];
+        return [
+          curX + (gx + (6 - gy) * chSlant) * chScale + ru * fontSize * 0.35,
+          baseY + gy * chScale + yWave + rv * fontSize * 0.35,
+          Math.max(0.28, Math.min(0.96, p * 1.35 + 0.18))
+        ];
+      }));
+    }
+    curX += (widths[i] + (Math.random() - 0.5) * 0.25 * tau) * sc;
+  }
+  return strokes;
+}
+
+// ============================================================================
+// 3. METHOD B: PER-CHARACTER NON-AUTOREGRESSIVE GLYPH-VAE (~1-2ms / phrase)
+// ============================================================================
+function decodeGlyphVAE(ch, zVec) {
+  const cid = GLYPH_CHAR_MAP.get(ch) ?? GLYPH_CHAR_MAP.get(ch.toLowerCase());
+  if (cid === undefined) return null;
+  const emb = GLYPH_VAE.char_emb[cid];
+  let h = new Float32Array(emb.length + zVec.length);
+  for (let i = 0; i < emb.length; i++) h[i] = emb[i];
+  for (let i = 0; i < zVec.length; i++) h[emb.length + i] = zVec[i];
+
+  for (let li = 0; li < GLYPH_VAE.layers.length; li++) {
+    const { w, b } = GLYPH_VAE.layers[li];
+    const out = new Float32Array(b.length);
+    const isLast = li === GLYPH_VAE.layers.length - 1;
+    for (let i = 0; i < b.length; i++) {
+      let s = b[i];
+      const row = w[i];
+      for (let j = 0; j < row.length; j++) s += row[j] * h[j];
+      out[i] = isLast ? s : silu(s);
+    }
+    h = out;
+  }
+  const K = GLYPH_VAE.k_pts;
+  const segs = [];
+  let cur = [];
+  for (let k = 0; k < K; k++) {
+    const x = h[k * 4], y = h[k * 4 + 1];
+    const penDown = sigmoid(h[k * 4 + 2]) > 0.5;
+    const p = sigmoid(h[k * 4 + 3]);
+    if (!penDown || k === 0) {
+      if (cur.length >= 2) segs.push(cur);
+      cur = [[x, y, p]];
+    } else {
+      cur.push([x, y, p]);
+    }
+  }
+  if (cur.length >= 2) segs.push(cur);
+  return { segs, adv: Math.max(0.42, h[K * 4]) };
+}
+
+function synthMethodB(text, xCenter, yCenter, fontSize = 18, tau = 0.7, styleIdx = 0) {
+  if (!GLYPH_VAE) return synthMethodA(text, xCenter, yCenter, fontSize, tau);
+  const st = GLYPH_VAE.styles[styleIdx % GLYPH_VAE.styles.length];
+  const scX = fontSize * (4.0 / 6.0);
+  const scY = fontSize;
+  const decoded = [];
+  let totalW = 0;
+
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (ch === ' ') {
+      decoded.push({ space: true, advPx: scX * 0.58 });
+      totalW += scX * 0.58;
+      continue;
+    }
+    // Natural per-character latent variation around the writer style centroid!
+    const zVar = st.z.map((v, d) => v + randn() * (d < 3 ? 0.14 : 0.32) * tau);
+    const g = decodeGlyphVAE(ch, zVar);
+    if (!g) { totalW += scX * 0.45; continue; }
+    const advPx = g.adv * scX;
+    decoded.push({ segs: g.segs, advPx });
+    totalW += advPx;
+  }
+
+  let curX = xCenter - totalW / 2;
+  const baseY = yCenter - fontSize * 0.52;
+  const strokes = [];
+  for (let i = 0; i < decoded.length; i++) {
+    const item = decoded[i];
+    if (!item.space) {
+      const yWave = Math.sin(i * 0.7) * 0.6 * tau;
+      for (const seg of item.segs) {
+        strokes.push(seg.map(([nx, ny, p]) => [curX + nx * scX, baseY + ny * scY + yWave, p]));
+      }
+    }
+    curX += item.advPx;
+  }
+  return strokes;
+}
+
+// ============================================================================
+// 4. METHOD C: WASM SIMD128 INT8 CACHED-STATE CURSIVE (WEB WORKER)
+// ============================================================================
+let hwWorker = null;
+let hwReady = false;
+let hwStyleLabels = [];
+let hwReqId = 0;
+const hwPending = new Map();
+
+function initMethodCWorker() {
+  hwWorker = new Worker('hw_worker.js');
+  hwWorker.onmessage = (e) => {
+    const msg = e.data;
+    if (msg.type === 'ready') {
+      hwReady = true;
+      hwStyleLabels = msg.styleLabels;
+      if (document.getElementById('engine-sel').value === 'C') populateStyles();
+      document.getElementById('status').textContent =
+        `All engines ready — Method C WASM SIMD128 (${(msg.bytes / 1e6).toFixed(1)}MB INT8) loaded in ${msg.loadMs}ms`;
+    } else if (msg.type === 'result') {
+      const cb = hwPending.get(msg.id);
+      if (cb) { hwPending.delete(msg.id); cb.resolve(msg); }
+    } else if (msg.type === 'error') {
+      const cb = hwPending.get(msg.id);
+      if (cb) { hwPending.delete(msg.id); cb.reject(new Error(msg.error)); }
+      else document.getElementById('status').textContent = 'Method C error: ' + msg.error;
+    }
+  };
+  hwWorker.postMessage({ type: 'init' });
+}
+
+function requestMethodC(text, styleId = 9, bias = 1.0) {
+  return new Promise((resolve, reject) => {
+    const id = ++hwReqId;
+    hwPending.set(id, { resolve, reject });
+    const seed = Math.floor(Math.random() * 1e9) + 1;
+    hwWorker.postMessage({ type: 'synth', id, text, styleId, bias, seed });
+  });
+}
+
+// Convert Graves [dx, dy, eos] sequence into centered, scaled, velocity-pressure-tapered strokes
+function gravesSeqToStrokes(flatF32, n, xCenter, yCenter, targetH, maxW) {
+  const rawSegs = [];
+  let x = 0, y = 0, cur = [];
+  let minX = 1e9, maxX = -1e9, minY = 1e9, maxY = -1e9;
+  for (let i = 0; i < n; i++) {
+    const dx = flatF32[i * 3], dy = flatF32[i * 3 + 1], eos = flatF32[i * 3 + 2];
+    x += dx; y -= dy; // flip y for canvas
+    cur.push([x, y]);
+    if (x < minX) minX = x; if (x > maxX) maxX = x;
+    if (y < minY) minY = y; if (y > maxY) maxY = y;
+    if (eos > 0.5) {
+      if (cur.length >= 2) rawSegs.push(cur);
+      cur = [];
+    }
+  }
+  if (cur.length >= 2) rawSegs.push(cur);
+  if (!rawSegs.length) return [];
+
+  const bw = Math.max(1, maxX - minX);
+  const bh = Math.max(1, maxY - minY);
+  let sc = targetH / bh;
+  if (maxW && bw * sc > maxW) sc = maxW / bw;
+  const cx = (minX + maxX) * 0.5, cy = (minY + maxY) * 0.5;
+
+  return rawSegs.map(seg => seg.map(([px, py], idx) => {
+    const prev = seg[Math.max(0, idx - 1)];
+    const sp = Math.hypot(px - prev[0], py - prev[1]);
+    const t = idx / Math.max(1, seg.length - 1);
+    const taper = Math.min(1, t * 6, (1 - t) * 6);
+    const p = Math.max(0.24, Math.min(0.94, (0.88 - sp * 0.045) * (0.45 + 0.55 * taper)));
+    return [xCenter + (px - cx) * sc, yCenter + (py - cy) * sc, p];
+  }));
+}
+
+// Unified text synthesizer dispatching A / B (sync) or C (async Web Worker)
+async function synthesizeLabelForItem(text, xCenter, yCenter, fontSize, maxW, color) {
+  const engine = document.getElementById('engine-sel').value;
+  const tau = parseFloat(document.getElementById('tau-sl').value);
+  const styleIdx = parseInt(document.getElementById('style-sel').value || '0', 10);
+
+  if (engine === 'A') {
+    const t0 = performance.now();
+    const raw = synthMethodA(text, xCenter, yCenter, fontSize, tau);
+    return {
+      ms: performance.now() - t0,
+      engine: 'A',
+      strokes: raw.map(pts => ({ pts, alpha: 0.96, baseW: 1.55, color }))
+    };
+  }
+  if (engine === 'B') {
+    const t0 = performance.now();
+    const raw = synthMethodB(text, xCenter, yCenter, fontSize, tau, styleIdx);
+    return {
+      ms: performance.now() - t0,
+      engine: 'B',
+      strokes: raw.map(pts => ({ pts, alpha: 0.96, baseW: 1.6, color }))
+    };
+  }
+  // Method C (WASM SIMD128 Worker)
+  const res = await requestMethodC(text, styleIdx, 1.0);
+  const raw = gravesSeqToStrokes(res.out, res.n, xCenter, yCenter, fontSize * 1.45, maxW);
+  return {
+    ms: res.ms,
+    engine: 'C',
+    strokes: raw.map(pts => ({ pts, alpha: 0.96, baseW: 1.65, color }))
+  };
+}
+
+// ============================================================================
+// 5. INTERACTIVE NAPKIN CANVAS (SAME CORE INTERACTION AS v3)
+// ============================================================================
+const canvas = document.getElementById('c');
+const inlineInput = document.getElementById('inline-text');
+let tool = 'smart';
+let items = [];
+let activeRaw = null;
+let dragStart = null;
+let dragMoveItem = null, dragMoveOff = [0, 0];
+let typingTarget = null;
+
+function setTool(t) {
+  tool = t;
+  document.querySelectorAll('.bar button[id^="t-"]').forEach(b => b.classList.remove('active'));
+  const btn = document.getElementById('t-' + t);
+  if (btn) btn.classList.add('active');
+  canvas.style.cursor = t === 'move' ? 'grab' : (t === 'text' ? 'text' : 'crosshair');
+}
+
+function getOpts() {
+  return {
+    isPres: parseFloat(document.getElementById('pres-sl').value),
+    tau: parseFloat(document.getElementById('tau-sl').value),
+    under: document.getElementById('under-cb').checked,
+    color: document.getElementById('color-sel').value
+  };
+}
+
+function populateStyles() {
+  const eng = document.getElementById('engine-sel').value;
+  const sel = document.getElementById('style-sel');
+  const wrap = document.getElementById('style-wrap');
+  sel.innerHTML = '';
+  if (eng === 'A') {
+    wrap.style.display = 'none';
+    return;
+  }
+  wrap.style.display = '';
+  if (eng === 'B' && GLYPH_VAE) {
+    GLYPH_VAE.styles.forEach((s, i) => {
+      const opt = document.createElement('option');
+      opt.value = i; opt.textContent = s.name;
+      if (i === 1) opt.selected = true; // Notebook Script default
+      sel.appendChild(opt);
+    });
+  } else if (eng === 'C') {
+    const labels = hwStyleLabels.length ? hwStyleLabels : ['9: Designer Cursive', '1: Crisp Print', '7: Clean Upright'];
+    labels.forEach((lbl, i) => {
+      const opt = document.createElement('option');
+      opt.value = hwStyleLabels.length ? i : (i === 0 ? 9 : (i === 1 ? 1 : 7));
+      opt.textContent = lbl;
+      if (opt.value === '9') opt.selected = true;
+      sel.appendChild(opt);
+    });
+  }
+}
+
+function onEngineChange() {
+  populateStyles();
+  rerenderAllText();
+}
+
+async function applyLabelToShape(item) {
+  if (!item.label) { item.textStrokes = []; return 0; }
+  const maxW = item.shapeType === 'diamond' ? item.w * 0.62 : item.w * 0.84;
+  const estSize = Math.min(20, Math.max(13, maxW / Math.max(3, item.label.length * 0.62)));
+  const r = await synthesizeLabelForItem(item.label, item.x + item.w / 2, item.y + item.h / 2, estSize, maxW, item.color);
+  item.textStrokes = r.strokes;
+  return r.ms;
+}
+
+async function rerenderAllText() {
+  const eng = document.getElementById('engine-sel').value;
+  document.getElementById('status').textContent = `Synthesizing scene text with Method ${eng}...`;
+  let totalMs = 0, count = 0;
+  for (const it of items) {
+    if (it.kind === 'shape' && it.label) {
+      totalMs += await applyLabelToShape(it);
+      count++;
+      render();
+    } else if (it.kind === 'text' && it.text) {
+      const r = await synthesizeLabelForItem(it.text, it.cx, it.cy, 20, 420, it.color);
+      it.strokes = r.strokes;
+      totalMs += r.ms;
+      count++;
+      render();
+    }
+  }
+  document.getElementById('status').textContent =
+    `Method ${eng}: rendered ${count} label(s) in ${totalMs.toFixed(1)} ms (${count ? (totalMs / count).toFixed(1) : 0} ms/label)`;
+}
+
+function buildShapeItem(shapeType, x, y, w, h, label = '', color = null) {
+  const o = getOpts();
+  const col = color || o.color;
+  const strokes = [];
+  const addPass = (isP, tau, ov, alpha, baseW) => {
+    if (shapeType === 'box') {
+      strokes.push({ pts: designerLine(x, y, x + w, y, isP, tau, ov), alpha, baseW, color: col });
+      strokes.push({ pts: designerLine(x + w, y, x + w, y + h, isP, tau, ov), alpha, baseW, color: col });
+      strokes.push({ pts: designerLine(x + w, y + h, x, y + h, isP, tau, ov), alpha, baseW, color: col });
+      strokes.push({ pts: designerLine(x, y + h, x, y, isP, tau, ov), alpha, baseW, color: col });
+    } else if (shapeType === 'diamond') {
+      const cx = x + w / 2, cy = y + h / 2;
+      strokes.push({ pts: designerLine(cx, y, x + w, cy, isP, tau, ov), alpha, baseW, color: col });
+      strokes.push({ pts: designerLine(x + w, cy, cx, y + h, isP, tau, ov), alpha, baseW, color: col });
+      strokes.push({ pts: designerLine(cx, y + h, x, cy, isP, tau, ov), alpha, baseW, color: col });
+      strokes.push({ pts: designerLine(x, cy, cx, y, isP, tau, ov), alpha, baseW, color: col });
+    } else {
+      const cx = x + w / 2, cy = y + h / 2, rx = w / 2, ry = h / 2;
+      strokes.push({ pts: designerBezier(cx - rx, cy, cx - rx, cy - ry, cx, cy - ry, isP, tau), alpha, baseW, color: col });
+      strokes.push({ pts: designerBezier(cx, cy - ry, cx + rx, cy - ry, cx + rx, cy, isP, tau), alpha, baseW, color: col });
+      strokes.push({ pts: designerBezier(cx + rx, cy, cx + rx, cy + ry, cx, cy + ry, isP, tau), alpha, baseW, color: col });
+      strokes.push({ pts: designerBezier(cx, cy + ry, cx - rx, cy + ry, cx - rx, cy, isP, tau), alpha, baseW, color: col });
+    }
+  };
+  if (o.under) addPass(0.0, o.tau * 1.15, 7, 0.24, 1.35);
+  addPass(o.isPres, o.tau, 3.5 * (1.2 - o.isPres), 1.0, 2.2);
+  return { kind: 'shape', shapeType, x, y, w, h, label, color: col, strokes, textStrokes: [] };
+}
+
+function buildArrowItem(x1, y1, x2, y2, color = null) {
+  const o = getOpts(), col = color || o.color;
+  const ang = Math.atan2(y2 - y1, x2 - x1), hl = 12;
+  const strokes = [
+    { pts: designerLine(x1, y1, x2, y2, o.isPres, o.tau, 1.5), alpha: 0.96, baseW: 2.0, color: col },
+    { pts: designerLine(x2 - hl * Math.cos(ang - 0.45), y2 - hl * Math.sin(ang - 0.45), x2, y2, o.isPres, o.tau, 1.0), alpha: 0.96, baseW: 1.85, color: col },
+    { pts: designerLine(x2 - hl * Math.cos(ang + 0.45), y2 - hl * Math.sin(ang + 0.45), x2, y2, o.isPres, o.tau, 1.0), alpha: 0.96, baseW: 1.85, color: col }
+  ];
+  return { kind: 'arrow', x: Math.min(x1, x2), y: Math.min(y1, y2), w: Math.abs(x2 - x1) + 12, h: Math.abs(y2 - y1) + 12, x1, y1, x2, y2, color: col, strokes };
+}
+
+function buildFreehandItem(rawPts, color = null) {
+  const col = color || getOpts().color;
+  const simp = [rawPts[0]];
+  for (let i = 1; i < rawPts.length; i++) {
+    const prev = simp[simp.length - 1];
+    if (Math.hypot(rawPts[i].x - prev.x, rawPts[i].y - prev.y) >= 3.5) simp.push(rawPts[i]);
+  }
+  if (simp.length < 2) simp.push(rawPts[rawPts.length - 1]);
+  const smoothed = chaikin(simp.map(p => [p.x, p.y]), 1);
+  const pts = smoothed.map(([x, y], i) => {
+    const prev = smoothed[Math.max(0, i - 1)];
+    const sp = Math.hypot(x - prev[0], y - prev[1]);
+    const t = i / Math.max(1, smoothed.length - 1);
+    const endTaper = Math.min(1, t * 7, (1 - t) * 7);
+    const p = Math.max(0.18, Math.min(0.92, (0.85 - sp * 0.03) * (0.35 + 0.65 * endTaper)));
+    return [x, y, p];
+  });
+  const xs = pts.map(p => p[0]), ys = pts.map(p => p[1]);
+  return {
+    kind: 'free', x: Math.min(...xs), y: Math.min(...ys),
+    w: Math.max(10, Math.max(...xs) - Math.min(...xs)),
+    h: Math.max(10, Math.max(...ys) - Math.min(...ys)),
+    color: col, strokes: [{ pts, alpha: 0.95, baseW: 2.1, color: col }]
+  };
+}
+
+function recognizeAndBeautify(rawPts) {
+  const xs = rawPts.map(p => p.x), ys = rawPts.map(p => p.y);
+  const minX = Math.min(...xs), maxX = Math.max(...xs), minY = Math.min(...ys), maxY = Math.max(...ys);
+  const w = maxX - minX, h = maxY - minY, diag = Math.hypot(w, h);
+  if (diag < 26) return buildFreehandItem(rawPts);
+  const start = rawPts[0], end = rawPts[rawPts.length - 1];
+  const endDist = Math.hypot(end.x - start.x, end.y - start.y);
+  let arc = 0;
+  for (let i = 1; i < rawPts.length; i++) arc += Math.hypot(rawPts[i].x - rawPts[i - 1].x, rawPts[i].y - rawPts[i - 1].y);
+
+  if (endDist / Math.max(arc, 1) > 0.72 && endDist > 35) return buildArrowItem(start.x, start.y, end.x, end.y);
+  if (endDist < diag * 0.42 && w > 28 && h > 22) {
+    const cx = (minX + maxX) / 2, cy = (minY + maxY) / 2, rx = w / 2, ry = h / 2;
+    let eErr = 0, dErr = 0, bErr = 0;
+    for (const p of rawPts) {
+      const nx = Math.abs(p.x - cx) / rx, ny = Math.abs(p.y - cy) / ry;
+      eErr += Math.abs(nx * nx + ny * ny - 1);
+      dErr += Math.abs(nx + ny - 1);
+      bErr += Math.abs(Math.max(nx, ny) - 1);
+    }
+    if (dErr < eErr && dErr < bErr) return buildShapeItem('diamond', minX, minY, w, h);
+    if (bErr < eErr * 0.92) return buildShapeItem('box', minX, minY, w, h);
+    return buildShapeItem('oval', minX, minY, w, h);
+  }
+  return buildFreehandItem(rawPts);
+}
+
+function drawPStroke(ctx, pts, baseW, color, alphaScale) {
+  if (!pts || pts.length < 2) return;
+  ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.strokeStyle = color;
+  for (let i = 1; i < pts.length; i++) {
+    const [x0, y0, p0] = pts[i - 1], [x1, y1, p1] = pts[i];
+    const p = (p0 + p1) * 0.5;
+    ctx.lineWidth = Math.max(0.45, baseW * (0.28 + 1.15 * p));
+    ctx.globalAlpha = Math.min(1, (0.42 + 0.58 * p) * alphaScale);
+    ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke();
+  }
+  ctx.globalAlpha = 1;
+}
+
+function render() {
+  const r = canvas.getBoundingClientRect();
+  const dpr = window.devicePixelRatio || 1;
+  canvas.width = r.width * dpr; canvas.height = r.height * dpr;
+  const ctx = canvas.getContext('2d');
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, r.width, r.height);
+
+  for (const it of items) {
+    for (const s of it.strokes) drawPStroke(ctx, s.pts, s.baseW, s.color, s.alpha);
+    if (it.textStrokes) for (const s of it.textStrokes) drawPStroke(ctx, s.pts, s.baseW, s.color, s.alpha);
+  }
+  if (activeRaw && activeRaw.length > 1) {
+    ctx.strokeStyle = getOpts().color; ctx.lineWidth = 2; ctx.lineCap = 'round'; ctx.globalAlpha = 0.6;
+    ctx.beginPath(); ctx.moveTo(activeRaw[0].x, activeRaw[0].y);
+    for (let i = 1; i < activeRaw.length; i++) ctx.lineTo(activeRaw[i].x, activeRaw[i].y);
+    ctx.stroke(); ctx.globalAlpha = 1;
+  }
+  if (dragStart && dragStart.cur) {
+    const x = Math.min(dragStart.x, dragStart.cur.x), y = Math.min(dragStart.y, dragStart.cur.y);
+    const w = Math.abs(dragStart.cur.x - dragStart.x), h = Math.abs(dragStart.cur.y - dragStart.y);
+    ctx.save(); ctx.strokeStyle = '#666'; ctx.setLineDash([4, 4]); ctx.lineWidth = 1.2;
+    if (tool === 'arrow') { ctx.beginPath(); ctx.moveTo(dragStart.x, dragStart.y); ctx.lineTo(dragStart.cur.x, dragStart.cur.y); ctx.stroke(); }
+    else ctx.strokeRect(x, y, w, h);
+    ctx.restore();
+  }
+}
+
+function openTextBox(x, y, shapeRef = null) {
+  typingTarget = { x, y, shapeRef };
+  inlineInput.style.left = Math.max(8, x - 75) + 'px';
+  inlineInput.style.top = Math.max(8, y - 14) + 'px';
+  inlineInput.style.display = 'block';
+  inlineInput.value = shapeRef ? (shapeRef.label || '') : '';
+  inlineInput.focus();
+}
+
+async function commitTextBox() {
+  if (!typingTarget) return;
+  const tgt = typingTarget;
+  typingTarget = null;
+  const val = inlineInput.value.trim();
+  inlineInput.style.display = 'none';
+  if (!val) {
+    if (tgt.shapeRef) { tgt.shapeRef.label = ''; tgt.shapeRef.textStrokes = []; render(); }
+    return;
+  }
+  const eng = document.getElementById('engine-sel').value;
+  document.getElementById('status').textContent = `Synthesizing "${val}" with Method ${eng}...`;
+  if (tgt.shapeRef) {
+    tgt.shapeRef.label = val;
+    const ms = await applyLabelToShape(tgt.shapeRef);
+    document.getElementById('status').textContent = `Method ${eng}: "${val}" in ${ms.toFixed(1)} ms`;
+  } else {
+    const col = getOpts().color;
+    const r = await synthesizeLabelForItem(val, tgt.x, tgt.y, 20, 460, col);
+    const estW = Math.max(40, val.length * 13);
+    items.push({ kind: 'text', text: val, x: tgt.x - estW / 2, y: tgt.y - 14, w: estW, h: 28, cx: tgt.x, cy: tgt.y, color: col, strokes: r.strokes });
+    document.getElementById('status').textContent = `Method ${eng}: "${val}" in ${r.ms.toFixed(1)} ms`;
+  }
+  render();
+}
+
+inlineInput.addEventListener('keydown', e => {
+  if (e.key === 'Enter') commitTextBox();
+  if (e.key === 'Escape') { inlineInput.style.display = 'none'; typingTarget = null; }
+});
+inlineInput.addEventListener('blur', commitTextBox);
+
+function getPos(e) {
+  const r = canvas.getBoundingClientRect();
+  return { x: e.clientX - r.left, y: e.clientY - r.top };
+}
+function hitItem(x, y) {
+  for (let i = items.length - 1; i >= 0; i--) {
+    const it = items[i];
+    if (x >= it.x - 6 && x <= it.x + it.w + 6 && y >= it.y - 6 && y <= it.y + it.h + 6) return it;
+  }
+  return null;
+}
+
+canvas.addEventListener('dblclick', e => {
+  const p = getPos(e), hit = hitItem(p.x, p.y);
+  if (hit && hit.kind === 'shape') openTextBox(hit.x + hit.w / 2, hit.y + hit.h / 2, hit);
+  else openTextBox(p.x, p.y, null);
+});
+canvas.addEventListener('pointerdown', e => {
+  if (typingTarget) commitTextBox();
+  const p = getPos(e);
+  canvas.setPointerCapture(e.pointerId);
+  if (tool === 'text') {
+    const hit = hitItem(p.x, p.y);
+    openTextBox(hit && hit.kind === 'shape' ? hit.x + hit.w / 2 : p.x, hit && hit.kind === 'shape' ? hit.y + hit.h / 2 : p.y, hit && hit.kind === 'shape' ? hit : null);
+    return;
+  }
+  if (tool === 'move') {
+    const hit = hitItem(p.x, p.y);
+    if (hit) { dragMoveItem = hit; dragMoveOff = [p.x, p.y]; canvas.style.cursor = 'grabbing'; }
+    return;
+  }
+  if (tool === 'smart' || tool === 'free') { activeRaw = [p]; return; }
+  dragStart = { x: p.x, y: p.y, cur: p };
+});
+canvas.addEventListener('pointermove', e => {
+  const p = getPos(e);
+  if (dragMoveItem) {
+    const dx = p.x - dragMoveOff[0], dy = p.y - dragMoveOff[1];
+    dragMoveOff = [p.x, p.y];
+    dragMoveItem.x += dx; dragMoveItem.y += dy;
+    if (dragMoveItem.cx !== undefined) { dragMoveItem.cx += dx; dragMoveItem.cy += dy; }
+    const shift = s => { for (const pt of s.pts) { pt[0] += dx; pt[1] += dy; } };
+    dragMoveItem.strokes.forEach(shift);
+    if (dragMoveItem.textStrokes) dragMoveItem.textStrokes.forEach(shift);
+    render();
+    return;
+  }
+  if (activeRaw) { activeRaw.push(p); render(); return; }
+  if (dragStart) { dragStart.cur = p; render(); }
+});
+canvas.addEventListener('pointerup', () => {
+  if (dragMoveItem) { dragMoveItem = null; canvas.style.cursor = 'grab'; return; }
+  if (activeRaw) {
+    const pts = activeRaw; activeRaw = null;
+    if (pts.length >= 3) items.push(tool === 'smart' ? recognizeAndBeautify(pts) : buildFreehandItem(pts));
+    render();
+    return;
+  }
+  if (dragStart && dragStart.cur) {
+    const x1 = dragStart.x, y1 = dragStart.y, x2 = dragStart.cur.x, y2 = dragStart.cur.y;
+    dragStart = null;
+    if (tool === 'arrow' && Math.hypot(x2 - x1, y2 - y1) > 15) items.push(buildArrowItem(x1, y1, x2, y2));
+    else if (Math.abs(x2 - x1) > 20 && Math.abs(y2 - y1) > 16) items.push(buildShapeItem(tool, Math.min(x1, x2), Math.min(y1, y2), Math.abs(x2 - x1), Math.abs(y2 - y1)));
+    render();
+  }
+});
+
+function undo() { items.pop(); render(); }
+function clearAll() { items = []; render(); }
+
+async function loadDemoScene() {
+  items = [
+    buildShapeItem('oval', 90, 30, 180, 56, 'Raw Idea'),
+    buildArrowItem(180, 90, 180, 136),
+    buildShapeItem('box', 68, 142, 224, 60, 'Sketch on Napkin'),
+    buildArrowItem(180, 206, 180, 252),
+    buildShapeItem('diamond', 94, 258, 174, 74, 'Clear?'),
+    buildArrowItem(272, 295, 360, 295),
+    buildShapeItem('box', 368, 266, 190, 58, 'Refine Ink'),
+    buildArrowItem(180, 336, 180, 386),
+    buildShapeItem('box', 70, 392, 220, 56, 'Export SVG')
+  ];
+  render();
+  await rerenderAllText();
+}
+
+function exportSVG() {
+  const lines = [];
+  const emit = s => {
+    for (let i = 1; i < s.pts.length; i++) {
+      const [x0, y0, p0] = s.pts[i - 1], [x1, y1, p1] = s.pts[i];
+      const p = (p0 + p1) * 0.5;
+      lines.push(`<line x1="${x0.toFixed(1)}" y1="${y0.toFixed(1)}" x2="${x1.toFixed(1)}" y2="${y1.toFixed(1)}" stroke="${s.color}" stroke-width="${(s.baseW * (0.28 + 1.15 * p)).toFixed(2)}" stroke-opacity="${((0.42 + 0.58 * p) * s.alpha).toFixed(2)}" stroke-linecap="round"/>`);
+    }
+  };
+  for (const it of items) { it.strokes.forEach(emit); if (it.textStrokes) it.textStrokes.forEach(emit); }
+  const r = canvas.getBoundingClientRect();
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${r.width} ${r.height}">${lines.join('')}</svg>`], { type: 'image/svg+xml' }));
+  a.download = 'v4-napkin.svg'; a.click();
+}
+
+// ============================================================================
+// 6. SIDE-BY-SIDE METHOD A vs B vs C VISUAL & LATENCY BENCHMARK STRIP
+// ============================================================================
+async function runComparison() {
+  const phrase = (document.getElementById('bench-input').value || 'Sketch on Napkin').trim();
+  const bc = document.getElementById('bench-c');
+  const r = bc.getBoundingClientRect();
+  const dpr = window.devicePixelRatio || 1;
+  bc.width = r.width * dpr; bc.height = r.height * dpr;
+  const ctx = bc.getContext('2d');
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, r.width, r.height);
+  ctx.font = '12px monospace';
+
+  const tau = parseFloat(document.getElementById('tau-sl').value);
+  const cx = r.width * 0.58;
+
+  // Row 1: Method A
+  const tA0 = performance.now();
+  const stA = synthMethodA(phrase, cx, 38, 22, tau);
+  const msA = performance.now() - tA0;
+  ctx.fillStyle = '#444';
+  ctx.fillText(`Method A (v3 OpenSketch-Ink):  ${msA.toFixed(2)} ms`, 12, 42);
+  stA.forEach(pts => drawPStroke(ctx, pts, 1.6, '#1b2430', 0.96));
+
+  // Row 2: Method B
+  const tB0 = performance.now();
+  const stB = synthMethodB(phrase, cx, 108, 22, tau, 1);
+  const msB = performance.now() - tB0;
+  ctx.fillStyle = '#1d4ed8';
+  ctx.fillText(`Method B (Glyph-VAE, 47k):     ${msB.toFixed(2)} ms`, 12, 112);
+  stB.forEach(pts => drawPStroke(ctx, pts, 1.65, '#1d4ed8', 0.96));
+
+  // Row 3: Method C (WASM SIMD128)
+  ctx.fillStyle = '#b45309';
+  ctx.fillText('Method C (WASM SIMD128 INT8):  running in worker...', 12, 178);
+  try {
+    const resC = await requestMethodC(phrase, 9, 1.0);
+    const stC = gravesSeqToStrokes(resC.out, resC.n, cx, 174, 34, r.width * 0.56);
+    ctx.clearRect(0, 145, r.width, 70);
+    ctx.fillStyle = '#b45309';
+    ctx.fillText(`Method C (WASM SIMD128 INT8):  ${resC.ms.toFixed(1)} ms (${resC.n} steps)`, 12, 178);
+    stC.forEach(pts => drawPStroke(ctx, pts, 1.75, '#b45309', 0.96));
+    document.getElementById('bench-stats').textContent =
+      `A: ${msA.toFixed(2)}ms | B: ${msB.toFixed(2)}ms | C (WASM SIMD): ${resC.ms.toFixed(1)}ms (vs v2 JS ~3000-14000ms)`;
+  } catch (err) {
+    ctx.clearRect(0, 145, r.width, 70);
+    ctx.fillStyle = '#b91c1c';
+    ctx.fillText('Method C failed: ' + err.message, 12, 178);
+  }
+}
+
+window.addEventListener('resize', render);
+
+// Boot all 3 models concurrently
+initMethodCWorker();
+Promise.all([
+  fetch('../exports/opensketch_residual_vae.json').then(r => r.json()),
+  fetch('../exports/glyph_vae.json').then(r => r.json())
+]).then(async ([vae, gvae]) => {
+  VAE = vae;
+  GLYPH_VAE = gvae;
+  GLYPH_CHAR_MAP = new Map(gvae.chars.map((c, i) => [c, i]));
+  populateStyles();
+  await loadDemoScene();
+  runComparison();
+});
+</script>
+</body>
+</html>

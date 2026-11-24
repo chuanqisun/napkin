@@ -1,0 +1,154 @@
+{
+  "total_bytes": 4003340,
+  "tail_chars": 4,
+  "tail_texts": [
+    "nce ",
+    "mes ",
+    "ed. ",
+    "ish ",
+    "way ",
+    "A.D ",
+    "aid ",
+    " of ",
+    "ge, ",
+    "im, ",
+    "ing ",
+    "ind ",
+    " It "
+  ],
+  "style_labels": [
+    "0: Neat Italic",
+    "1: Crisp Print",
+    "2: Flowing Cursive",
+    "3: Compact Notes",
+    "4: Relaxed Script",
+    "5: Classic Serif-Hand",
+    "6: Quick Jotting",
+    "7: Clean Upright",
+    "8: Tall Cursive",
+    "9: Designer Cursive",
+    "10: Bold Sketch",
+    "11: Fine Journal",
+    "12: Light Slant"
+  ],
+  "tensors": {
+    "lstm1_Wq": {
+      "byte_offset": 0,
+      "bytes": 768000,
+      "shape": [
+        1600,
+        480
+      ],
+      "dtype": "int8"
+    },
+    "lstm1_Wsc": {
+      "byte_offset": 768000,
+      "bytes": 6400,
+      "shape": [
+        1600
+      ],
+      "dtype": "float32"
+    },
+    "lstm1_b": {
+      "byte_offset": 774400,
+      "bytes": 6400,
+      "shape": [
+        1600
+      ],
+      "dtype": "float32"
+    },
+    "lstm2_Wq": {
+      "byte_offset": 780800,
+      "bytes": 1408000,
+      "shape": [
+        1600,
+        880
+      ],
+      "dtype": "int8"
+    },
+    "lstm2_Wsc": {
+      "byte_offset": 2188800,
+      "bytes": 6400,
+      "shape": [
+        1600
+      ],
+      "dtype": "float32"
+    },
+    "lstm2_b": {
+      "byte_offset": 2195200,
+      "bytes": 6400,
+      "shape": [
+        1600
+      ],
+      "dtype": "float32"
+    },
+    "lstm3_Wq": {
+      "byte_offset": 2201600,
+      "bytes": 1408000,
+      "shape": [
+        1600,
+        880
+      ],
+      "dtype": "int8"
+    },
+    "lstm3_Wsc": {
+      "byte_offset": 3609600,
+      "bytes": 6400,
+      "shape": [
+        1600
+      ],
+      "dtype": "float32"
+    },
+    "lstm3_b": {
+      "byte_offset": 3616000,
+      "bytes": 6400,
+      "shape": [
+        1600
+      ],
+      "dtype": "float32"
+    },
+    "attn_WT": {
+      "byte_offset": 3622400,
+      "bytes": 57600,
+      "shape": [
+        30,
+        480
+      ],
+      "dtype": "float32"
+    },
+    "attn_b": {
+      "byte_offset": 3680000,
+      "bytes": 120,
+      "shape": [
+        30
+      ],
+      "dtype": "float32"
+    },
+    "gmm_WT": {
+      "byte_offset": 3680128,
+      "bytes": 193600,
+      "shape": [
+        121,
+        400
+      ],
+      "dtype": "float32"
+    },
+    "gmm_b": {
+      "byte_offset": 3873728,
+      "bytes": 484,
+      "shape": [
+        121
+      ],
+      "dtype": "float32"
+    },
+    "primed_states": {
+      "byte_offset": 3874224,
+      "bytes": 129116,
+      "shape": [
+        13,
+        2483
+      ],
+      "dtype": "float32"
+    }
+  }
+}
