@@ -1,6 +1,5 @@
 export type ToolId =
   | 'sketch'
-  | 'handwrite'
   | 'text'
   | 'box'
   | 'oval'

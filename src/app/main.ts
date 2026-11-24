@@ -7,7 +7,6 @@ import { createNapkinCup } from './cup';
 import { createHandwritingEngine, layoutWordsToStrokes } from './handwriting';
 import {
   buildArrowItem,
-  buildHandwriteObject,
   buildShapeItem,
   buildShapeStrokes,
   buildStrokeOutline,
@@ -39,22 +38,26 @@ import {
   type WordCacheEntry,
 } from './types';
 
-// Conditional polyfills / offline fallback for Popover & Invoker Commands
+// Conditional polyfills per Chrome Modern Web Guidance (only loaded when native support is missing)
 if (!Object.hasOwn(HTMLElement.prototype, 'popover')) {
   const popoverPolyfillUrl = 'https://unpkg.com/@oddbird/popover-polyfill@latest/dist/popover.min.js';
   void import(/* @vite-ignore */ popoverPolyfillUrl);
 }
 if (!('commandForElement' in HTMLButtonElement.prototype)) {
-  document.addEventListener('click', e => {
-    const btn = (e.target as HTMLElement | null)?.closest<HTMLButtonElement>('button[commandfor][command]');
-    if (!btn) return;
-    const targetId = btn.getAttribute('commandfor');
-    const cmd = btn.getAttribute('command');
-    const el = targetId ? document.getElementById(targetId) : null;
-    if (!el || typeof el.togglePopover !== 'function') return;
-    if (cmd === 'toggle-popover') el.togglePopover();
-    else if (cmd === 'show-popover') el.showPopover();
-    else if (cmd === 'hide-popover') el.hidePopover();
+  const invokersPolyfillUrl = 'https://esm.run/invokers-polyfill';
+  void import(/* @vite-ignore */ invokersPolyfillUrl).catch(() => {
+    // Offline fallback when CDN polyfill cannot be reached
+    document.addEventListener('click', e => {
+      const btn = (e.target as HTMLElement | null)?.closest<HTMLButtonElement>('button[commandfor][command]');
+      if (!btn) return;
+      const targetId = btn.getAttribute('commandfor');
+      const cmd = btn.getAttribute('command');
+      const el = targetId ? document.getElementById(targetId) : null;
+      if (!el || typeof el.togglePopover !== 'function') return;
+      if (cmd === 'toggle-popover') el.togglePopover();
+      else if (cmd === 'show-popover') el.showPopover();
+      else if (cmd === 'hide-popover') el.hidePopover();
+    });
   });
 }
 
@@ -67,6 +70,7 @@ const inlineInput = document.getElementById('inline-text') as HTMLInputElement;
 const selActionsEl = document.getElementById('sel-actions') as HTMLElement | null;
 const selEditBtn = document.getElementById('sel-edit-btn') as HTMLButtonElement | null;
 const selDeleteBtn = document.getElementById('sel-delete-btn') as HTMLButtonElement | null;
+const resetViewBtn = document.getElementById('reset-view-btn') as HTMLButtonElement | null;
 const crumpleOverlay = document.getElementById('crumple-overlay') as HTMLCanvasElement;
 
 let currentColor = '#1b3d8f';
@@ -77,7 +81,6 @@ let tool: ToolId = 'sketch';
 let items: NapkinItem[] = [];
 let activeRaw: Point2D[] | null = null;
 let pendingStrokes: Point2D[][] = [];
-let pendingMode: ToolId | null = null;
 let pendingTimer: ReturnType<typeof setTimeout> | null = null;
 
 interface DragShapeState {
@@ -120,6 +123,19 @@ let lastPointerType = 'mouse';
 let activePointerId: number | null = null;
 let pendingTextTap: { pointerId: number; x: number; y: number } | null = null;
 let lastMoveTap: { time: number; x: number; y: number; item: NapkinItem } | null = null;
+
+// Mobile two-finger pan & pinch-to-zoom camera (identity on desktop: scale=1, x=0, y=0)
+let viewX = 0;
+let viewY = 0;
+let viewScale = 1;
+const touchPoints = new Map<number, Point2D>();
+let pinchState: {
+  startMid: Point2D;
+  startDist: number;
+  startViewX: number;
+  startViewY: number;
+  startScale: number;
+} | null = null;
 
 interface TypingSnapshot {
   text: string;
@@ -165,13 +181,15 @@ const cup = createNapkinCup({
   audio,
   getTool: () => tool,
   getItemCount: () => items.length,
-  isCanvasBusy: () => !!(activeRaw || dragShape || dragItem || resizeState),
+  isCanvasBusy: () => !!(activeRaw || dragShape || dragItem || resizeState || pinchState),
   isTyping: () => !!typingTarget,
   isPointInsideTypingTarget,
   commitTextBox,
   restoreFocus,
   render: () => render(),
   scheduleRender,
+  getViewTransform: () => ({ x: viewX, y: viewY, scale: viewScale }),
+  isMultiTouch: () => touchPoints.size >= 2 || !!pinchState,
 });
 
 function restoreFocus(sel: string): void {
@@ -310,18 +328,10 @@ function flushPendingNow(): void {
   }
   if (!pendingStrokes.length) return;
   const batch = pendingStrokes;
-  const mode = pendingMode ?? tool;
   pendingStrokes = [];
-  pendingMode = null;
-  if (mode === 'handwrite') {
-    const created = buildHandwriteObject(batch, currentColor, currentStyleKey, currentPenId);
-    items.push(created);
-    cup.onActivity('text');
-  } else {
-    const created = recognizeMultiStroke(batch, currentColor, currentPenId, currentStyleKey);
-    items.push(created);
-    cup.onActivity(created.kind || 'sketch');
-  }
+  const created = recognizeMultiStroke(batch, currentColor, currentPenId, currentStyleKey);
+  items.push(created);
+  cup.onActivity(created.kind || 'sketch');
   scheduleRender();
 }
 
@@ -346,9 +356,48 @@ function getResizeHandles(it: NapkinItem): Array<{ id: HandleId; x: number; y: n
   ];
 }
 
+function screenToWorld(sx: number, sy: number): Point2D {
+  return { x: (sx - viewX) / viewScale, y: (sy - viewY) / viewScale };
+}
+
+function worldToScreen(wx: number, wy: number): Point2D {
+  return { x: wx * viewScale + viewX, y: wy * viewScale + viewY };
+}
+
+function clampView(nx: number, ny: number, ns: number, w: number, h: number): void {
+  const s = Math.max(0.55, Math.min(2.5, ns));
+  const scaledW = w * s;
+  const scaledH = h * s;
+  const minX = Math.min(w * 0.65 - scaledW, w - scaledW - 24);
+  const maxX = Math.max(w * 0.35, 24);
+  const minY = Math.min(h * 0.65 - scaledH, h - scaledH - 24);
+  const maxY = Math.max(h * 0.35, 24);
+  viewScale = s;
+  viewX = Math.max(minX, Math.min(maxX, nx));
+  viewY = Math.max(minY, Math.min(maxY, ny));
+  updateResetViewBtn();
+}
+
+function updateResetViewBtn(): void {
+  if (!resetViewBtn) return;
+  const isDefault = Math.abs(viewScale - 1) <= 0.02 && Math.abs(viewX) <= 4 && Math.abs(viewY) <= 4;
+  resetViewBtn.hidden = isDefault;
+  if (!isDefault) {
+    resetViewBtn.textContent = Math.abs(viewScale - 1) > 0.02 ? `${Math.round(viewScale * 100)}%` : 'Reset';
+  }
+}
+
+function resetView(): void {
+  viewX = 0;
+  viewY = 0;
+  viewScale = 1;
+  updateResetViewBtn();
+  scheduleRender();
+}
+
 function hitResizeHandle(it: NapkinItem | null, px: number, py: number, isTouch = false) {
   if (!it) return null;
-  const tol = isTouch ? 22 : 7;
+  const tol = (isTouch ? 22 : 7) / viewScale;
   for (const h of getResizeHandles(it)) {
     if (Math.abs(px - h.x) <= tol && Math.abs(py - h.y) <= tol) return h;
   }
@@ -361,6 +410,55 @@ function syncToolbarBottom(): void {
   document.documentElement.style.setProperty('--toolbar-bottom', `${bottom}px`);
 }
 
+function setupFlexiblePopoverFallbacks(): void {
+  if (typeof CSS !== 'undefined' && CSS.supports('anchor-name', '--a') && CSS.supports('position-area', 'block-end')) {
+    return;
+  }
+  const pairs: Array<[string, string]> = [
+    ['pen-menu', 'pen-btn'],
+    ['drink-menu', 'drink-menu-btn'],
+    ['save-menu', 'save-btn'],
+  ];
+  const positionPopover = (pop: HTMLElement, btn: HTMLElement) => {
+    const ar = btn.getBoundingClientRect();
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    const pad = 8;
+    const pw = Math.min(pop.offsetWidth || 300, vw - pad * 2);
+    const ph = pop.offsetHeight || 240;
+
+    // Flexible inline direction: open left (right-aligned) -> flip right (left-aligned) -> clamp inside viewport
+    let left = ar.right - pw;
+    if (left < pad) {
+      const rightOpen = ar.left;
+      left = rightOpen + pw <= vw - pad ? rightOpen : Math.max(pad, Math.min(vw - pw - pad, (vw - pw) * 0.5));
+    }
+
+    // Flexible block direction: open below -> flip above if clipped below
+    let top = ar.bottom + 6;
+    if (top + ph > vh - pad && ar.top - ph - 6 >= pad) {
+      top = ar.top - ph - 6;
+    } else {
+      top = Math.max(pad, Math.min(vh - Math.min(ph, vh - pad * 2) - pad, top));
+    }
+
+    pop.style.left = `${Math.round(left)}px`;
+    pop.style.right = 'auto';
+    pop.style.top = `${Math.round(top)}px`;
+  };
+
+  for (const [popId, btnId] of pairs) {
+    const pop = document.getElementById(popId);
+    const btn = document.getElementById(btnId);
+    if (!pop || !btn) continue;
+    pop.addEventListener('toggle', e => {
+      if ((e as ToggleEvent).newState === 'open') {
+        requestAnimationFrame(() => positionPopover(pop, btn));
+      }
+    });
+  }
+}
+
 function updateSelectionActions(): void {
   if (!selActionsEl) return;
   const show =
@@ -370,6 +468,7 @@ function updateSelectionActions(): void {
     items.includes(selectedItem) &&
     !dragItem &&
     !resizeState &&
+    !pinchState &&
     !typingTarget;
   if (!show || !selectedItem) {
     selActionsEl.hidden = true;
@@ -382,10 +481,12 @@ function updateSelectionActions(): void {
   const r = canvas.getBoundingClientRect();
   const barW = selActionsEl.offsetWidth || (canEdit ? 124 : 74);
   const barH = selActionsEl.offsetHeight || 42;
-  const cx = selectedItem.x + selectedItem.w * 0.5;
+  const topLeft = worldToScreen(selectedItem.x, selectedItem.y);
+  const botRight = worldToScreen(selectedItem.x + selectedItem.w, selectedItem.y + selectedItem.h);
+  const cx = (topLeft.x + botRight.x) * 0.5;
   const left = Math.max(8, Math.min(r.width - barW - 8, cx - barW * 0.5));
-  const above = selectedItem.y - barH - 14;
-  const top = above >= 8 ? above : Math.min(r.height - barH - 8, selectedItem.y + selectedItem.h + 14);
+  const above = topLeft.y - barH - 14;
+  const top = above >= 8 ? above : Math.min(r.height - barH - 8, botRight.y + 14);
   selActionsEl.style.left = `${Math.round(left)}px`;
   selActionsEl.style.top = `${Math.round(Math.max(8, top))}px`;
 }
@@ -494,6 +595,25 @@ function render(opts: { skipCup?: boolean } = {}): void {
   if (!ctx) return;
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
+  const isTransformed = Math.abs(viewScale - 1) > 0.001 || Math.abs(viewX) > 0.5 || Math.abs(viewY) > 0.5;
+  if (isTransformed) {
+    ctx.fillStyle = '#c8b69b';
+    ctx.fillRect(0, 0, r.width, r.height);
+  }
+
+  ctx.save();
+  if (isTransformed) {
+    ctx.translate(viewX, viewY);
+    ctx.scale(viewScale, viewScale);
+    ctx.save();
+    ctx.shadowColor = 'rgba(55, 40, 22, 0.22)';
+    ctx.shadowBlur = 18;
+    ctx.shadowOffsetY = 6;
+    ctx.fillStyle = getNapkinSpec().baseHex;
+    ctx.fillRect(0, 0, r.width, r.height);
+    ctx.restore();
+  }
+
   drawNapkinBackground(ctx, r.width, r.height);
   cup.renderStainsTo(ctx);
 
@@ -599,8 +719,9 @@ function render(opts: { skipCup?: boolean } = {}): void {
       ctx.restore();
     }
 
-    inlineInput.style.left = Math.max(4, Math.min(r.width - 8, cx)) + 'px';
-    inlineInput.style.top = Math.max(4, Math.min(r.height - 30, cy - chH * 0.5)) + 'px';
+    const caretScr = worldToScreen(cx, cy - chH * 0.5);
+    inlineInput.style.left = Math.max(4, Math.min(r.width - 8, caretScr.x)) + 'px';
+    inlineInput.style.top = Math.max(4, Math.min(r.height - 30, caretScr.y)) + 'px';
 
     if (caretVisible) {
       ctx.save();
@@ -631,18 +752,17 @@ function render(opts: { skipCup?: boolean } = {}): void {
     ctx.setLineDash([4, 3]);
     ctx.strokeRect(selectedItem.x - 5, selectedItem.y - 5, selectedItem.w + 10, selectedItem.h + 10);
     ctx.setLineDash([]);
-    const hs = lastPointerType === 'touch' ? 10 : 7;
+    const hs = (lastPointerType === 'touch' ? 10 : 7) / viewScale;
     const hh = hs * 0.5;
     for (const h of getResizeHandles(selectedItem)) {
       ctx.fillStyle = '#f8f3ea';
       ctx.strokeStyle = '#23201c';
-      ctx.lineWidth = 1.4;
+      ctx.lineWidth = 1.4 / viewScale;
       ctx.fillRect(h.x - hh, h.y - hh, hs, hs);
       ctx.strokeRect(h.x - hh, h.y - hh, hs, hs);
     }
     ctx.restore();
   }
-  updateSelectionActions();
 
   for (const ps of pendingStrokes) drawRawPreview(ctx, ps, currentColor, currentPenId);
   if (activeRaw) drawRawPreview(ctx, activeRaw, currentColor, currentPenId);
@@ -672,6 +792,9 @@ function render(opts: { skipCup?: boolean } = {}): void {
       }
     }
   }
+
+  ctx.restore();
+  updateSelectionActions();
 
   if (!opts.skipCup) {
     cup.renderCupLayer();
@@ -733,8 +856,9 @@ function openTextBox(x: number, y: number, shapeRef: ShapeItem | null = null, ex
   const r = canvas.getBoundingClientRect();
   const anchorX = shapeRef ? shapeRef.x + shapeRef.w / 2 : textItem!.anchorX;
   const anchorY = shapeRef ? shapeRef.y + shapeRef.h / 2 : textItem!.anchorY;
-  inlineInput.style.left = Math.max(4, Math.min(r.width - 8, anchorX)) + 'px';
-  inlineInput.style.top = Math.max(4, Math.min(r.height - 30, anchorY - 14)) + 'px';
+  const anchorScr = worldToScreen(anchorX, anchorY - 14);
+  inlineInput.style.left = Math.max(4, Math.min(r.width - 8, anchorScr.x)) + 'px';
+  inlineInput.style.top = Math.max(4, Math.min(r.height - 30, anchorScr.y)) + 'px';
   inlineInput.style.display = 'block';
   inlineInput.value = shapeRef ? shapeRef.label || '' : textItem!.text || '';
   typingTarget.lastLen = inlineInput.value.length;
@@ -899,6 +1023,10 @@ const clearAllWithCrumple = createCrumpleRunner({
   renderForSnapshot: () => render({ skipCup: true }),
   clearAndGenerateFreshSheet() {
     items = [];
+    viewX = 0;
+    viewY = 0;
+    viewScale = 1;
+    updateResetViewBtn();
     cup.resetSheetForCrumple();
     nextNapkin();
     render();
@@ -920,16 +1048,6 @@ function undo(): void {
   }
   cup.onUndo();
   scheduleRender();
-}
-
-function toggleSaveMenu(e: Event | null, forceState?: boolean): void {
-  e?.stopPropagation();
-  const menu = document.getElementById('save-menu');
-  const btn = document.getElementById('save-btn');
-  if (!menu) return;
-  const open = typeof forceState === 'boolean' ? forceState : !menu.classList.contains('open');
-  menu.classList.toggle('open', open);
-  btn?.classList.toggle('active', open);
 }
 
 function triggerDownload(url: string, filename: string): void {
@@ -954,7 +1072,6 @@ function getCleanExportBg(w: number, h: number, scale = 2): HTMLCanvasElement {
 }
 
 function exportPNG(): void {
-  toggleSaveMenu(null, false);
   if (typingTarget) commitTextBox();
   flushPendingNow();
   const r = canvas.getBoundingClientRect();
@@ -987,7 +1104,6 @@ function exportPNG(): void {
 }
 
 function exportSVG(): void {
-  toggleSaveMenu(null, false);
   if (typingTarget) commitTextBox();
   flushPendingNow();
   const r = canvas.getBoundingClientRect();
@@ -1136,18 +1252,47 @@ async function loadStarterScene(forcedIdx: number | null = null): Promise<string
   return diagram.name;
 }
 
-function getPos(e: PointerEvent | MouseEvent): Point2D {
+function getScreenPos(e: PointerEvent | MouseEvent): Point2D {
   const r = canvas.getBoundingClientRect();
   return { x: e.clientX - r.left, y: e.clientY - r.top };
 }
 
+function getPos(e: PointerEvent | MouseEvent): Point2D {
+  const s = getScreenPos(e);
+  return screenToWorld(s.x, s.y);
+}
+
 function hitItem(x: number, y: number, isTouch = false): NapkinItem | null {
-  const pad = isTouch ? 18 : 8;
+  const pad = (isTouch ? 18 : 8) / viewScale;
   for (let i = items.length - 1; i >= 0; i--) {
     const it = items[i]!;
     if (x >= it.x - pad && x <= it.x + it.w + pad && y >= it.y - pad && y <= it.y + it.h + pad) return it;
   }
   return null;
+}
+
+function cancelSingleTouchInteraction(): void {
+  activePointerId = null;
+  pendingTextTap = null;
+  activeRaw = null;
+  dragShape = null;
+  dragItem = null;
+  resizeState = null;
+  audio.stopDraw();
+}
+
+function startTwoFingerPanZoom(): void {
+  const pts = Array.from(touchPoints.values());
+  if (pts.length < 2) return;
+  const a = pts[0]!;
+  const b = pts[1]!;
+  pinchState = {
+    startMid: { x: (a.x + b.x) * 0.5, y: (a.y + b.y) * 0.5 },
+    startDist: Math.max(20, Math.hypot(b.x - a.x, b.y - a.y)),
+    startViewX: viewX,
+    startViewY: viewY,
+    startScale: viewScale,
+  };
 }
 
 function deleteSelectedItem(): void {
@@ -1196,6 +1341,23 @@ canvas.addEventListener('pointerdown', e => {
   if (e.pointerType === 'mouse' && e.button !== 0) return;
   const isTouch = e.pointerType === 'touch';
   lastPointerType = e.pointerType || 'mouse';
+
+  if (isTouch) {
+    touchPoints.set(e.pointerId, getScreenPos(e));
+    if (touchPoints.size >= 2) {
+      if (typingTarget) commitTextBox();
+      cancelSingleTouchInteraction();
+      startTwoFingerPanZoom();
+      try {
+        canvas.setPointerCapture(e.pointerId);
+      } catch {
+        // Ignore capture errors
+      }
+      scheduleRender();
+      return;
+    }
+  }
+
   const p = getPos(e);
 
   if (typingTarget) {
@@ -1275,13 +1437,31 @@ canvas.addEventListener('pointerdown', e => {
     clearTimeout(pendingTimer);
     pendingTimer = null;
   }
-  pendingMode = tool;
   activeRaw = [p];
   audio.startDraw(p.x, p.y);
   scheduleRender();
 });
 
 canvas.addEventListener('pointermove', e => {
+  if (e.pointerType === 'touch' && touchPoints.has(e.pointerId)) {
+    touchPoints.set(e.pointerId, getScreenPos(e));
+    if (pinchState && touchPoints.size >= 2) {
+      const pts = Array.from(touchPoints.values());
+      const a = pts[0]!;
+      const b = pts[1]!;
+      const curMid = { x: (a.x + b.x) * 0.5, y: (a.y + b.y) * 0.5 };
+      const curDist = Math.max(20, Math.hypot(b.x - a.x, b.y - a.y));
+      const newScale = Math.max(0.55, Math.min(2.5, pinchState.startScale * (curDist / pinchState.startDist)));
+      const wx = (pinchState.startMid.x - pinchState.startViewX) / pinchState.startScale;
+      const wy = (pinchState.startMid.y - pinchState.startViewY) / pinchState.startScale;
+      const r = canvas.getBoundingClientRect();
+      clampView(curMid.x - wx * newScale, curMid.y - wy * newScale, newScale, r.width, r.height);
+      scheduleRender();
+      return;
+    }
+  }
+  if (pinchState) return;
+
   const p = getPos(e);
 
   if (pendingTextTap && e.pointerId === pendingTextTap.pointerId) {
@@ -1380,6 +1560,19 @@ canvas.addEventListener('pointermove', e => {
 
 canvas.addEventListener('pointerup', e => {
   const isTouch = e.pointerType === 'touch';
+  if (isTouch) {
+    touchPoints.delete(e.pointerId);
+    if (pinchState) {
+      if (touchPoints.size < 2) {
+        pinchState = null;
+        activePointerId = null;
+      } else {
+        startTwoFingerPanZoom();
+      }
+      scheduleRender();
+      return;
+    }
+  }
   const p = getPos(e);
 
   if (pendingTextTap && e.pointerId === pendingTextTap.pointerId) {
@@ -1479,8 +1672,8 @@ canvas.addEventListener('pointerup', e => {
       arc += Math.hypot(pts[i]!.x - pts[i - 1]!.x, pts[i]!.y - pts[i - 1]!.y);
     }
 
-    if (pendingMode === 'sketch' && !pendingStrokes.length && arc < tapThresh) {
-      pendingMode = null;
+    const tapThreshWorld = tapThresh / viewScale;
+    if (!pendingStrokes.length && arc < tapThreshWorld) {
       const hit = hitItem(p.x, p.y, isTouch);
       if (hit && hit.kind === 'shape') openTextBox(hit.x + hit.w / 2, hit.y + hit.h / 2, hit, null);
       else if (hit && hit.kind === 'text') openTextBox(hit.anchorX, hit.anchorY, null, hit);
@@ -1489,7 +1682,7 @@ canvas.addEventListener('pointerup', e => {
       return;
     }
 
-    if (pts.length >= 2 || pendingMode === 'handwrite') {
+    if (pts.length >= 2 || pendingStrokes.length > 0) {
       const first = pts[0]!;
       pendingStrokes.push(pts.length >= 2 ? pts : [first, { x: first.x + 0.8, y: first.y + 0.8 }]);
       pendingTimer = setTimeout(flushPendingNow, DEFAULTS.debounceMs);
@@ -1499,14 +1692,13 @@ canvas.addEventListener('pointerup', e => {
 });
 
 canvas.addEventListener('pointercancel', e => {
+  if (e.pointerType === 'touch') {
+    touchPoints.delete(e.pointerId);
+    if (pinchState && touchPoints.size < 2) pinchState = null;
+  }
   if (pendingTextTap && e.pointerId === pendingTextTap.pointerId) pendingTextTap = null;
   if (activePointerId !== null && e.pointerId !== activePointerId) return;
-  activePointerId = null;
-  audio.stopDraw();
-  activeRaw = null;
-  dragShape = null;
-  dragItem = null;
-  resizeState = null;
+  cancelSingleTouchInteraction();
   scheduleRender();
 });
 canvas.addEventListener('lostpointercapture', e => {
@@ -1540,14 +1732,17 @@ document.querySelectorAll<HTMLButtonElement>('button.swatch[data-color]').forEac
 document.getElementById('sound-toggle')?.addEventListener('click', () => audio.toggleMute());
 document.getElementById('undo-btn')?.addEventListener('click', () => undo());
 document.getElementById('clear-btn')?.addEventListener('click', () => void clearAllWithCrumple());
-document.getElementById('save-btn')?.addEventListener('click', e => {
-  syncToolbarBottom();
-  toggleSaveMenu(e);
-});
+document.getElementById('save-btn')?.addEventListener('click', () => syncToolbarBottom());
 document.getElementById('pen-btn')?.addEventListener('click', () => syncToolbarBottom());
 document.getElementById('drink-menu-btn')?.addEventListener('click', () => syncToolbarBottom());
-document.getElementById('export-png-btn')?.addEventListener('click', () => exportPNG());
-document.getElementById('export-svg-btn')?.addEventListener('click', () => exportSVG());
+document.getElementById('export-png-btn')?.addEventListener('click', () => {
+  exportPNG();
+  restoreFocus('#save-btn');
+});
+document.getElementById('export-svg-btn')?.addEventListener('click', () => {
+  exportSVG();
+  restoreFocus('#save-btn');
+});
 document.getElementById('pen-close-btn')?.addEventListener('click', () => restoreFocus('#pen-btn'));
 document.getElementById('drink-close-btn')?.addEventListener('click', () => restoreFocus('#drink-menu-btn'));
 
@@ -1560,13 +1755,8 @@ selEditBtn?.addEventListener('click', () => {
 });
 selDeleteBtn?.addEventListener('click', () => deleteSelectedItem());
 
-window.addEventListener('pointerdown', e => {
-  const menu = document.getElementById('save-menu');
-  const target = e.target as HTMLElement | null;
-  if (menu && menu.classList.contains('open') && !target?.closest('.save-wrap')) {
-    toggleSaveMenu(null, false);
-  }
-});
+resetViewBtn?.addEventListener('pointerdown', e => e.stopPropagation());
+resetViewBtn?.addEventListener('click', () => resetView());
 
 window.addEventListener('keydown', e => {
   if (typingTarget) return;
@@ -1584,7 +1774,6 @@ window.addEventListener('keydown', e => {
   }
   const k = e.key.toLowerCase();
   if (k === 's') setTool('sketch');
-  else if (k === 'h') setTool('handwrite');
   else if (k === 't') setTool('text');
   else if (k === 'b') setTool('box');
   else if (k === 'o') setTool('oval');
@@ -1612,6 +1801,7 @@ if (typeof ResizeObserver !== 'undefined') {
 
 // Bootstrap app
 syncToolbarBottom();
+setupFlexiblePopoverFallbacks();
 initPenAndStyleMenu();
 audio.initUI();
 cup.init();

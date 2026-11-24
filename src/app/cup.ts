@@ -108,6 +108,12 @@ interface PointerDragState {
   holdTimer: ReturnType<typeof setTimeout>;
 }
 
+export interface ViewTransform {
+  x: number;
+  y: number;
+  scale: number;
+}
+
 export interface NapkinCupDeps {
   canvas: HTMLCanvasElement;
   cupCanvas: HTMLCanvasElement;
@@ -122,6 +128,8 @@ export interface NapkinCupDeps {
   restoreFocus(selector: string): void;
   render(): void;
   scheduleRender(): void;
+  getViewTransform?(): ViewTransform;
+  isMultiTouch?(): boolean;
 }
 
 export interface NapkinCupController {
@@ -822,8 +830,10 @@ export function createNapkinCup(deps: NapkinCupDeps): NapkinCupController {
     cctx.clearRect(0, 0, sr.width, sr.height);
     if (!state.hasDrink) return;
 
+    const vt = deps.getViewTransform ? deps.getViewTransform() : { x: 0, y: 0, scale: 1 };
     cctx.save();
-    cctx.translate(nr.left - sr.left, nr.top - sr.top);
+    cctx.translate(nr.left - sr.left + vt.x, nr.top - sr.top + vt.y);
+    cctx.scale(vt.scale, vt.scale);
     renderCupTo(cctx, nr.width, nr.height, now);
     cctx.restore();
   }
@@ -1351,12 +1361,25 @@ export function createNapkinCup(deps: NapkinCupDeps): NapkinCupController {
 
     const toNapkin = (e: PointerEvent): Point2D => {
       const r = deps.canvas.getBoundingClientRect();
-      return { x: e.clientX - r.left, y: e.clientY - r.top };
+      const vt = deps.getViewTransform ? deps.getViewTransform() : { x: 0, y: 0, scale: 1 };
+      return {
+        x: (e.clientX - r.left - vt.x) / vt.scale,
+        y: (e.clientY - r.top - vt.y) / vt.scale,
+      };
     };
+
+    const activeTouches = new Set<number>();
 
     deps.stageEl.addEventListener(
       'pointerdown',
       e => {
+        if (e.pointerType === 'touch') {
+          activeTouches.add(e.pointerId);
+          if (activeTouches.size >= 2 || deps.isMultiTouch?.()) {
+            if (pointerState) finishPointer(true);
+            return;
+          }
+        }
         if (e.pointerType === 'mouse' && e.button !== 0) return;
         const p = toNapkin(e);
         if (deps.isTyping() && deps.isPointInsideTypingTarget(p.x, p.y)) return;
@@ -1370,6 +1393,7 @@ export function createNapkinCup(deps: NapkinCupDeps): NapkinCupController {
     deps.stageEl.addEventListener(
       'pointermove',
       e => {
+        if (e.pointerType === 'touch' && (activeTouches.size >= 2 || deps.isMultiTouch?.())) return;
         if (onPointerMove(e, toNapkin(e))) e.stopPropagation();
       },
       true,
@@ -1377,11 +1401,19 @@ export function createNapkinCup(deps: NapkinCupDeps): NapkinCupController {
     deps.stageEl.addEventListener(
       'pointerup',
       e => {
+        if (e.pointerType === 'touch') activeTouches.delete(e.pointerId);
         if (finishPointer(false, e.pointerId)) e.stopPropagation();
       },
       true,
     );
-    deps.stageEl.addEventListener('pointercancel', e => finishPointer(true, e.pointerId), true);
+    deps.stageEl.addEventListener(
+      'pointercancel',
+      e => {
+        if (e.pointerType === 'touch') activeTouches.delete(e.pointerId);
+        finishPointer(true, e.pointerId);
+      },
+      true,
+    );
     deps.stageEl.addEventListener('lostpointercapture', e => finishPointer(true, e.pointerId), false);
     deps.stageEl.addEventListener('pointerleave', () => {
       if (!pointerState && hoveringCup) {

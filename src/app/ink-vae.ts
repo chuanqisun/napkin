@@ -363,9 +363,9 @@ export function buildFreehandObject(rawList: Point2D[][], color: string, penId: 
     for (let i = 1; i < raw.length; i++) {
       const prev = simp[simp.length - 1]!;
       const cur = raw[i]!;
-      if (Math.hypot(cur.x - prev.x, cur.y - prev.y) >= 3.5) simp.push(cur);
+      if (Math.hypot(cur.x - prev.x, cur.y - prev.y) >= 2.2) simp.push(cur);
     }
-    if (simp.length < 2) simp.push({ x: first.x + 1, y: first.y + 1 });
+    if (simp.length < 2) simp.push({ x: first.x + 0.9, y: first.y + 0.9 });
     const smoothed = chaikin(
       simp.map(p => [p.x, p.y] as [number, number]),
       1,
@@ -375,10 +375,10 @@ export function buildFreehandObject(rawList: Point2D[][], color: string, penId: 
       const sp = Math.hypot(x - prev[0], y - prev[1]);
       const t = i / Math.max(1, smoothed.length - 1);
       const endTaper = Math.min(1, t * 7, (1 - t) * 7);
-      const p = Math.max(0.2, Math.min(0.94, (0.86 - sp * 0.03) * (0.4 + 0.6 * endTaper)));
+      const p = Math.max(0.22, Math.min(0.94, (0.87 - sp * 0.03) * (0.42 + 0.58 * endTaper)));
       return [x, y, p];
     });
-    return { pts, alpha: 0.96, baseW: 2.05, color, penId };
+    return { pts, alpha: 0.96, baseW: 1.9, color, penId };
   });
 
   let minX = 1e9;
@@ -467,45 +467,149 @@ export function recognizeMultiStroke(
   const w = maxX - minX;
   const h = maxY - minY;
   const diag = Math.hypot(w, h);
-  if (diag < 26) return buildFreehandObject(rawList, color, penId);
+  if (diag < 42) return buildFreehandObject(rawList, color, penId);
 
-  if (rawList.length <= 3) {
+  // High-confidence arrow detection: requires an actual arrowhead (chevron / barbs / hooked tip)
+  // so plain straight lines, underlines, or letters (l, 1, I, /, -, T) stay freehand.
+  if (rawList.length === 1) {
+    const main = stats[0]!;
+    if (main.raw.length >= 6 && main.arc >= 60) {
+      // Find the point farthest from start; in a 1-stroke arrow (shaft + reverse barb),
+      // the shaft goes straight to the tip and then reverses sharply to form the barb.
+      let tipIdx = 0;
+      let maxDist = 0;
+      for (let i = 1; i < main.raw.length; i++) {
+        const d = Math.hypot(main.raw[i]!.x - main.s.x, main.raw[i]!.y - main.s.y);
+        if (d > maxDist) {
+          maxDist = d;
+          tipIdx = i;
+        }
+      }
+      if (tipIdx >= 2 && tipIdx <= main.raw.length - 2 && maxDist >= 52) {
+        let shaftArc = 0;
+        for (let i = 1; i <= tipIdx; i++) {
+          shaftArc += Math.hypot(main.raw[i]!.x - main.raw[i - 1]!.x, main.raw[i]!.y - main.raw[i - 1]!.y);
+        }
+        let barbArc = 0;
+        for (let i = tipIdx + 1; i < main.raw.length; i++) {
+          barbArc += Math.hypot(main.raw[i]!.x - main.raw[i - 1]!.x, main.raw[i]!.y - main.raw[i - 1]!.y);
+        }
+        const tip = main.raw[tipIdx]!;
+        const barbEnd = main.e;
+        const barbChord = Math.hypot(barbEnd.x - tip.x, barbEnd.y - tip.y);
+        const shaftStraight = maxDist / Math.max(shaftArc, 1);
+        const ux = (tip.x - main.s.x) / maxDist;
+        const uy = (tip.y - main.s.y) / maxDist;
+        const bx = barbEnd.x - tip.x;
+        const by = barbEnd.y - tip.y;
+        const backProj = -(bx * ux + by * uy);
+        const latOff = Math.abs(-uy * bx + ux * by);
+        if (
+          shaftStraight > 0.88 &&
+          barbArc >= 10 &&
+          barbArc <= shaftArc * 0.45 &&
+          barbChord >= 8 &&
+          backProj > barbChord * 0.35 &&
+          latOff > barbChord * 0.18 &&
+          latOff < barbChord * 0.92
+        ) {
+          return buildArrowItem(main.s.x, main.s.y, tip.x, tip.y, color, penId);
+        }
+      }
+    }
+  } else if (rawList.length === 2 || rawList.length === 3) {
     let mainIdx = 0;
     for (let i = 1; i < stats.length; i++) {
       if (stats[i]!.arc > stats[mainIdx]!.arc) mainIdx = i;
     }
     const main = stats[mainIdx]!;
-    if (rawList.length === 1 && main.straightness > 0.72 && main.chord > 34) {
-      return buildArrowItem(main.s.x, main.s.y, main.e.x, main.e.y, color, penId);
-    }
-    if (rawList.length >= 2 && main.straightness > 0.68 && main.chord > 36) {
+    if (main.straightness > 0.84 && main.chord > 48) {
       const others = stats.filter((_, i) => i !== mainIdx);
-      const nearEnd = others.every(
-        o =>
-          o.arc < main.arc * 0.65 &&
-          Math.min(
-            Math.hypot(o.s.x - main.e.x, o.s.y - main.e.y),
-            Math.hypot(o.e.x - main.e.x, o.e.y - main.e.y),
-          ) < Math.max(36, main.chord * 0.4),
-      );
-      const nearStart = others.every(
-        o =>
-          o.arc < main.arc * 0.65 &&
-          Math.min(
-            Math.hypot(o.s.x - main.s.x, o.s.y - main.s.y),
-            Math.hypot(o.e.x - main.s.x, o.e.y - main.s.y),
-          ) < Math.max(36, main.chord * 0.4),
-      );
-      if (nearEnd) return buildArrowItem(main.s.x, main.s.y, main.e.x, main.e.y, color, penId);
-      if (nearStart) return buildArrowItem(main.e.x, main.e.y, main.s.x, main.s.y, color, penId);
+      const checkHeadAt = (tail: Point2D, tip: Point2D): boolean => {
+        const len = Math.hypot(tip.x - tail.x, tip.y - tail.y) || 1;
+        const ux = (tip.x - tail.x) / len;
+        const uy = (tip.y - tail.y) / len;
+        const nx = -uy;
+        const ny = ux;
+        const tipTol = Math.max(24, len * 0.26);
+
+        if (others.length === 1) {
+          // 2-stroke arrow: shaft + V-shaped chevron whose apex is near tip
+          const o = others[0]!;
+          if (o.arc < 14 || o.arc > main.arc * 0.65 || o.straightness > 0.82) return false;
+          let bestIdx = 0;
+          let bestD = 1e9;
+          for (let i = 0; i < o.raw.length; i++) {
+            const d = Math.hypot(o.raw[i]!.x - tip.x, o.raw[i]!.y - tip.y);
+            if (d < bestD) {
+              bestD = d;
+              bestIdx = i;
+            }
+          }
+          if (bestD > tipTol) return false;
+          const apex = o.raw[bestIdx]!;
+          const sBack = -((o.s.x - apex.x) * ux + (o.s.y - apex.y) * uy);
+          const eBack = -((o.e.x - apex.x) * ux + (o.e.y - apex.y) * uy);
+          const sSide = (o.s.x - apex.x) * nx + (o.s.y - apex.y) * ny;
+          const eSide = (o.e.x - apex.x) * nx + (o.e.y - apex.y) * ny;
+          return sBack > 4 && eBack > 4 && sSide * eSide < -12;
+        }
+
+        // 3-stroke arrow: shaft + 2 barbs on opposite sides pointing back from tip
+        const sides: number[] = [];
+        for (const o of others) {
+          if (o.arc < 8 || o.arc > main.arc * 0.5 || o.straightness < 0.72) return false;
+          const ds = Math.hypot(o.s.x - tip.x, o.s.y - tip.y);
+          const de = Math.hypot(o.e.x - tip.x, o.e.y - tip.y);
+          if (Math.min(ds, de) > tipTol) return false;
+          const near = ds <= de ? o.s : o.e;
+          const far = ds <= de ? o.e : o.s;
+          const bx = far.x - near.x;
+          const by = far.y - near.y;
+          const blen = Math.hypot(bx, by) || 1;
+          const back = -(bx * ux + by * uy) / blen;
+          const side = (bx * nx + by * ny) / blen;
+          if (back < 0.25 || Math.abs(side) < 0.18 || Math.abs(side) > 0.95) return false;
+          sides.push(side);
+        }
+        return sides.length === 2 && sides[0]! * sides[1]! < 0;
+      };
+
+      if (checkHeadAt(main.s, main.e)) return buildArrowItem(main.s.x, main.s.y, main.e.x, main.e.y, color, penId);
+      if (checkHeadAt(main.e, main.s)) return buildArrowItem(main.e.x, main.e.y, main.s.x, main.s.y, color, penId);
     }
   }
 
-  const isSingleClosed = rawList.length === 1 && stats[0]!.chord < diag * 0.45;
+  // High-confidence closed shape detection (box / oval / diamond)
+  const aspect = Math.max(w / Math.max(h, 1), h / Math.max(w, 1));
   const totalArc = stats.reduce((a, s) => a + s.arc, 0);
-  const isMultiClosed = rawList.length >= 2 && rawList.length <= 6 && totalArc > 2 * (w + h) * 0.6;
+  const boxPerim = 2 * (w + h);
+  const ovalPerim = Math.PI * (3 * (w / 2 + h / 2) - Math.sqrt((3 * (w / 2) + h / 2) * (w / 2 + 3 * (h / 2))));
+  const minPerim = Math.min(ovalPerim, 2 * Math.hypot(w, h));
+  const perimOk = totalArc >= minPerim * 0.78 && totalArc <= boxPerim * 1.38;
 
-  if ((isSingleClosed || isMultiClosed) && w > 28 && h > 22) {
+  const isSingleClosed = rawList.length === 1 && stats[0]!.chord < diag * 0.28 && perimOk;
+  let isMultiClosed = false;
+  if (rawList.length >= 2 && rawList.length <= 4 && perimOk) {
+    const minStrokeArc = Math.min(w, h) * 0.22;
+    const allLongEnough = stats.every(s => s.arc >= minStrokeArc);
+    if (allLongEnough) {
+      // Every stroke endpoint should connect near another stroke's endpoint (forms a closed loop, not separate letters)
+      const connTol = Math.max(20, diag * 0.22);
+      isMultiClosed = stats.every((st, idx) => {
+        const nearOther = (pt: Point2D) =>
+          stats.some(
+            (o, j) =>
+              j !== idx &&
+              (Math.hypot(pt.x - o.s.x, pt.y - o.s.y) <= connTol ||
+                Math.hypot(pt.x - o.e.x, pt.y - o.e.y) <= connTol),
+          );
+        return nearOther(st.s) && nearOther(st.e);
+      });
+    }
+  }
+
+  if ((isSingleClosed || isMultiClosed) && w >= 44 && h >= 34 && diag >= 62 && aspect <= 4.2) {
     const cx = (minX + maxX) / 2;
     const cy = (minY + maxY) / 2;
     const rx = w / 2;
@@ -513,10 +617,21 @@ export function recognizeMultiStroke(
     let eErr = 0;
     let bErr = 0;
     let dErr = 0;
+    const eErrs: number[] = [];
+    const bErrs: number[] = [];
+    const dErrs: number[] = [];
     const radii: number[] = [];
+    let octantMask = 0;
+
     for (const p of uniPts) {
-      const nx = Math.abs(p.x - cx) / rx;
-      const ny = Math.abs(p.y - cy) / ry;
+      const dx = (p.x - cx) / rx;
+      const dy = (p.y - cy) / ry;
+      const ang = Math.atan2(dy, dx);
+      const oct = Math.floor(((ang + Math.PI) / (Math.PI * 2)) * 8) & 7;
+      octantMask |= 1 << oct;
+
+      const nx = Math.abs(dx);
+      const ny = Math.abs(dy);
       const r = Math.hypot(nx, ny);
       radii.push(r);
       const invR = 1 / Math.max(r, 1e-6);
@@ -524,28 +639,54 @@ export function recognizeMultiStroke(
       const sa = ny * invR;
       const rBox = 1 / Math.max(Math.max(ca, sa), 1e-6);
       const rDia = 1 / Math.max(ca + sa, 1e-6);
-      eErr += Math.abs(r - 1.0);
-      bErr += Math.abs(r - rBox);
-      dErr += Math.abs(r - rDia);
+      const ee = Math.abs(r - 1.0);
+      const be = Math.abs(r - rBox);
+      const de = Math.abs(r - rDia);
+      eErr += ee;
+      bErr += be;
+      dErr += de;
+      eErrs.push(ee);
+      bErrs.push(be);
+      dErrs.push(de);
     }
+
+    let octCount = 0;
+    for (let k = 0; k < 8; k++) if (octantMask & (1 << k)) octCount++;
+
     const n = uniPts.length;
     eErr /= n;
     bErr /= n;
     dErr /= n;
 
     radii.sort((a, b) => a - b);
-    const p90 = radii[Math.min(n - 1, Math.floor(n * 0.9))]!;
+    const p10 = radii[Math.floor(n * 0.1)]!;
     const p15 = radii[Math.floor(n * 0.15)]!;
+    const p90 = radii[Math.min(n - 1, Math.floor(n * 0.9))]!;
 
-    const bScore = bErr - (p90 > 1.16 ? 0.04 : -0.025);
-    const dScore = dErr - (p15 < 0.77 ? 0.025 : 0.0);
-    const eScore = eErr;
+    // Reject open arcs (<7 octants) and shapes/words with interior strokes (low p10)
+    if (octCount >= 7 && p10 >= 0.6) {
+      const bScore = bErr - (p90 > 1.16 ? 0.035 : -0.025);
+      const dScore = dErr - (p15 < 0.77 ? 0.025 : 0.0);
+      const eScore = eErr;
 
-    if (Math.min(eErr, bErr, dErr) < 0.28) {
       let shapeType: ShapeType = 'oval';
-      if (dScore < eScore && dScore < bScore) shapeType = 'diamond';
-      else if (bScore < eScore) shapeType = 'box';
-      return buildShapeItem(shapeType, minX, minY, w, h, '', color, penId, styleKey);
+      let winErr = eErr;
+      let winArr = eErrs;
+      if (dScore < eScore && dScore < bScore) {
+        shapeType = 'diamond';
+        winErr = dErr;
+        winArr = dErrs;
+      } else if (bScore < eScore) {
+        shapeType = 'box';
+        winErr = bErr;
+        winArr = bErrs;
+      }
+
+      winArr.sort((a, b) => a - b);
+      const winP90 = winArr[Math.min(n - 1, Math.floor(n * 0.9))]!;
+      if (winErr < 0.165 && winP90 < 0.3) {
+        return buildShapeItem(shapeType, minX, minY, w, h, '', color, penId, styleKey);
+      }
     }
   }
 

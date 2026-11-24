@@ -6,18 +6,18 @@ Back-of-the-napkin sketching for your next big idea—with organic hand-drawn sh
 
 ## Features
 
-- **Smart Sketch (`S`) & Shape Tools (`B`, `O`, `D`, `A`):** Sketch rough shapes freehand and let them auto-beautify into clean hand-drawn boxes, circles, diamonds, and arrows—or use the explicit shape and arrow tools to draw them directly.
-- **Handwriting (`H`) & On-Napkin Typing (`T`):** Click anywhere on the napkin or inside a shape to type directly onto the paper in real-time cursive across 4 styles (_Clean Upright_, _Designer Cursive_, _Crisp Print_, _Fast Journal_).
+- **Sketch (`S`) & Shape Tools (`B`, `O`, `D`, `A`):** Sketch or handwrite freely on the napkin—clean hand-drawn boxes, ovals, diamonds, and arrows auto-beautify with high confidence, or use the explicit shape and arrow tools to draw them directly.
+- **On-Napkin Typing (`T`):** Click anywhere on the napkin or inside a shape to type directly on the paper in real-time cursive across 4 styles (_Clean Upright_, _Designer Cursive_, _Crisp Print_, _Fast Journal_).
 - **5 Pens & Sound Effects:** Switch between _Ballpoint Pen_, _2B Graphite Pencil_, _Felt-Tip Marker_, _Fountain Pen_, and _0.5mm Mechanical_ in the pen/style menu, with velocity-matched paper foley and an optional toolbar sound toggle.
 - **Café Drink Menu & Interactive Mug:** Open **Menu** to order _Coffee Latte_, _Black Coffee_, _Ceremonial Matcha_, or _Matcha Latte_. Click the mug to take a sip (or refill when empty), or press-and-hold to move and rotate it around the napkin and table—leaving occasional cup rings and drips.
-- **Select, Edit & Starter Diagrams (`V`):** Move or resize any shape, arrow, or text block, double-click to edit labels, or refresh for a new randomized starter diagram on a procedurally textured paper napkin.
+- **Select, Edit & Mobile Touch (`V`):** Move or resize any shape, arrow, or text block, double-click/double-tap to edit labels, or use two-finger drag and pinch to pan and zoom on mobile.
 - **Crumple & Export:** Toss finished sheets away with a 3D crumple animation, or click **Save** to export a **2× PNG** or **Vector SVG** with the paper texture, stains, and ink intact.
 
 ## Keyboard Shortcuts
 
 | Shortcut               | Action                       |
 | :--------------------- | :--------------------------- |
-| `S` / `H` / `T`        | Sketch / Handwrite / Text    |
+| `S` / `T`              | Sketch / Text                |
 | `B` / `O` / `D` / `A`  | Box / Oval / Diamond / Arrow |
 | `V` (or `M`)           | Select, Move & Resize        |
 | `Backspace` / `Delete` | Delete selected item         |

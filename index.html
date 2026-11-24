@@ -20,19 +20,11 @@
           </div>
           <div class="divider"></div>
 
-          <button id="t-sketch" class="tool-btn active" data-tool="sketch" title="Smart Sketch (600ms multi-stroke auto-beautify) [S]">
+          <button id="t-sketch" class="tool-btn active" data-tool="sketch" title="Sketch &amp; Handwrite (auto-beautifies clean shapes &amp; arrows) [S]">
             <svg viewBox="0 0 24 24">
-              <path d="M4 19c2.5-3 4-9 8-9s3.5 6 8 3" />
-              <path d="M16 5l3 3-9 9H7v-3l9-9z" />
+              <path d="M3 16c2.5-6 5-9 7-4s3 7 5 1 4-7 6-2" />
             </svg>
             <span class="lbl">Sketch</span>
-          </button>
-          <button id="t-handwrite" class="tool-btn" data-tool="handwrite" title="Direct Handwrite (600ms burst, styled ink) [H]">
-            <svg viewBox="0 0 24 24">
-              <path d="M3 17c2-4 4-8 6-8s1.5 6 3.5 6 3-5 4.5-5 1.5 4 4 3" />
-              <path d="M3 20h18" />
-            </svg>
-            <span class="lbl">Handwrite</span>
           </button>
           <button id="t-text" class="tool-btn" data-tool="text" title="Single-click anywhere or inside a shape to type live [T]">
             <svg viewBox="0 0 24 24">
@@ -114,7 +106,6 @@
               <line x1="23" y1="9" x2="17" y2="15" />
               <line x1="17" y1="9" x2="23" y2="15" />
             </svg>
-            <span class="snd-dot"></span>
           </button>
 
           <div class="divider"></div>
@@ -132,26 +123,22 @@
               <path d="M19 6l-1 14H6L5 6" />
             </svg>
           </button>
-          <div class="save-wrap">
-            <button id="save-btn" class="tool-btn" title="Save Napkin (PNG or SVG with Napkin Background)">
-              <svg viewBox="0 0 24 24">
-                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                <path d="M7 10l5 5 5-5" />
-                <path d="M12 15V3" />
-              </svg>
-              <span class="lbl">Save</span>
-            </button>
-            <div id="save-menu" class="save-menu" role="menu">
-              <button id="export-png-btn" role="menuitem">
-                <span class="sm-title">Save PNG Image</span>
-                <span class="sm-sub">2&times; HiDPI &middot; full napkin texture &amp; ink</span>
-              </button>
-              <button id="export-svg-btn" role="menuitem">
-                <span class="sm-title">Save SVG Vector</span>
-                <span class="sm-sub">Editable vector ink + napkin background</span>
-              </button>
-            </div>
-          </div>
+          <button id="save-btn" class="tool-btn" commandfor="save-menu" command="toggle-popover" title="Save Napkin (PNG or SVG with Napkin Background)">
+            <svg viewBox="0 0 24 24">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+              <path d="M7 10l5 5 5-5" />
+              <path d="M12 15V3" />
+            </svg>
+            <span class="lbl">Save</span>
+          </button>
+
+          <div class="divider"></div>
+
+          <a id="github-link" class="tool-btn" href="https://github.com/chuanqisun/napkin" target="_blank" rel="noopener noreferrer" aria-label="GitHub repository" title="View on GitHub">
+            <svg class="icon-fill" viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12" />
+            </svg>
+          </a>
         </div>
       </header>
 
@@ -163,6 +150,7 @@
             <button id="sel-edit-btn" type="button" class="sel-act-btn">Edit</button>
             <button id="sel-delete-btn" type="button" class="sel-act-btn sel-act-danger">Delete</button>
           </div>
+          <button id="reset-view-btn" type="button" class="reset-view-btn" title="Reset pan &amp; zoom" hidden>100%</button>
         </div>
         <canvas id="cup-layer"></canvas>
       </main>
@@ -192,6 +180,18 @@
           <button id="drink-close-btn" class="pop-close" commandfor="drink-menu" command="hide-popover" aria-label="Close café menu">&times;</button>
         </div>
         <div class="drink-grid" id="drink-menu-grid"></div>
+      </div>
+
+      <!-- Declarative Popover: Save Format Menu -->
+      <div id="save-menu" class="napkin-popover save-menu" popover role="menu" aria-label="Save Napkin">
+        <button id="export-png-btn" role="menuitem" commandfor="save-menu" command="hide-popover">
+          <span class="sm-title">Save PNG Image</span>
+          <span class="sm-sub">2&times; HiDPI &middot; full napkin texture &amp; ink</span>
+        </button>
+        <button id="export-svg-btn" role="menuitem" commandfor="save-menu" command="hide-popover">
+          <span class="sm-title">Save SVG Vector</span>
+          <span class="sm-sub">Editable vector ink + napkin background</span>
+        </button>
       </div>
     </div>
     <canvas id="crumple-overlay"></canvas>
