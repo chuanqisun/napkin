@@ -16,7 +16,15 @@ import {
   setVAEModel,
   strokeAlphaForPen,
 } from './ink-vae';
-import { buildNapkinSheetCanvas, drawNapkinBackground, getNapkinSpec, nextNapkin } from './napkin-paper';
+import {
+  buildNapkinSheetCanvas,
+  drawNapkinBackground,
+  getNapkinSpec,
+  nextNapkin,
+  nextNapkinOrTrailer,
+  queueTrailerNapkin,
+  setTrailerNapkin,
+} from './napkin-paper';
 import { pickStarterDiagram, STARTER_DIAGRAMS } from './starters';
 import {
   DEFAULTS,
@@ -1056,7 +1064,7 @@ const clearAllWithCrumple = createCrumpleRunner({
     viewScale = 1;
     updateResetViewBtn();
     cup.resetSheetForCrumple();
-    nextNapkin();
+    nextNapkinOrTrailer();
     render();
   },
   liftCupForCrumple: () => cup.liftForCrumple(),
@@ -1856,15 +1864,178 @@ if (typeof ResizeObserver !== 'undefined') {
 }
 
 // Bootstrap app
+const isTrailerMode = new URLSearchParams(window.location.search).get('trailer') === '1';
+
 syncToolbarBottom();
 setupFlexiblePopoverFallbacks();
 initPenAndStyleMenu();
 audio.initUI();
 cup.init();
+if (isTrailerMode) {
+  setTrailerNapkin({ paletteIdx: 0, embossStyle: 'linen', borderStyle: 'double', cupRing: null });
+}
 scheduleRender();
 
 void cachedFetchJSON<VAEModel>(MODEL_URLS.vae).then(model => {
   setVAEModel(model);
-  void loadStarterScene();
+  if (!isTrailerMode) void loadStarterScene();
 });
 void handwriting.initWasmPool().then(() => generateStylePreviews());
+
+if (isTrailerMode) {
+  const st = document.createElement('style');
+  st.textContent = `
+    #github-link { display: none !important; }
+    #pen-btn .lbl, #drink-menu-btn .lbl { display: inline !important; }
+    body.trailer-hide-toolbar header.toolbar { display: none !important; }
+    body.trailer-hide-toolbar main.stage { padding: 0 !important; }
+    body.trailer-hide-toolbar .napkin-frame { border-radius: 0 !important; box-shadow: none !important; }
+    #trailer-cursor {
+      position: fixed; left: 0; top: 0; width: 42px; height: 42px;
+      pointer-events: none; z-index: 99999;
+      transform: translate3d(-100px, -100px, 0);
+      filter: drop-shadow(0 3px 6px rgba(20, 14, 8, 0.34));
+      will-change: transform;
+    }
+    #trailer-cursor.down svg { transform: scale(0.88); }
+    #trailer-cursor svg { transition: transform 0.06s ease-out; display: block; width: 100%; height: 100%; }
+  `;
+  document.head.appendChild(st);
+
+  const curEl = document.createElement('div');
+  curEl.id = 'trailer-cursor';
+  const MICKEY_POINT_SVG = `<svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path d="M16.5 36.5L15 41.5C15 43.2 19.5 44.6 25.2 44.6C30.9 44.6 35.4 43.2 35.4 41.5L33.8 36.2" fill="#F2ECE2" stroke="#181411" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M17.2 21.5V8.4C17.2 5.9 19.1 4.0 21.4 4.0C23.7 4.0 25.5 5.9 25.5 8.4V17.4C26.4 16.4 27.9 15.9 29.4 16.3C30.9 16.7 32.0 17.8 32.3 19.2C33.4 18.4 35.0 18.3 36.3 19.0C37.6 19.7 38.4 21.1 38.4 22.7V27.6C38.4 33.4 34.4 38.2 27.6 38.5H23.2C18.5 38.5 14.9 35.9 12.6 32.0L8.8 25.8C7.7 24.0 8.2 21.6 10.0 20.6C11.8 19.6 14.1 20.2 15.2 21.9L17.2 24.8V21.5Z" fill="#FFFFFF" stroke="#181411" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M25.5 17.4V22.8" stroke="#181411" stroke-width="2.0" stroke-linecap="round"/>
+    <path d="M32.3 19.2V24.2" stroke="#181411" stroke-width="2.0" stroke-linecap="round"/>
+    <path d="M21.2 28.5L22.2 34.0" stroke="#181411" stroke-width="2.1" stroke-linecap="round"/>
+    <path d="M26.2 28.2L26.2 34.2" stroke="#181411" stroke-width="2.1" stroke-linecap="round"/>
+    <path d="M31.2 28.5L30.2 34.0" stroke="#181411" stroke-width="2.1" stroke-linecap="round"/>
+  </svg>`;
+  const MICKEY_GRAB_SVG = `<svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path d="M16.2 36.8L14.8 41.6C14.8 43.3 19.2 44.6 24.8 44.6C30.4 44.6 34.8 43.3 34.8 41.6L33.4 36.6" fill="#F2ECE2" stroke="#181411" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M12.2 22.8C11.6 18.8 13.8 16.0 16.8 16.0C17.8 16.0 18.7 16.3 19.4 16.9C20.2 15.3 21.8 14.4 23.6 14.6C25.1 14.8 26.3 15.6 27.0 16.8C27.9 15.7 29.4 15.2 30.9 15.6C32.5 16.0 33.6 17.3 33.9 18.8C35.2 18.4 36.7 18.8 37.6 19.8C38.6 20.9 39.0 22.4 38.8 24.2L38.0 29.6C37.2 34.8 33.0 38.4 27.2 38.5H22.2C16.8 38.5 12.6 35.1 11.4 30.2L9.8 25.8C9.2 24.0 10.2 22.4 12.2 22.8Z" fill="#FFFFFF" stroke="#181411" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M19.4 16.9V23.4" stroke="#181411" stroke-width="2.0" stroke-linecap="round"/>
+    <path d="M27.0 16.8V23.2" stroke="#181411" stroke-width="2.0" stroke-linecap="round"/>
+    <path d="M33.9 18.8V24.2" stroke="#181411" stroke-width="2.0" stroke-linecap="round"/>
+    <path d="M20.8 28.4L21.8 34.0" stroke="#181411" stroke-width="2.1" stroke-linecap="round"/>
+    <path d="M25.6 28.2L25.6 34.2" stroke="#181411" stroke-width="2.1" stroke-linecap="round"/>
+    <path d="M30.4 28.4L29.4 34.0" stroke="#181411" stroke-width="2.1" stroke-linecap="round"/>
+  </svg>`;
+  const CROSS_SVG = `<svg viewBox="0 0 36 36" fill="none"><circle cx="18" cy="18" r="3.6" fill="#1b3d8f" stroke="#faf6ef" stroke-width="1.8"/><path d="M18 5V12M18 24V31M5 18H12M24 18H31" stroke="#181411" stroke-width="2.4" stroke-linecap="round"/><path d="M18 5V12M18 24V31M5 18H12M24 18H31" stroke="#faf6ef" stroke-width="0.9" stroke-linecap="round"/></svg>`;
+  curEl.innerHTML = MICKEY_POINT_SVG;
+  document.body.appendChild(curEl);
+
+  let curX = 360;
+  let curY = 640;
+  let curMode: 'arrow' | 'hand' | 'grab' | 'cross' | 'hidden' = 'hand';
+  const audioLog: Array<{ t: number; type: string; id: string }> = [];
+  audio.setEventLogger?.(ev => audioLog.push(ev));
+
+  const setCursorVisual = (x: number, y: number, mode?: 'arrow' | 'hand' | 'grab' | 'cross' | 'hidden', down?: boolean) => {
+    curX = x;
+    curY = y;
+    if (mode && mode !== curMode) {
+      curMode = mode;
+      curEl.style.display = mode === 'hidden' ? 'none' : 'block';
+      if (mode === 'arrow' || mode === 'hand') curEl.innerHTML = MICKEY_POINT_SVG;
+      else if (mode === 'grab') curEl.innerHTML = MICKEY_GRAB_SVG;
+      else if (mode === 'cross') curEl.innerHTML = CROSS_SVG;
+    }
+    if (down !== undefined) curEl.classList.toggle('down', down);
+    const ox = curMode === 'cross' || curMode === 'grab' ? -21 : -18;
+    const oy = curMode === 'cross' || curMode === 'grab' ? -21 : -4;
+    curEl.style.transform = `translate3d(${(x + ox).toFixed(1)}px, ${(y + oy).toFixed(1)}px, 0)`;
+  };
+
+  (window as unknown as Record<string, unknown>).__napkinTrailer = {
+    setCursor: setCursorVisual,
+    getCursor: () => ({ x: curX, y: curY, mode: curMode }),
+    setNapkin: (opts: Parameters<typeof setTrailerNapkin>[0]) => {
+      setTrailerNapkin(opts);
+      render();
+    },
+    queueNapkin: (opts: Parameters<typeof queueTrailerNapkin>[0]) => {
+      queueTrailerNapkin(opts);
+    },
+    setHideToolbar: (hide: boolean) => {
+      document.body.classList.toggle('trailer-hide-toolbar', hide);
+      syncToolbarBottom();
+      render();
+    },
+    getAudioLog: () => audioLog.slice(),
+    clearAudioLog: () => {
+      audioLog.length = 0;
+    },
+    isHandwritingIdle: () => handwriting.isIdle(),
+    flushPendingNow: () => flushPendingNow(),
+    cup,
+    audio,
+    setTool,
+    setPen,
+    setWritingStyle,
+    setColor,
+    undo,
+    clearInstant: () => {
+      if (typingTarget) commitTextBox();
+      pendingStrokes = [];
+      activeRaw = null;
+      items = [];
+      cup.resetSheetForCrumple();
+      render();
+    },
+    getCanvasRect: () => {
+      const r = canvas.getBoundingClientRect();
+      return { left: r.left, top: r.top, width: r.width, height: r.height };
+    },
+    getItemRects: () => {
+      const r = canvas.getBoundingClientRect();
+      return items.map((it, idx) => ({
+        idx,
+        kind: it.kind,
+        label: it.kind === 'shape' ? it.label : it.kind === 'text' ? it.text : '',
+        left: r.left + it.x,
+        top: r.top + it.y,
+        width: it.w,
+        height: it.h,
+        cx: r.left + it.x + it.w * 0.5,
+        cy: r.top + it.y + it.h * 0.5,
+      }));
+    },
+    typeTextDirect: async (text: string, x: number, y: number, targetH: number, maxW: number, color: string) => {
+      const ti: TextItem = {
+        kind: 'text',
+        text,
+        styleKey: currentStyleKey,
+        penId: currentPenId,
+        anchorX: x,
+        anchorY: y,
+        x: x - maxW * 0.4,
+        y: y - targetH * 0.6,
+        w: maxW * 0.8,
+        h: targetH * 1.2,
+        color,
+        strokes: [],
+        wordCache: [],
+        wordCacheStyle: currentStyleKey,
+      };
+      items.push(ti);
+      await handwriting.synthesizeCursiveStreaming(
+        text,
+        x,
+        y,
+        targetH,
+        maxW,
+        color,
+        null,
+        ti,
+        currentStyleKey,
+        'center',
+        currentPenId,
+      );
+      render();
+    },
+    forceRender: () => render(),
+  };
+}

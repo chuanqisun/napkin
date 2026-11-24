@@ -147,6 +147,10 @@ export interface NapkinCupController {
   liftForCrumple(): Promise<boolean | 'cancelled'>;
   resetSheetForCrumple(): void;
   returnAfterCrumple(): void;
+  setTrailerDripOverride?(pos: { x: number; y: number; kind: 'drip' | 'trail'; scale?: number } | null): void;
+  setTrailerForceRing?(force: boolean): void;
+  getCupScreenPos?(): { x: number; y: number; bowlX: number; bowlY: number; sz: number };
+  setTrailerCupPos?(nx: number, ny: number, rotDeg?: number): void;
   getState(): {
     hasDrink: boolean;
     isDrinkDone: boolean;
@@ -213,6 +217,8 @@ export function createNapkinCup(deps: NapkinCupDeps): NapkinCupController {
   let idleTimer: ReturnType<typeof setTimeout> | null = null;
   let idleFiredThisStretch = false;
   let pendingTimers: ReturnType<typeof setTimeout>[] = [];
+  let trailerDripOverride: { x: number; y: number; kind: 'drip' | 'trail'; scale?: number } | null = null;
+  let trailerForceRing = false;
 
   const MIN_VOCAL_COOLDOWN_MS = 5200;
   const MIN_DRINK_COOLDOWN_MS = 12500;
@@ -897,18 +903,30 @@ export function createNapkinCup(deps: NapkinCupDeps): NapkinCupController {
           syncMenuBtn();
         }
         const r = Math.random();
-        const sipClip: CompanionClipId = r < 0.45 ? 'sip_coffee' : r < 0.75 ? 'sip_ahhh' : 'swallow_liquid';
-        const baseDur = sipClip === 'sip_ahhh' ? 2550 : sipClip === 'sip_coffee' ? 2100 : 1850;
-        state.drinkDurMs = baseDur + Math.round(Math.random() * 260);
+        const sipClip: CompanionClipId = trailerDripOverride
+          ? 'sip_ahhh'
+          : r < 0.45
+            ? 'sip_coffee'
+            : r < 0.75
+              ? 'sip_ahhh'
+              : 'swallow_liquid';
+        const baseDur = sipClip === 'sip_ahhh' ? 2150 : sipClip === 'sip_coffee' ? 2100 : 1850;
+        state.drinkDurMs = trailerDripOverride ? 2150 : baseDur + Math.round(Math.random() * 260);
         void deps.audio.playClip(sipClip, { channel: 'vocal', interrupt: true });
       }
     } else if (state.phase === 'drinking') {
       const t = Math.min(1, (now - state.phaseStart) / state.drinkDurMs);
-      if (state.pendingDrip && !state.dripFired && t >= 0.56) {
+      if (state.pendingDrip && !state.dripFired && t >= 0.52) {
         state.dripFired = true;
         const { w, h } = getStageSize();
-        const pos = randomNapkinDripPos(w, h);
-        addStain(Math.random() < 0.34 ? 'drip' : 'trail', pos.x, pos.y, 1.18);
+        if (trailerDripOverride) {
+          const ov = trailerDripOverride;
+          trailerDripOverride = null;
+          addStain(ov.kind, ov.x, ov.y, ov.scale ?? 1.45);
+        } else {
+          const pos = randomNapkinDripPos(w, h);
+          addStain(Math.random() < 0.34 ? 'drip' : 'trail', pos.x, pos.y, 1.18);
+        }
         scheduleTimer(() => {
           void deps.audio.playClip('oops_drip', { channel: 'vocal', interrupt: true });
           lastVocalAt = performance.now();
@@ -1031,13 +1049,15 @@ export function createNapkinCup(deps: NapkinCupDeps): NapkinCupController {
     const nextIdx = idx === -1 ? 1 : Math.min(VOLUME_STOPS.length - 1, idx + 1);
     state.nextVolAfterSip = VOLUME_STOPS[nextIdx]!.val;
 
-    const dripProb = !hasInteractedWithDrawing
-      ? 0
-      : opts.forceDrip
-        ? 1.0
-        : state.targetVolume >= 0.9
-          ? 0.72
-          : 0.58;
+    const dripProb = trailerDripOverride
+      ? 1.0
+      : !hasInteractedWithDrawing
+        ? 0
+        : opts.forceDrip
+          ? 1.0
+          : state.targetVolume >= 0.9
+            ? 0.72
+            : 0.58;
     state.pendingDrip = Math.random() < dripProb;
     state.dripFired = false;
     state.phase = 'exiting';
@@ -1162,11 +1182,18 @@ export function createNapkinCup(deps: NapkinCupDeps): NapkinCupController {
         void deps.audio.playClip('cup_setdown', { channel: 'foley', volumeMul: 0.92 });
         if (moved > 18) {
           mugMoveCount++;
-          const shouldRing = mugMoveCount >= 2 || (hasInteractedWithDrawing && Math.random() < 0.8);
+          const shouldRing = trailerForceRing || mugMoveCount >= 2 || (hasInteractedWithDrawing && Math.random() < 0.8);
           if (shouldRing) {
-            addStain('ring', ps.originBowlX, ps.originBowlY, 0.98);
-            const splashProb =
-              mugMoveCount >= 3 ? 0.82 : mugMoveCount >= 2 ? 0.68 : hasInteractedWithDrawing ? 0.45 : 0;
+            addStain('ring', ps.originBowlX, ps.originBowlY, trailerForceRing ? 1.25 : 0.98);
+            const splashProb = trailerForceRing
+              ? 0
+              : mugMoveCount >= 3
+                ? 0.82
+                : mugMoveCount >= 2
+                  ? 0.68
+                  : hasInteractedWithDrawing
+                    ? 0.45
+                    : 0;
             if (Math.random() < splashProb) {
               const pos = randomNapkinDripPos(w, h);
               const kind = Math.random() < 0.65 ? 'trail' : 'drip';
@@ -1438,6 +1465,24 @@ export function createNapkinCup(deps: NapkinCupDeps): NapkinCupController {
     liftForCrumple,
     resetSheetForCrumple,
     returnAfterCrumple,
+    setTrailerDripOverride: pos => {
+      trailerDripOverride = pos;
+    },
+    setTrailerForceRing: force => {
+      trailerForceRing = force;
+    },
+    getCupScreenPos: () => {
+      const r = deps.canvas.getBoundingClientRect();
+      const { x, y, sz } = getCupCenter(r.width, r.height);
+      const bowl = getBowlCenter(x, y, sz, state.rotDeg);
+      return { x: r.left + x, y: r.top + y, bowlX: r.left + bowl.x, bowlY: r.top + bowl.y, sz };
+    },
+    setTrailerCupPos: (nx, ny, rotDeg) => {
+      state.cupNX = nx;
+      state.cupNY = ny;
+      if (rotDeg !== undefined) state.rotDeg = rotDeg;
+      deps.render();
+    },
     getState: () => ({
       hasDrink: state.hasDrink,
       isDrinkDone: state.isDrinkDone,

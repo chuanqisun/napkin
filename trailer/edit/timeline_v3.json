@@ -2,13 +2,13 @@
   "fps": 30,
   "width": 1080,
   "height": 1920,
-  "totalFrames": 745,
-  "totalDurationSec": 24.8333,
+  "totalFrames": 777,
+  "totalDurationSec": 25.9,
   "musicCues": {
     "splatCutStart": 9.933333333333334,
     "musicResume": 15.8,
     "eurekaHit": 20.3,
-    "endCardStart": 22.033333333333335
+    "endCardStart": 23.1
   },
   "audioEvents": [
     {
@@ -270,7 +270,7 @@
     {
       "kind": "vo",
       "id": "vo_05",
-      "t": 21.04,
+      "t": 21.96,
       "dur": 1.04
     },
     {
@@ -282,33 +282,32 @@
     {
       "kind": "clip",
       "id": "eureka_win",
-      "t": 20.32,
-      "maxDur": 1.1,
+      "t": 20.12,
       "gain": 1.08
     },
     {
       "kind": "el_sfx",
       "id": "eureka_chime",
       "t": 20.36,
-      "gain": 0.7
+      "gain": 0.68
     },
     {
       "kind": "vo",
       "id": "vo_06",
-      "t": 22.0933,
+      "t": 23.16,
       "dur": 2.48
     },
     {
       "kind": "el_sfx",
       "id": "fountain_scratch",
-      "t": 22.093333333333334,
+      "t": 23.16,
       "maxDur": 0.7,
       "gain": 0.5
     },
     {
       "kind": "clip",
       "id": "cup_setdown",
-      "t": 24.433333333333334,
+      "t": 25.5,
       "gain": 0.85
     }
   ]

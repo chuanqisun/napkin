@@ -548,27 +548,28 @@ def build_v3():
     audio_events.append({"kind": "clip", "id": "aha_spark", "t": aha_out_t - 0.10, "maxDur": 0.70, "gain": 0.86})
     audio_events.append({"kind": "el_sfx", "id": "marker_sketch", "t": b5b_t + 1.25, "maxDur": 0.64, "gain": 0.72})
 
-    # 5C: HERO EUREKA CLIMAX! (52f = 1.73s)
+    # 5C: HERO EUREKA CLIMAX! (84f = 2.80s) — let FULL "EUREKA!!" ring out before "There it is."!
+    # eureka_win.mp3 vocal runs 0.26s..1.72s (1.46s); starting at eureka_out_t - 0.18s puts full vocal at +0.08s..+1.54s!
     eureka_out_t = cur_t()
     music_cues["eurekaHit"] = eureka_out_t
-    vo5_start = eureka_out_t + 0.74
+    vo5_start = eureka_out_t + 1.66
     place_vo("vo_05", vo5_start, y_center=1445)
 
-    seg5c = sample_segment(f4, m4, eureka_f, min(len(f4) - 1, eureka_f + 52), 52)
+    seg5c = sample_segment(f4, m4, eureka_f, len(f4) - 1, 84)
     cam5c = [
         (0.00, 1.10, 345, 580, "hold"),
-        (0.17, 1.92, eureka_m["x"], eureka_m["y"] + 8, "crash"),
-        (0.80, 1.92, eureka_m["x"], eureka_m["y"] + 8, "hold"),
-        (1.06, 1.00, 360, 620, "snap"),
-        (1.73, 1.00, 360, 620, "hold"),
+        (0.17, 1.92, eureka_m["x"], eureka_m["y"] + 8, "crash"),  # 5-frame hero crash zoom!
+        (1.36, 1.92, eureka_m["x"], eureka_m["y"] + 8, "hold"),   # Hold dead-steady through full EUREKA!!
+        (1.64, 1.00, 360, 620, "snap"),                           # Pull out cleanly right before "There it is."!
+        (2.80, 1.00, 360, 620, "hold"),
     ]
     for i, (sf, rgb, fr) in enumerate(seg5c):
         z, cx, cy, mv = eval_camera(cam5c, i / FPS)
         out_specs.append({"rgb": rgb, "zoom": z, "cx": cx, "cy": cy, "moving": mv})
     audio_events.append({"kind": "el_sfx", "id": "zoom_whoosh", "t": eureka_out_t, "gain": 0.38})
-    audio_events.append({"kind": "clip", "id": "eureka_win", "t": eureka_out_t + 0.02, "maxDur": 1.10, "gain": 1.08})
-    audio_events.append({"kind": "el_sfx", "id": "eureka_chime", "t": eureka_out_t + 0.06, "gain": 0.70})
-    stamp_captions.append({"start": eureka_out_t + 0.03, "end": vo5_start - 0.06, "text": "EUREKA!!", "y": 1390, "accent": True})
+    audio_events.append({"kind": "clip", "id": "eureka_win", "t": round(eureka_out_t - 0.18, 4), "gain": 1.08})
+    audio_events.append({"kind": "el_sfx", "id": "eureka_chime", "t": eureka_out_t + 0.06, "gain": 0.68})
+    stamp_captions.append({"start": eureka_out_t + 0.03, "end": eureka_out_t + 1.54, "text": "EUREKA!!", "y": 1390, "accent": True})
 
     # =========================================================================
     # BEAT 6: FULL-BLEED SUNLIT NAPKIN END CARD + "PLAY FREE BETA NOW" (2.80s = 84f)

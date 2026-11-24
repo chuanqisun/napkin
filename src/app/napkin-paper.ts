@@ -173,6 +173,50 @@ export function nextNapkin(): NapkinSpec {
   return currentSpec;
 }
 
+let trailerNextNapkinQueue: Array<{
+  paletteIdx: number;
+  embossStyle: EmbossStyle;
+  borderStyle: BorderStyle;
+  cupRing: GhostCupRing | null;
+}> = [];
+
+export function queueTrailerNapkin(spec: {
+  paletteIdx: number;
+  embossStyle: EmbossStyle;
+  borderStyle: BorderStyle;
+  cupRing: GhostCupRing | null;
+}): void {
+  trailerNextNapkinQueue.push(spec);
+}
+
+export function setTrailerNapkin(opts: {
+  paletteIdx: number;
+  embossStyle: EmbossStyle;
+  borderStyle: BorderStyle;
+  cupRing: GhostCupRing | null;
+}): NapkinSpec {
+  const sp = createNapkinSpec();
+  const pal = NAPKIN_PALETTES[opts.paletteIdx % NAPKIN_PALETTES.length]!;
+  sp.paletteName = pal.name;
+  sp.baseHex = rgbToHex(pal.r, pal.g, pal.b);
+  sp.embossStyle = opts.embossStyle;
+  sp.borderStyle = opts.borderStyle;
+  sp.fiberMul = pal.fiberMul;
+  sp.fleckMul = pal.fleckMul;
+  sp.cupRing = opts.cupRing;
+  currentSpec = sp;
+  bgCache = null;
+  const wrapEl = document.getElementById('wrap');
+  if (wrapEl) wrapEl.style.background = currentSpec.baseHex;
+  return sp;
+}
+
+export function nextNapkinOrTrailer(): NapkinSpec {
+  const queued = trailerNextNapkinQueue.shift();
+  if (queued) return setTrailerNapkin(queued);
+  return nextNapkin();
+}
+
 function createNapkinPattern(ctx: CanvasRenderingContext2D, sp: NapkinSpec): CanvasPattern | null {
   const S = 320;
   const tile = document.createElement('canvas');

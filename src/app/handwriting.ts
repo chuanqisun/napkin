@@ -165,6 +165,7 @@ export function layoutWordsToStrokes(
 export interface HandwritingEngine {
   initWasmPool(): Promise<void>;
   nextReqId(): number;
+  isIdle(): boolean;
   synthesizeCursiveStreaming(
     text: string,
     cx: number,
@@ -428,6 +429,7 @@ export function createHandwritingEngine(onRenderNeeded: () => void): Handwriting
   return {
     initWasmPool,
     nextReqId: () => ++reqCounter,
+    isIdle: () => activeJobs.size === 0 && preReadyQueue.length === 0,
     synthesizeCursiveStreaming,
   };
 }

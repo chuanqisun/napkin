@@ -977,8 +977,8 @@ async function main() {
     cdp?.close();
     try { chrome?.kill('SIGKILL'); } catch {}
     try { vite?.kill('SIGKILL'); } catch {}
+    process.exit(0);
   }
-  process.exit(0);
 }
 
 main().catch(err => {

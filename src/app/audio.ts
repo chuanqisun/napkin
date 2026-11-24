@@ -109,6 +109,12 @@ export interface PlayClipOptions {
   volumeMul?: number;
 }
 
+export interface AudioEventRecord {
+  t: number;
+  type: 'clip' | 'crumple' | 'draw_start' | 'draw_stop' | 'type_pulse' | 'pen';
+  id: string;
+}
+
 export interface NapkinAudioController {
   initUI(): void;
   setPreset(id: PenId): void;
@@ -123,6 +129,7 @@ export interface NapkinAudioController {
   stopCompanion(): void;
   isVocalBusy(): boolean;
   toggleMute(): void;
+  setEventLogger?(fn: ((ev: AudioEventRecord) => void) | null): void;
   getState(): {
     muted: boolean;
     presetId: PenId;
@@ -138,6 +145,10 @@ export function createNapkinAudio(): NapkinAudioController {
   const CRUMPLE_VOL = 0.85;
   let activePresetId: PenId = 'ballpoint';
   let muted = false;
+  let eventLogger: ((ev: AudioEventRecord) => void) | null = null;
+  const logEv = (type: AudioEventRecord['type'], id: string) => {
+    eventLogger?.({ t: performance.now(), type, id });
+  };
 
   const currentPreset = (): DrawPresetSpec => DRAW_PRESETS[activePresetId];
 
@@ -466,6 +477,7 @@ export function createNapkinAudio(): NapkinAudioController {
 
   function startDraw(x: number, y: number): void {
     ensureContext();
+    logEv('draw_start', activePresetId);
     isDrawing = true;
     lastX = x;
     lastY = y;
@@ -506,6 +518,7 @@ export function createNapkinAudio(): NapkinAudioController {
 
   function stopDraw(): void {
     if (!isDrawing) return;
+    logEv('draw_stop', activePresetId);
     isDrawing = false;
     smoothedSpeed = 0;
     smoothedCurve = 0;
@@ -518,6 +531,7 @@ export function createNapkinAudio(): NapkinAudioController {
 
   function triggerTypingPulse(): void {
     if (muted || isDrawing) return;
+    logEv('type_pulse', activePresetId);
     const now = performance.now();
     const dt = Math.max(45, Math.min(600, now - lastTypeTime));
     lastTypeTime = now;
@@ -569,6 +583,7 @@ export function createNapkinAudio(): NapkinAudioController {
   function playCrumple(): void {
     stopCrumple();
     if (muted) return;
+    logEv('crumple', 'crumble');
     const ctx = ensureContext();
     if (ctx && crumbleBuffer && masterGain) {
       const src = ctx.createBufferSource();
@@ -661,6 +676,7 @@ export function createNapkinAudio(): NapkinAudioController {
     if (channel === 'vocal' && activeVocalSrc && !opts.interrupt) {
       return { played: false, duration: spec.dur };
     }
+    logEv('clip', id);
     const ctx = ensureContext();
     if (!ctx || !masterGain) return { played: false, duration: spec.dur };
     const buf = await getCompanionBuffer(id);
@@ -733,6 +749,7 @@ export function createNapkinAudio(): NapkinAudioController {
 
   function setPreset(id: PenId): void {
     activePresetId = id;
+    logEv('pen', id);
     configureVoice();
   }
 
@@ -750,6 +767,9 @@ export function createNapkinAudio(): NapkinAudioController {
     stopCompanion,
     isVocalBusy: () => !!activeVocalSrc,
     toggleMute,
+    setEventLogger: fn => {
+      eventLogger = fn;
+    },
     getState: () => ({
       muted,
       presetId: activePresetId,
