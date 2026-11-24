@@ -1,0 +1,50 @@
+{
+  "id": "vo_01a",
+  "text": "值一个亿的灵感。",
+  "model": "eleven_v4",
+  "voice_id": "LRBMsOzRzI614MxPFGIY",
+  "language": "zh",
+  "duration": 1.84,
+  "chars": [
+    {
+      "ch": "值",
+      "start": 0,
+      "end": 0.32
+    },
+    {
+      "ch": "一",
+      "start": 0.32,
+      "end": 0.48
+    },
+    {
+      "ch": "个",
+      "start": 0.48,
+      "end": 0.64
+    },
+    {
+      "ch": "亿",
+      "start": 0.64,
+      "end": 0.88
+    },
+    {
+      "ch": "的",
+      "start": 0.88,
+      "end": 0.96
+    },
+    {
+      "ch": "灵",
+      "start": 0.96,
+      "end": 1.2
+    },
+    {
+      "ch": "感",
+      "start": 1.2,
+      "end": 1.44
+    },
+    {
+      "ch": "。",
+      "start": 1.44,
+      "end": 1.84
+    }
+  ]
+}

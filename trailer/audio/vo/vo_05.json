@@ -1,0 +1,24 @@
+{
+  "id": "vo_05",
+  "text": "There it is.",
+  "model": "eleven_v4",
+  "voice_id": "LRBMsOzRzI614MxPFGIY",
+  "duration": 1.04,
+  "words": [
+    {
+      "word": "There",
+      "start": 0,
+      "end": 0.32
+    },
+    {
+      "word": "it",
+      "start": 0.36,
+      "end": 0.4
+    },
+    {
+      "word": "is.",
+      "start": 0.48,
+      "end": 1.04
+    }
+  ]
+}

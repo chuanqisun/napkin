@@ -1,0 +1,24 @@
+{
+  "id": "vo_02",
+  "text": "Step two: caffeine.",
+  "model": "eleven_v4",
+  "voice_id": "LRBMsOzRzI614MxPFGIY",
+  "duration": 2.08,
+  "words": [
+    {
+      "word": "Step",
+      "start": 0,
+      "end": 0.32
+    },
+    {
+      "word": "two:",
+      "start": 0.48,
+      "end": 1.2
+    },
+    {
+      "word": "caffeine.",
+      "start": 1.28,
+      "end": 2.08
+    }
+  ]
+}

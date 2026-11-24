@@ -1,0 +1,39 @@
+{
+  "id": "vo_04",
+  "text": "Good thing there's a whole stack.",
+  "model": "eleven_v4",
+  "voice_id": "LRBMsOzRzI614MxPFGIY",
+  "duration": 1.92,
+  "words": [
+    {
+      "word": "Good",
+      "start": 0,
+      "end": 0.24
+    },
+    {
+      "word": "thing",
+      "start": 0.32,
+      "end": 0.4
+    },
+    {
+      "word": "there's",
+      "start": 0.48,
+      "end": 0.64
+    },
+    {
+      "word": "a",
+      "start": 0.68,
+      "end": 0.72
+    },
+    {
+      "word": "whole",
+      "start": 0.8,
+      "end": 0.96
+    },
+    {
+      "word": "stack.",
+      "start": 1.04,
+      "end": 1.92
+    }
+  ]
+}

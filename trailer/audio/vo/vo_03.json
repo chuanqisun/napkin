@@ -1,0 +1,29 @@
+{
+  "id": "vo_03",
+  "text": "Step three... ruin it.",
+  "model": "eleven_v4",
+  "voice_id": "LRBMsOzRzI614MxPFGIY",
+  "duration": 2.48,
+  "words": [
+    {
+      "word": "Step",
+      "start": 0,
+      "end": 0.32
+    },
+    {
+      "word": "three...",
+      "start": 0.4,
+      "end": 1.44
+    },
+    {
+      "word": "ruin",
+      "start": 1.6,
+      "end": 1.92
+    },
+    {
+      "word": "it.",
+      "start": 2.04,
+      "end": 2.48
+    }
+  ]
+}

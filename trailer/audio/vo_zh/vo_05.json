@@ -1,0 +1,40 @@
+{
+  "id": "vo_05",
+  "text": "对，就是它！",
+  "model": "eleven_v4",
+  "voice_id": "LRBMsOzRzI614MxPFGIY",
+  "language": "zh",
+  "duration": 1.44,
+  "chars": [
+    {
+      "ch": "对",
+      "start": 0,
+      "end": 0.48
+    },
+    {
+      "ch": "，",
+      "start": 0.48,
+      "end": 0.64
+    },
+    {
+      "ch": "就",
+      "start": 0.64,
+      "end": 0.8
+    },
+    {
+      "ch": "是",
+      "start": 0.8,
+      "end": 0.96
+    },
+    {
+      "ch": "它",
+      "start": 0.96,
+      "end": 1.04
+    },
+    {
+      "ch": "！",
+      "start": 1.04,
+      "end": 1.44
+    }
+  ]
+}

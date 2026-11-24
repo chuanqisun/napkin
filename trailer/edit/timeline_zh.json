@@ -1,0 +1,328 @@
+{
+  "fps": 30,
+  "width": 1080,
+  "height": 1920,
+  "totalFrames": 745,
+  "totalDurationSec": 24.8333,
+  "musicCues": {
+    "splatCutStart": 9.933333333333334,
+    "musicResume": 15.8,
+    "eurekaHit": 20.3,
+    "endCardStart": 22.033333333333335
+  },
+  "audioEvents": [
+    {
+      "kind": "vo_zh",
+      "id": "vo_01a",
+      "t": 0.05,
+      "tempo": 1.05,
+      "dur": 1.7524
+    },
+    {
+      "kind": "el_sfx",
+      "id": "fountain_scratch",
+      "t": 0.08,
+      "maxDur": 0.65,
+      "gain": 0.58
+    },
+    {
+      "kind": "el_sfx",
+      "id": "fountain_scratch",
+      "t": 1.05,
+      "maxDur": 0.55,
+      "gain": 0.48
+    },
+    {
+      "kind": "vo_zh",
+      "id": "vo_01b",
+      "t": 1.8933,
+      "tempo": 1.04,
+      "dur": 2.9231
+    },
+    {
+      "kind": "el_sfx",
+      "id": "zoom_whoosh",
+      "t": 1.8533333333333333,
+      "gain": 0.3
+    },
+    {
+      "kind": "el_sfx",
+      "id": "ui_click",
+      "t": 2.0733333333333333,
+      "gain": 0.58
+    },
+    {
+      "kind": "el_sfx",
+      "id": "zoom_whoosh",
+      "t": 2.8533333333333335,
+      "gain": 0.38
+    },
+    {
+      "kind": "el_sfx",
+      "id": "ui_click",
+      "t": 2.9833333333333334,
+      "gain": 0.72
+    },
+    {
+      "kind": "el_sfx",
+      "id": "fountain_scratch",
+      "t": 4.913333333333333,
+      "maxDur": 0.8,
+      "gain": 0.6
+    },
+    {
+      "kind": "el_sfx",
+      "id": "fountain_scratch",
+      "t": 5.883333333333333,
+      "maxDur": 0.3,
+      "gain": 0.45
+    },
+    {
+      "kind": "el_sfx",
+      "id": "ui_click",
+      "t": 6.333333333333333,
+      "gain": 0.55
+    },
+    {
+      "kind": "clip",
+      "id": "sigh_block",
+      "t": 6.373333333333333,
+      "maxDur": 0.9,
+      "gain": 0.95
+    },
+    {
+      "kind": "vo_zh",
+      "id": "vo_02",
+      "t": 6.76,
+      "tempo": 1.14,
+      "dur": 2.2456
+    },
+    {
+      "kind": "el_sfx",
+      "id": "zoom_whoosh",
+      "t": 6.819999999999999,
+      "gain": 0.3
+    },
+    {
+      "kind": "el_sfx",
+      "id": "ui_click",
+      "t": 7.279999999999999,
+      "gain": 0.58
+    },
+    {
+      "kind": "el_sfx",
+      "id": "ui_click",
+      "t": 7.7,
+      "gain": 0.62
+    },
+    {
+      "kind": "clip",
+      "id": "cup_setdown",
+      "t": 8.28,
+      "gain": 1.1
+    },
+    {
+      "kind": "el_sfx",
+      "id": "ui_click",
+      "t": 8.9,
+      "gain": 0.5
+    },
+    {
+      "kind": "clip",
+      "id": "sip_ahhh",
+      "t": 9.040000000000001,
+      "maxDur": 0.92,
+      "gain": 1.2
+    },
+    {
+      "kind": "el_sfx",
+      "id": "coffee_splat",
+      "t": 9.933333333333334,
+      "gain": 0.95
+    },
+    {
+      "kind": "el_sfx",
+      "id": "zoom_whoosh",
+      "t": 9.933333333333334,
+      "gain": 0.42
+    },
+    {
+      "kind": "clip",
+      "id": "oops_drip",
+      "t": 10.153333333333334,
+      "gain": 1.1
+    },
+    {
+      "kind": "vo_zh",
+      "id": "vo_03",
+      "t": 11.23,
+      "tempo": 1.06,
+      "dur": 2.4906
+    },
+    {
+      "kind": "clip",
+      "id": "cup_setdown",
+      "t": 11.34,
+      "gain": 0.9
+    },
+    {
+      "kind": "clip",
+      "id": "cup_setdown",
+      "t": 12.7,
+      "gain": 1.05
+    },
+    {
+      "kind": "el_sfx",
+      "id": "zoom_whoosh",
+      "t": 12.7,
+      "gain": 0.34
+    },
+    {
+      "kind": "el_sfx",
+      "id": "ui_click",
+      "t": 14.064888888888888,
+      "gain": 0.65
+    },
+    {
+      "kind": "clip",
+      "id": "crumble",
+      "t": 14.434666666666667,
+      "gain": 1.32
+    },
+    {
+      "kind": "clip",
+      "id": "argh_stain",
+      "t": 14.548444444444444,
+      "gain": 0.96
+    },
+    {
+      "kind": "el_sfx",
+      "id": "zoom_whoosh",
+      "t": 15.174222222222221,
+      "gain": 0.34
+    },
+    {
+      "kind": "vo_zh",
+      "id": "vo_04",
+      "t": 15.82,
+      "tempo": 1.0,
+      "dur": 1.76
+    },
+    {
+      "kind": "crumble_fast",
+      "t": 15.9731,
+      "rate": 2.4,
+      "gain": 1.1
+    },
+    {
+      "kind": "crumble_fast",
+      "t": 16.6192,
+      "rate": 2.4,
+      "gain": 1.1
+    },
+    {
+      "kind": "crumble_fast",
+      "t": 17.1385,
+      "rate": 2.4,
+      "gain": 1.1
+    },
+    {
+      "kind": "clip",
+      "id": "cup_setdown",
+      "t": 17.46,
+      "gain": 1.05
+    },
+    {
+      "kind": "el_sfx",
+      "id": "ui_click",
+      "t": 17.720000000000002,
+      "gain": 0.52
+    },
+    {
+      "kind": "el_sfx",
+      "id": "ui_click",
+      "t": 17.92,
+      "gain": 0.58
+    },
+    {
+      "kind": "clip",
+      "id": "cup_setdown",
+      "t": 18.32,
+      "gain": 1.02
+    },
+    {
+      "kind": "el_sfx",
+      "id": "fountain_scratch",
+      "t": 18.479999999999997,
+      "maxDur": 0.42,
+      "gain": 0.45
+    },
+    {
+      "kind": "el_sfx",
+      "id": "fountain_scratch",
+      "t": 19.049999999999997,
+      "maxDur": 0.4,
+      "gain": 0.45
+    },
+    {
+      "kind": "clip",
+      "id": "aha_spark",
+      "t": 19.535467980295564,
+      "maxDur": 0.7,
+      "gain": 0.86
+    },
+    {
+      "kind": "el_sfx",
+      "id": "marker_sketch",
+      "t": 19.65,
+      "maxDur": 0.64,
+      "gain": 0.72
+    },
+    {
+      "kind": "vo_zh",
+      "id": "vo_05",
+      "t": 20.96,
+      "tempo": 1.18,
+      "dur": 1.2203
+    },
+    {
+      "kind": "el_sfx",
+      "id": "zoom_whoosh",
+      "t": 20.3,
+      "gain": 0.38
+    },
+    {
+      "kind": "clip",
+      "id": "eureka_win",
+      "t": 20.32,
+      "maxDur": 1.0,
+      "gain": 1.08
+    },
+    {
+      "kind": "el_sfx",
+      "id": "eureka_chime",
+      "t": 20.36,
+      "gain": 0.7
+    },
+    {
+      "kind": "vo_zh",
+      "id": "vo_06",
+      "t": 22.0733,
+      "tempo": 1.15,
+      "dur": 2.9217
+    },
+    {
+      "kind": "el_sfx",
+      "id": "fountain_scratch",
+      "t": 22.093333333333334,
+      "maxDur": 0.7,
+      "gain": 0.5
+    },
+    {
+      "kind": "clip",
+      "id": "cup_setdown",
+      "t": 24.553333333333335,
+      "gain": 0.85
+    }
+  ]
+}

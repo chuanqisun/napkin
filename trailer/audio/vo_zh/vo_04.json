@@ -1,0 +1,50 @@
+{
+  "id": "vo_04",
+  "text": "还好，纸巾管够。",
+  "model": "eleven_v4",
+  "voice_id": "LRBMsOzRzI614MxPFGIY",
+  "language": "zh",
+  "duration": 1.76,
+  "chars": [
+    {
+      "ch": "还",
+      "start": 0,
+      "end": 0.48
+    },
+    {
+      "ch": "好",
+      "start": 0.48,
+      "end": 0.64
+    },
+    {
+      "ch": "，",
+      "start": 0.64,
+      "end": 0.72
+    },
+    {
+      "ch": "纸",
+      "start": 0.72,
+      "end": 0.88
+    },
+    {
+      "ch": "巾",
+      "start": 0.88,
+      "end": 1.04
+    },
+    {
+      "ch": "管",
+      "start": 1.04,
+      "end": 1.2
+    },
+    {
+      "ch": "够",
+      "start": 1.2,
+      "end": 1.36
+    },
+    {
+      "ch": "。",
+      "start": 1.36,
+      "end": 1.76
+    }
+  ]
+}

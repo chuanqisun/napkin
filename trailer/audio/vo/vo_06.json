@@ -1,0 +1,39 @@
+{
+  "id": "vo_06",
+  "text": "Napkin. Play the free beta now.",
+  "model": "eleven_v4",
+  "voice_id": "LRBMsOzRzI614MxPFGIY",
+  "duration": 2.48,
+  "words": [
+    {
+      "word": "Napkin.",
+      "start": 0,
+      "end": 0.76
+    },
+    {
+      "word": "Play",
+      "start": 0.96,
+      "end": 1.12
+    },
+    {
+      "word": "the",
+      "start": 1.16,
+      "end": 1.2
+    },
+    {
+      "word": "free",
+      "start": 1.28,
+      "end": 1.44
+    },
+    {
+      "word": "beta",
+      "start": 1.52,
+      "end": 1.76
+    },
+    {
+      "word": "now.",
+      "start": 1.84,
+      "end": 2.48
+    }
+  ]
+}

@@ -1,0 +1,274 @@
+{
+  "fps": 30,
+  "width": 1080,
+  "height": 1920,
+  "totalFrames": 640,
+  "totalDurationSec": 21.3333,
+  "musicCues": {
+    "splatCutStart": 8.166666666666666,
+    "musicResume": 13.956666666666669,
+    "eurekaHit": 17.533333333333335,
+    "endCardStart": 18.933333333333334
+  },
+  "audioEvents": [
+    {
+      "kind": "click",
+      "t": 0.14,
+      "gain": 0.28
+    },
+    {
+      "kind": "click",
+      "t": 0.72,
+      "gain": 0.32
+    },
+    {
+      "kind": "whoosh",
+      "t": 1.15,
+      "dur": 0.16,
+      "gain": 0.18
+    },
+    {
+      "kind": "scratch",
+      "t": 1.3466666666666667,
+      "dur": 0.34,
+      "style": "fountain",
+      "gain": 0.28
+    },
+    {
+      "kind": "scratch",
+      "t": 2.0166666666666666,
+      "dur": 0.36,
+      "style": "fountain",
+      "gain": 0.22
+    },
+    {
+      "kind": "scratch",
+      "t": 2.5166666666666666,
+      "dur": 0.2,
+      "style": "fountain",
+      "gain": 0.24
+    },
+    {
+      "kind": "scratch",
+      "t": 2.8466666666666667,
+      "dur": 0.34,
+      "style": "fountain",
+      "gain": 0.28
+    },
+    {
+      "kind": "scratch",
+      "t": 3.486666666666667,
+      "dur": 0.28,
+      "style": "fountain",
+      "gain": 0.22
+    },
+    {
+      "kind": "scratch",
+      "t": 3.9466666666666668,
+      "dur": 0.3,
+      "style": "fountain",
+      "gain": 0.22
+    },
+    {
+      "kind": "click",
+      "t": 4.516666666666667,
+      "gain": 0.26
+    },
+    {
+      "kind": "clip",
+      "id": "sigh_block",
+      "t": 4.586666666666667,
+      "maxDur": 1.15,
+      "gain": 0.85
+    },
+    {
+      "kind": "whoosh",
+      "t": 5.093333333333333,
+      "dur": 0.14,
+      "gain": 0.2
+    },
+    {
+      "kind": "click",
+      "t": 5.453333333333333,
+      "gain": 0.3
+    },
+    {
+      "kind": "click",
+      "t": 5.8133333333333335,
+      "gain": 0.3
+    },
+    {
+      "kind": "clip",
+      "id": "cup_setdown",
+      "t": 6.283333333333333,
+      "gain": 1.05
+    },
+    {
+      "kind": "click",
+      "t": 6.886666666666667,
+      "gain": 0.25
+    },
+    {
+      "kind": "clip",
+      "id": "sip_ahhh",
+      "t": 7.116666666666666,
+      "maxDur": 1.08,
+      "gain": 1.15
+    },
+    {
+      "kind": "splat",
+      "t": 8.166666666666666,
+      "gain": 0.52
+    },
+    {
+      "kind": "whoosh",
+      "t": 8.166666666666666,
+      "dur": 0.13,
+      "gain": 0.28
+    },
+    {
+      "kind": "clip",
+      "id": "oops_drip",
+      "t": 8.406666666666666,
+      "gain": 1.05
+    },
+    {
+      "kind": "clip",
+      "id": "cup_setdown",
+      "t": 9.6,
+      "gain": 0.85
+    },
+    {
+      "kind": "clip",
+      "id": "cup_setdown",
+      "t": 10.58,
+      "gain": 0.98
+    },
+    {
+      "kind": "whoosh",
+      "t": 10.58,
+      "dur": 0.12,
+      "gain": 0.22
+    },
+    {
+      "kind": "click",
+      "t": 11.8,
+      "gain": 0.32
+    },
+    {
+      "kind": "clip",
+      "id": "crumble",
+      "t": 12.233333333333334,
+      "gain": 1.25
+    },
+    {
+      "kind": "clip",
+      "id": "argh_stain",
+      "t": 12.366666666666667,
+      "gain": 0.92
+    },
+    {
+      "kind": "whoosh",
+      "t": 13.133333333333335,
+      "dur": 0.22,
+      "gain": 0.26
+    },
+    {
+      "kind": "clip",
+      "id": "cup_setdown",
+      "t": 13.996666666666668,
+      "gain": 1.05
+    },
+    {
+      "kind": "click",
+      "t": 14.673333333333334,
+      "gain": 0.25
+    },
+    {
+      "kind": "click",
+      "t": 14.893333333333333,
+      "gain": 0.28
+    },
+    {
+      "kind": "clip",
+      "id": "cup_setdown",
+      "t": 15.313333333333333,
+      "gain": 0.98
+    },
+    {
+      "kind": "scratch",
+      "t": 15.5,
+      "dur": 0.24,
+      "style": "fountain",
+      "gain": 0.22
+    },
+    {
+      "kind": "scratch",
+      "t": 15.950000000000001,
+      "dur": 0.24,
+      "style": "fountain",
+      "gain": 0.22
+    },
+    {
+      "kind": "scratch",
+      "t": 16.4,
+      "dur": 0.22,
+      "style": "marker",
+      "gain": 0.26
+    },
+    {
+      "kind": "clip",
+      "id": "aha_spark",
+      "t": 16.667192118226602,
+      "maxDur": 0.75,
+      "gain": 0.8
+    },
+    {
+      "kind": "scratch",
+      "t": 16.95,
+      "dur": 0.28,
+      "style": "marker",
+      "gain": 0.3
+    },
+    {
+      "kind": "scratch",
+      "t": 17.28,
+      "dur": 0.22,
+      "style": "marker",
+      "gain": 0.32
+    },
+    {
+      "kind": "whoosh",
+      "t": 17.533333333333335,
+      "dur": 0.14,
+      "gain": 0.25
+    },
+    {
+      "kind": "clip",
+      "id": "eureka_win",
+      "t": 17.553333333333335,
+      "maxDur": 1.35,
+      "gain": 1.05
+    },
+    {
+      "kind": "scratch",
+      "t": 19.013333333333332,
+      "dur": 0.5,
+      "style": "fountain",
+      "gain": 0.26
+    },
+    {
+      "kind": "scratch",
+      "t": 19.553333333333335,
+      "dur": 0.22,
+      "style": "fountain",
+      "gain": 0.28
+    },
+    {
+      "kind": "clip",
+      "id": "cup_setdown",
+      "t": 20.783333333333335,
+      "gain": 0.78
+    }
+  ]
+}

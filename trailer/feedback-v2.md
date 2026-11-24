@@ -1,0 +1,4 @@
+- overall, good script. keep the narrative
+- fancy pen voice over should match timing with showing the pen menu, consider zooming into the menu for impact
+- the cursor hand should look nice, similar to mickey mouse's glove (maybe find only asset?)
+- "good think there is a whole stack", you should use speed up to play the "trash it" animation rapidly several times. (remember you can speed up arbitrarily)
