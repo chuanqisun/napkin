@@ -508,37 +508,98 @@ function renderStain(ctx, st, now) {
   ctx.globalCompositeOperation = 'multiply';
 
   if (st.kind === 'ring' && st.ringSpec) {
-    const rs = st.ringSpec, rad = rs.radius * (0.97 + 0.03 * spread), segs = 72;
+    // Continuous variable-width annulus ribbon (zero segmented overlaps -> zero nodes/dashes!)
+    const rs = st.ringSpec, rad = rs.radius * (0.97 + 0.03 * spread), segs = 108;
     const rnd = makeRng(st.seed ^ 0x777);
-    for (let pass = 0; pass < 3; pass++) {
-      for (let i = 0; i < segs; i++) {
-        const a0 = (i / segs) * 6.2831853, a1 = ((i + 1.2) / segs) * 6.2831853;
-        const heavy = 0.5 + 0.5 * Math.cos(a0 - rs.heavyAngle);
-        const gap = Math.max(0, Math.cos(a0 - rs.gapAngle) - 0.55);
-        const strength = Math.max(0.08, (0.28 + 0.72 * Math.pow(heavy, 1.5)) - gap * 0.9) * rs.intensity;
-        const wob = Math.sin(a0 * 4 + pass * 1.4) * 1.4 + Math.cos(a0 * 7 - rs.rot) * 0.85;
-        const rNow = Math.max(2, rad + (pass - 1) * (1.8 * spread) + wob);
-        const isEdge = pass !== 1;
-        const cr = isEdge ? rr : wr, cg = isEdge ? rg : wg, cb = isEdge ? rb : wb;
-        const alpha = (isEdge ? (0.14 + 0.16 * ringDry) : 0.16) * strength;
-        ctx.strokeStyle = `rgba(${cr},${cg},${cb},${alpha.toFixed(3)})`;
-        ctx.lineWidth = (pass === 1 ? 4.2 : 2.0) * (0.65 + 0.55 * heavy);
-        ctx.lineCap = 'round';
-        ctx.beginPath(); ctx.arc(st.x, st.y, rNow, a0, a1); ctx.stroke();
-      }
+
+    // Precompute smooth organic centerline & varying ribbon thickness around the full 360deg loop
+    const outerBleed = [], innerBleed = [];
+    const outerBody = [], innerBody = [];
+    const midLine = [];
+    for (let i = 0; i < segs; i++) {
+      const a = (i / segs) * 6.2831853;
+      // Smooth angular weight: thick pooled crescent on heavyAngle, tapering organically near gapAngle
+      const heavy = 0.5 + 0.5 * Math.cos(a - rs.heavyAngle);
+      const drySide = Math.max(0, Math.cos(a - rs.gapAngle));
+      const dryMask = Math.max(0.04, 1 - Math.pow(drySide, 2.4) * 0.94);
+
+      const wob = Math.sin(a * 3 + rs.rot) * 1.15
+                + Math.cos(a * 5 - rs.rot * 1.7) * 0.65
+                + Math.sin(a * 8 + rs.rot * 0.6) * 0.28;
+      const rMid = rad + wob;
+      const halfW = (1.1 + 3.4 * Math.pow(heavy, 1.5)) * dryMask * (0.65 + 0.35 * spread);
+      const bleedW = halfW * 1.95 + 1.4;
+
+      const ca = Math.cos(a), sa = Math.sin(a);
+      midLine.push({ x: st.x + ca * rMid, y: st.y + sa * rMid });
+      outerBody.push({ x: st.x + ca * (rMid + halfW), y: st.y + sa * (rMid + halfW) });
+      innerBody.push({ x: st.x + ca * Math.max(2, rMid - halfW), y: st.y + sa * Math.max(2, rMid - halfW) });
+      outerBleed.push({ x: st.x + ca * (rMid + bleedW), y: st.y + sa * (rMid + bleedW) });
+      innerBleed.push({ x: st.x + ca * Math.max(2, rMid - bleedW), y: st.y + sa * Math.max(2, rMid - bleedW) });
     }
-    const px = st.x + Math.cos(rs.heavyAngle) * rad, py = st.y + Math.sin(rs.heavyAngle) * rad;
-    const pool = ctx.createRadialGradient(px, py, 1, px, py, 14 * spread);
-    pool.addColorStop(0, `rgba(${rr},${rg},${rb},${(0.24 * rs.intensity).toFixed(3)})`);
+
+    const fillRibbon = (outerPts, innerPts, fillStyle) => {
+      const n = outerPts.length;
+      ctx.beginPath();
+      ctx.moveTo((outerPts[n - 1].x + outerPts[0].x) * 0.5, (outerPts[n - 1].y + outerPts[0].y) * 0.5);
+      for (let i = 0; i < n; i++) {
+        const p = outerPts[i], q = outerPts[(i + 1) % n];
+        ctx.quadraticCurveTo(p.x, p.y, (p.x + q.x) * 0.5, (p.y + q.y) * 0.5);
+      }
+      ctx.closePath();
+      // Trace inner loop in reverse so nonzero/evenodd winding carves a clean seamless ring
+      ctx.moveTo((innerPts[0].x + innerPts[n - 1].x) * 0.5, (innerPts[0].y + innerPts[n - 1].y) * 0.5);
+      for (let i = n - 1; i >= 0; i--) {
+        const p = innerPts[i], q = innerPts[(i - 1 + n) % n];
+        ctx.quadraticCurveTo(p.x, p.y, (p.x + q.x) * 0.5, (p.y + q.y) * 0.5);
+      }
+      ctx.closePath();
+      ctx.fillStyle = fillStyle;
+      ctx.fill('evenodd');
+    };
+
+    // Smooth directional gradient peaking at the heavy pooled side and fading gently toward the dry side
+    const hx = st.x + Math.cos(rs.heavyAngle) * rad, hy = st.y + Math.sin(rs.heavyAngle) * rad;
+    const ox = st.x - Math.cos(rs.heavyAngle) * rad, oy = st.y - Math.sin(rs.heavyAngle) * rad;
+
+    // 1. Soft porous capillary outer bleed ribbon
+    const bleedGrad = ctx.createLinearGradient(hx, hy, ox, oy);
+    bleedGrad.addColorStop(0, `rgba(${wr},${wg},${wb},${(0.14 * rs.intensity).toFixed(3)})`);
+    bleedGrad.addColorStop(0.55, `rgba(${wr},${wg},${wb},${(0.07 * rs.intensity).toFixed(3)})`);
+    bleedGrad.addColorStop(1, `rgba(${wr},${wg},${wb},${(0.025 * rs.intensity).toFixed(3)})`);
+    fillRibbon(outerBleed, innerBleed, bleedGrad);
+
+    // 2. Main translucent coffee/matcha ring body ribbon
+    const bodyGrad = ctx.createLinearGradient(hx, hy, ox, oy);
+    bodyGrad.addColorStop(0, `rgba(${wr},${wg},${wb},${(0.34 * rs.intensity).toFixed(3)})`);
+    bodyGrad.addColorStop(0.55, `rgba(${wr},${wg},${wb},${(0.20 * rs.intensity).toFixed(3)})`);
+    bodyGrad.addColorStop(1, `rgba(${wr},${wg},${wb},${(0.07 * rs.intensity).toFixed(3)})`);
+    fillRibbon(outerBody, innerBody, bodyGrad);
+
+    // 3. Continuous crisp outer & inner capillary drying rims (one smooth closed stroke each — zero nodes!)
+    const rimGrad = ctx.createLinearGradient(hx, hy, ox, oy);
+    rimGrad.addColorStop(0, `rgba(${rr},${rg},${rb},${((0.18 + 0.30 * ringDry) * rs.intensity).toFixed(3)})`);
+    rimGrad.addColorStop(0.55, `rgba(${rr},${rg},${rb},${((0.10 + 0.16 * ringDry) * rs.intensity).toFixed(3)})`);
+    rimGrad.addColorStop(1, `rgba(${rr},${rg},${rb},${((0.03 + 0.05 * ringDry) * rs.intensity).toFixed(3)})`);
+    ctx.strokeStyle = rimGrad;
+    ctx.lineWidth = 1.15;
+    traceClosed(ctx, outerBody); ctx.stroke();
+    ctx.lineWidth = 0.9;
+    traceClosed(ctx, innerBody); ctx.stroke();
+
+    // 4. Pooled teardrop smudge where liquid collected on the heavy edge
+    const pool = ctx.createRadialGradient(hx, hy, 1, hx, hy, 13 * spread);
+    pool.addColorStop(0, `rgba(${rr},${rg},${rb},${(0.22 * rs.intensity).toFixed(3)})`);
     pool.addColorStop(1, `rgba(${wr},${wg},${wb},0)`);
     ctx.fillStyle = pool;
-    ctx.beginPath(); ctx.arc(px, py, 14 * spread, 0, 6.2831853); ctx.fill();
+    ctx.beginPath(); ctx.arc(hx, hy, 13 * spread, 0, 6.2831853); ctx.fill();
 
+    // 5. Fine suspended powder flecks (subtle for coffee, richer for matcha)
     const speckN = Math.round(42 * d.speckDensity);
     ctx.fillStyle = `rgba(${sr},${sg},${sb},${(0.32 * ringDry).toFixed(3)})`;
     for (let i = 0; i < speckN; i++) {
-      const a = rnd() * 6.2831853, rj = rad + (rnd() - 0.5) * 6;
-      ctx.fillRect(st.x + Math.cos(a) * rj, st.y + Math.sin(a) * rj, 1.2, 1.2);
+      const a = rnd() * 6.2831853, rj = rad + (rnd() - 0.5) * 5;
+      ctx.fillRect(st.x + Math.cos(a) * rj, st.y + Math.sin(a) * rj, 1.15, 1.15);
     }
   }
 
