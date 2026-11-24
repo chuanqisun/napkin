@@ -285,6 +285,33 @@
     }
     .sb-check input { margin: 0; accent-color: #23201c; cursor: pointer; }
 
+    /* Compact Save format popover */
+    .save-wrap { position: relative; display: inline-flex; align-items: center; }
+    .save-menu {
+      position: absolute; top: calc(100% + 6px); right: 0;
+      min-width: 196px;
+      padding: 5px;
+      border-radius: 10px;
+      background: rgba(248, 243, 234, 0.98);
+      border: 1px solid rgba(92, 74, 52, 0.24);
+      box-shadow: 0 10px 26px rgba(45, 32, 18, 0.18), 0 2px 6px rgba(45, 32, 18, 0.08);
+      backdrop-filter: blur(10px);
+      display: none; flex-direction: column; gap: 2px;
+      z-index: 45;
+    }
+    .save-menu.open { display: flex; }
+    .save-menu button {
+      display: flex; flex-direction: column; align-items: flex-start; gap: 1px;
+      width: 100%; padding: 7px 9px;
+      border: none; border-radius: 7px;
+      background: transparent; color: var(--ink-ui);
+      text-align: left; cursor: pointer;
+      transition: background 0.12s ease;
+    }
+    .save-menu button:hover { background: var(--hover-bg); }
+    .save-menu .sm-title { font-size: 12px; font-weight: 600; }
+    .save-menu .sm-sub { font-size: 10.5px; color: var(--ink-muted); }
+
     /* Full-viewport overlay for the crumpled napkin ball throw animation */
     canvas#crumple-overlay {
       position: fixed; inset: 0; width: 100vw; height: 100dvh;
@@ -390,10 +417,22 @@
       <button id="clear-btn" class="tool-btn" onclick="clearAllWithCrumple()" title="Crumple & Toss Napkin">
         <svg viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/></svg>
       </button>
-      <button class="tool-btn" onclick="exportSVG()" title="Export SVG">
-        <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>
-        <span class="lbl">SVG</span>
-      </button>
+      <div class="save-wrap">
+        <button id="save-btn" class="tool-btn" onclick="toggleSaveMenu(event)" title="Save Napkin (PNG or SVG with Napkin Background)">
+          <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>
+          <span class="lbl">Save</span>
+        </button>
+        <div id="save-menu" class="save-menu" role="menu">
+          <button role="menuitem" onclick="exportPNG()">
+            <span class="sm-title">Save PNG Image</span>
+            <span class="sm-sub">2&times; HiDPI &middot; full napkin texture &amp; ink</span>
+          </button>
+          <button role="menuitem" onclick="exportSVG()">
+            <span class="sm-title">Save SVG Vector</span>
+            <span class="sm-sub">Editable vector ink + napkin background</span>
+          </button>
+        </div>
+      </div>
     </div>
   </header>
 
@@ -484,22 +523,22 @@ const DEFAULTS = {
 const WRITING_STYLES = {
   cursive: {
     label: 'Designer Cursive',
-    wasmStyleId: 9, bias: 1.05, dkMult: 1.06,
+    wasmStyleId: 9, bias: 0.95, dkMult: 1.00,
     hwSlant: -0.10, hwChaikin: 1, hwMinDist: 2.3, hwBaseW: 1.75, hwMinP: 0.22, hwVelDrop: 0.038, hwBaselinePull: 0.0
   },
   print: {
     label: 'Crisp Print',
-    wasmStyleId: 1, bias: 1.12, dkMult: 1.06,
+    wasmStyleId: 1, bias: 0.98, dkMult: 1.00,
     hwSlant: 0.02, hwChaikin: 0, hwMinDist: 2.6, hwBaseW: 1.62, hwMinP: 0.42, hwVelDrop: 0.022, hwBaselinePull: 0.08
   },
   upright: {
     label: 'Clean Upright',
-    wasmStyleId: 7, bias: 1.08, dkMult: 1.06,
+    wasmStyleId: 7, bias: 0.98, dkMult: 1.00,
     hwSlant: 0.0, hwChaikin: 1, hwMinDist: 2.4, hwBaseW: 1.72, hwMinP: 0.30, hwVelDrop: 0.030, hwBaselinePull: 0.14
   },
   journal: {
     label: 'Fast Journal',
-    wasmStyleId: 12, bias: 1.02, dkMult: 1.08,
+    wasmStyleId: 12, bias: 0.94, dkMult: 1.00,
     hwSlant: -0.20, hwChaikin: 2, hwMinDist: 2.2, hwBaseW: 1.58, hwMinP: 0.18, hwVelDrop: 0.048, hwBaselinePull: 0.0
   }
 };
@@ -1024,7 +1063,7 @@ const activeJobs = new Map();
 const preReadyQueue = [];
 
 async function cachedFetchBytes(url) {
-  const cacheName = 'napkin-ml-v6';
+  const cacheName = 'napkin-ml-v7-2';
   let cache = null;
   try { if ('caches' in window) cache = await caches.open(cacheName); } catch (_) {}
   if (cache) {
@@ -1097,9 +1136,14 @@ function layoutWordsToStrokes(wordBuffers, anchorX, anchorY, targetH, maxW, colo
       cur.push([x, y]);
       if (x < minX) minX = x; if (x > maxX) maxX = x;
       if (y < minY) minY = y; if (y > maxY) maxY = y;
-      if (eos > 0.5) { if (cur.length >= 2) segs.push(cur); cur = []; }
+      if (eos > 0.5) {
+        if (cur.length >= 2) segs.push(cur);
+        else if (cur.length === 1) segs.push([[cur[0][0] - 0.16, cur[0][1] - 0.16], [cur[0][0] + 0.16, cur[0][1] + 0.16]]);
+        cur = [];
+      }
     }
     if (cur.length >= 2) segs.push(cur);
+    else if (cur.length === 1) segs.push([[cur[0][0] - 0.16, cur[0][1] - 0.16], [cur[0][0] + 0.16, cur[0][1] + 0.16]]);
     if (!segs.length) {
       wordBoxes.push({ segs: [], minX: 0, w: 10 });
       totalRawW += 10 + wordGap;
@@ -1129,7 +1173,8 @@ function layoutWordsToStrokes(wordBuffers, anchorX, anchorY, targetH, maxW, colo
         const prev = seg[Math.max(0, idx - 1)];
         const sp = Math.hypot(px - prev[0], py - prev[1]);
         const t = idx / Math.max(1, seg.length - 1);
-        const taper = Math.min(1, t * 6, (1 - t) * 6);
+        // Preserve crisp firm pressure on short strokes (i/j dots, punctuation, quick t/f crossbars)
+        const taper = seg.length <= 3 ? 0.88 : Math.min(1, t * 6, (1 - t) * 6);
         const p = Math.max(0.24, Math.min(0.94, (0.88 - sp * 0.045) * (0.45 + 0.55 * taper)));
         const sx = curX + (px - wb.minX) * sc;
         const sy = anchorY + (py - cy) * sc;
@@ -3315,22 +3360,102 @@ function undo() {
   scheduleRender();
 }
 
-function exportSVG() {
+function toggleSaveMenu(e, forceState) {
+  if (e) e.stopPropagation();
+  const menu = document.getElementById('save-menu');
+  const btn = document.getElementById('save-btn');
+  if (!menu) return;
+  const open = typeof forceState === 'boolean' ? forceState : !menu.classList.contains('open');
+  menu.classList.toggle('open', open);
+  if (btn) btn.classList.toggle('active', open);
+}
+
+window.addEventListener('pointerdown', e => {
+  const menu = document.getElementById('save-menu');
+  if (menu && menu.classList.contains('open') && !e.target.closest('.save-wrap')) {
+    toggleSaveMenu(null, false);
+  }
+});
+
+function triggerDownload(url, filename) {
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  if (url.startsWith('blob:')) setTimeout(() => URL.revokeObjectURL(url), 4000);
+}
+
+function getCleanExportBg(w, h, scale = 2) {
+  if (!napkinSpec) nextNapkin();
+  return buildNapkinSheetCanvas(napkinSpec, w, h, scale);
+}
+
+function exportPNG() {
+  toggleSaveMenu(null, false);
+  if (typingTarget) commitTextBox();
   flushPendingNow();
   const r = canvas.getBoundingClientRect();
+  const w = Math.max(1, Math.round(r.width));
+  const h = Math.max(1, Math.round(r.height));
+  const scale = 2;
+
+  // Render clean 2x HiDPI composite (textured napkin background + ink strokes, no UI carets/handles)
+  const out = document.createElement('canvas');
+  out.width = w * scale;
+  out.height = h * scale;
+  const octx = out.getContext('2d');
+  const bg = getCleanExportBg(w, h, scale);
+  octx.drawImage(bg, 0, 0);
+
+  octx.setTransform(scale, 0, 0, scale, 0, 0);
+  for (const it of items) {
+    for (const s of it.strokes) drawPStroke(octx, s.pts, s.baseW, s.color, s.alpha);
+    if (it.textStrokes) for (const s of it.textStrokes) drawPStroke(octx, s.pts, s.baseW, s.color, s.alpha);
+  }
+
+  if (out.toBlob) {
+    out.toBlob(blob => {
+      if (blob) triggerDownload(URL.createObjectURL(blob), 'napkin-sketch.png');
+    }, 'image/png');
+  } else {
+    triggerDownload(out.toDataURL('image/png'), 'napkin-sketch.png');
+  }
+}
+
+function exportSVG() {
+  toggleSaveMenu(null, false);
+  if (typingTarget) commitTextBox();
+  flushPendingNow();
+  const r = canvas.getBoundingClientRect();
+  const w = Math.max(1, Math.round(r.width));
+  const h = Math.max(1, Math.round(r.height));
   const bgHex = napkinSpec ? napkinSpec.baseHex : '#e7dbc6';
-  const lines = [`<rect width="${r.width.toFixed(0)}" height="${r.height.toFixed(0)}" fill="${bgHex}"/>`];
+
+  // Embed full textured napkin sheet (embossing, fibers, creases, border, vignette) inside the SVG!
+  const bgCanvas = getCleanExportBg(w, h, 2);
+  const bgDataUrl = bgCanvas.toDataURL('image/jpeg', 0.93);
+
+  const inkLines = [];
   const emit = s => {
     for (let i = 1; i < s.pts.length; i++) {
       const [x0, y0, p0] = s.pts[i - 1], [x1, y1, p1] = s.pts[i];
       const p = (p0 + p1) * 0.5;
-      lines.push(`<line x1="${x0.toFixed(1)}" y1="${y0.toFixed(1)}" x2="${x1.toFixed(1)}" y2="${y1.toFixed(1)}" stroke="${s.color}" stroke-width="${(s.baseW * (0.28 + 1.12 * p)).toFixed(2)}" stroke-opacity="${((0.46 + 0.52 * p) * s.alpha).toFixed(2)}" stroke-linecap="round"/>`);
+      inkLines.push(`<line x1="${x0.toFixed(1)}" y1="${y0.toFixed(1)}" x2="${x1.toFixed(1)}" y2="${y1.toFixed(1)}" stroke="${s.color}" stroke-width="${(s.baseW * (0.28 + 1.12 * p)).toFixed(2)}" stroke-opacity="${((0.46 + 0.52 * p) * s.alpha).toFixed(2)}" stroke-linecap="round"/>`);
     }
   };
   for (const it of items) { it.strokes.forEach(emit); if (it.textStrokes) it.textStrokes.forEach(emit); }
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(new Blob([`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${r.width.toFixed(0)} ${r.height.toFixed(0)}">${lines.join('')}</svg>`], { type: 'image/svg+xml' }));
-  a.download = 'napkin-sketch-v7.svg'; a.click();
+
+  const svg = [
+    `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">`,
+    `<rect width="${w}" height="${h}" fill="${bgHex}"/>`,
+    `<image width="${w}" height="${h}" xlink:href="${bgDataUrl}" preserveAspectRatio="none"/>`,
+    `<g style="mix-blend-mode:multiply">${inkLines.join('')}</g>`,
+    `</svg>`
+  ].join('');
+
+  triggerDownload(URL.createObjectURL(new Blob([svg], { type: 'image/svg+xml;charset=utf-8' })), 'napkin-sketch.svg');
 }
 
 async function loadStarterScene() {

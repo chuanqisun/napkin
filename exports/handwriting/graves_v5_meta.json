@@ -1,5 +1,21 @@
 {
   "total_bytes": 4047452,
+  "tail_chars": 4,
+  "tail_texts": [
+    "nce ",
+    "mes ",
+    "ed. ",
+    "ish ",
+    "way ",
+    "A.D ",
+    "aid ",
+    " of ",
+    "ge, ",
+    "im, ",
+    "ing ",
+    "ind ",
+    " It "
+  ],
   "style_labels": [
     "9: Designer Cursive",
     "1: Crisp Print",

@@ -64,6 +64,10 @@
   (global $S_X2        (mut f32) (f32.const 1.0))
   (global $S_NACT      (mut i32) (i32.const 0))
   (global $RNG         (mut i32) (i32.const 42))
+  (global $S_AT_END    (mut i32) (i32.const 0))
+  (global $S_BACK_CNT  (mut i32) (i32.const 0))
+  (global $S_CUR_X     (mut f32) (f32.const 0.0))
+  (global $S_MAX_X     (mut f32) (f32.const -1e9))
 
   ;; Buffer pointer getters
   (func (export "get_weights_ptr") (result i32) (i32.const 131072))
@@ -503,6 +507,10 @@
     (global.set $S_X1 (f32.const 0.0))
     (global.set $S_X2 (f32.const 1.0))
     (global.set $RNG (select (local.get $seed) (i32.const 42) (i32.ne (local.get $seed) (i32.const 0))))
+    (global.set $S_AT_END (i32.const 0))
+    (global.set $S_BACK_CNT (i32.const 0))
+    (global.set $S_CUR_X (f32.const 0.0))
+    (global.set $S_MAX_X (f32.const -1e9))
   )
 
   ;; ==========================================================================
@@ -686,6 +694,26 @@
                      (f32.mul (f32.sqrt (f32.add (f32.sub (f32.const 1.0) (f32.mul (local.get $rho) (local.get $rho))) (f32.const 1e-6))) (local.get $z2))))))
         (local.set $eos (select (f32.const 1.0) (f32.const 0.0) (f32.lt (call $rng_u) (local.get $es))))
 
+        ;; Once the word body reached trailing space (S_AT_END=1) and this is a new pen-up jump (prev S_X2 > 0.5):
+        ;; allow delayed back-strokes over the word (t/f crossbars, i/j dots) to finish,
+        ;; and stop BEFORE emitting if the pen leaps forward into next-word space!
+        (if (i32.and (global.get $S_AT_END) (f32.gt (global.get $S_X2) (f32.const 0.5)))
+          (then
+            (if (i32.or
+                  (i32.ge_s (global.get $S_BACK_CNT) (i32.const 3))
+                  (i32.or
+                    (f32.gt (local.get $dx) (f32.const 3.5))
+                    (f32.gt (f32.add (global.get $S_CUR_X) (local.get $dx))
+                            (f32.add (global.get $S_MAX_X) (f32.const 1.5)))))
+              (then (global.set $S_DONE (i32.const 1)) (br $done_blk)))
+            (global.set $S_BACK_CNT (i32.add (global.get $S_BACK_CNT) (i32.const 1)))))
+
+        (global.set $S_CUR_X (f32.add (global.get $S_CUR_X) (local.get $dx)))
+        (if (i32.eqz (global.get $S_AT_END))
+          (then
+            (if (f32.gt (global.get $S_CUR_X) (global.get $S_MAX_X))
+              (then (global.set $S_MAX_X (global.get $S_CUR_X))))))
+
         (global.set $S_X0 (local.get $dx))
         (global.set $S_X1 (local.get $dy))
         (global.set $S_X2 (local.get $eos))
@@ -698,10 +726,14 @@
         (local.set $out_n (i32.add (local.get $out_n) (i32.const 1)))
         (global.set $S_STEP (i32.add (global.get $S_STEP) (i32.const 1)))
 
-        ;; Tight stop: finish cleanly on first pen lift once attention reaches trailing spaces (U - 3)
-        (if (i32.and (i32.ge_s (local.get $best_u) (i32.sub (local.get $U) (i32.const 3)))
-                     (f32.gt (local.get $eos) (f32.const 0.5)))
-          (then (global.set $S_DONE (i32.const 1)) (br $done_blk)))
+        ;; Input format: tail_text + word + "   \0" -> first trailing space is at U - 4.
+        ;; Arm S_AT_END on first pen lift at U - 4 (letting delayed crossbars/dots run); hard-stop at U - 2.
+        (if (f32.gt (local.get $eos) (f32.const 0.5))
+          (then
+            (if (i32.ge_s (local.get $best_u) (i32.sub (local.get $U) (i32.const 2)))
+              (then (global.set $S_DONE (i32.const 1)) (br $done_blk)))
+            (if (i32.ge_s (local.get $best_u) (i32.sub (local.get $U) (i32.const 4)))
+              (then (global.set $S_AT_END (i32.const 1))))))
 
         (br $step_loop)))
 

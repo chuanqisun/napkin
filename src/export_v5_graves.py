@@ -32,7 +32,10 @@ def quantize_rows_i8(M_out_in, pad_mult=16):
     return q, sc
 
 
-def compute_tight_primed(T, style):
+TAIL_CHARS = 4  # Keep last 4 chars of prime_text so Gaussian attention heads transition seamlessly
+
+
+def compute_primed_state(T, style):
     prime_text = style["text"] + " "
     oh = encode_text(prime_text + "    ")
     U = len(oh)
@@ -55,8 +58,11 @@ def compute_tight_primed(T, style):
         h2, c2 = lstm_step(np.concatenate([row, h1, w, h2]), c2, T["lstm2_W"], T["lstm2_b"])
         h3, c3 = lstm_step(np.concatenate([row, h2, w, h3]), c3, T["lstm3_W"], T["lstm3_b"])
 
-    shift = float(np.median(kappa)) - 0.35
-    return np.concatenate([h1, c1, h2, c2, h3, c3, kappa - shift, w]).astype(np.float32)
+    P = len(prime_text)
+    tail_text = prime_text[-TAIL_CHARS:]
+    kappa_shifted = kappa - float(P - TAIL_CHARS)
+    vec = np.concatenate([h1, c1, h2, c2, h3, c3, kappa_shifted, w]).astype(np.float32)
+    return vec, tail_text
 
 
 def main():
@@ -113,8 +119,10 @@ def main():
     add("gmm_WT", T["gmm_W"].T.astype(np.float32))
     add("gmm_b", T["gmm_b"].astype(np.float32))
 
-    # Tight primed states for all 13 styles
-    primed_mat = np.stack([compute_tight_primed(T, st) for st in styles], axis=0)
+    # Exact primed states + 4-char tail texts for all 13 styles
+    primed_pairs = [compute_primed_state(T, st) for st in styles]
+    primed_mat = np.stack([p[0] for p in primed_pairs], axis=0)
+    tail_texts = [p[1] for p in primed_pairs]
     add("primed", primed_mat)
 
     bin_path = os.path.join(OUT_DIR, "graves_v5.bin")
@@ -125,6 +133,8 @@ def main():
     meta_path = os.path.join(OUT_DIR, "graves_v5_meta.json")
     meta = {
         "total_bytes": cur,
+        "tail_chars": TAIL_CHARS,
+        "tail_texts": tail_texts,
         "style_labels": [
             "9: Designer Cursive",
             "1: Crisp Print",

@@ -17,6 +17,7 @@ const CHAR_MAP = new Map(ALPHABET.map((c, i) => [c, i]));
 let ex = null;
 let memI32 = null;
 let memF32 = null;
+let tailTexts = null;
 let cPtr = 0;
 let oPtr = 0;
 
@@ -44,6 +45,7 @@ self.onmessage = async (e) => {
       memU8.set(new Uint8Array(msg.binBuf), wPtr);
 
       const t = msg.meta.tensors;
+      tailTexts = Array.isArray(msg.meta.tail_texts) ? msg.meta.tail_texts : null;
       ex.init_offsets(
         t.l1_dq.byte_offset, t.l1_dsc.byte_offset, t.l1_cq.byte_offset, t.l1_csc.byte_offset, t.l1_b.byte_offset,
         t.l2_dq.byte_offset, t.l2_dsc.byte_offset, t.l2_cq.byte_offset, t.l2_csc.byte_offset, t.l2_b.byte_offset,
@@ -61,10 +63,11 @@ self.onmessage = async (e) => {
 
   if (msg.type === 'synth_word') {
     if (!ex) return;
-    const { reqId, wordIdx, word, styleId = 9, dkMult = 1.06, bias = 1.05, seed = 42, chunkSteps = 28 } = msg;
-    const idxs = encodeIndices(' ' + word + '  ');
+    const { reqId, wordIdx, word, styleId = 9, dkMult = 1.0, bias = 0.95, seed = 42, chunkSteps = 28 } = msg;
+    const prefix = (tailTexts && tailTexts[styleId]) ? tailTexts[styleId] : ' ';
+    const idxs = encodeIndices(prefix + word + '   ');
     memI32.set(idxs, cPtr >> 2);
-    const maxSteps = Math.max(110, word.length * 40);
+    const maxSteps = Math.max(160, word.length * 56);
 
     const t0 = performance.now();
     ex.init_session(styleId, idxs.length, bias, dkMult, maxSteps, seed >>> 0);
