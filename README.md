@@ -1,6 +1,6 @@
-# Napkin Sketch
+# Napkin
 
-A browser-first, zero-dependency digital café paper napkin for organic sketching and real-time neural handwriting. Draw rough shapes that snap into designer-grade vector ink, drag live hand-sketched boxes and arrows, type directly onto the paper in streaming cursive, choose real top-down pens with velocity-matched paper foley, order a coffee or matcha from the café menu, and crumple finished sheets away with 3D physics.
+Back of the napkin sketch for your next big idea, with creativity boost from a café drink menu!
 
 ![Napkin Sketch 8x Demo](docs/napkin_demo.gif)
 
