@@ -489,46 +489,110 @@ function chaikin(pts, iters = 1) {
 
 // ============================================================================
 // 3. PARALLEL WEB WORKER POOL FOR 60 FPS STREAMING WAT SIMD128 CURSIVE
+//    - Browser Cache API persistence (~15ms repeat loads!)
+//    - Worker #0 ready first (instant boot), Workers #1..2 spawned lazily
+//    - Queues any typing done during first-visit download & renders once ready
 // ============================================================================
-const POOL_SIZE = Math.min(4, Math.max(2, navigator.hardwareConcurrency || 3));
-const workers = [];
-let workersReady = 0;
+const POOL_SIZE = Math.min(3, Math.max(2, navigator.hardwareConcurrency || 2));
+const readyWorkers = [];
 let workerRR = 0;
 let reqCounter = 0;
 const activeJobs = new Map();
+const preReadyQueue = [];
+
+async function cachedFetchBytes(url, onProgress = null) {
+  const cacheName = 'napkin-ml-v6';
+  let cache = null;
+  try { if ('caches' in window) cache = await caches.open(cacheName); } catch (_) {}
+
+  if (cache) {
+    const hit = await cache.match(url);
+    if (hit) return await hit.arrayBuffer();
+  }
+
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`HTTP ${res.status} for ${url}`);
+  const total = parseInt(res.headers.get('content-length') || '0', 10);
+
+  if (!onProgress || !res.body || !total) {
+    const buf = await res.arrayBuffer();
+    if (cache) {
+      try { await cache.put(url, new Response(buf.slice(0), { headers: { 'Content-Type': res.headers.get('Content-Type') || 'application/octet-stream' } })); } catch (_) {}
+    }
+    return buf;
+  }
+
+  const reader = res.body.getReader();
+  const chunks = [];
+  let loaded = 0;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    chunks.push(value);
+    loaded += value.byteLength;
+    onProgress(loaded, total);
+  }
+  const merged = new Uint8Array(loaded);
+  let off = 0;
+  for (const ch of chunks) { merged.set(ch, off); off += ch.byteLength; }
+  if (cache) {
+    try { await cache.put(url, new Response(merged.buffer.slice(0), { headers: { 'Content-Type': 'application/octet-stream' } })); } catch (_) {}
+  }
+  return merged.buffer;
+}
+
+async function cachedFetchJSON(url) {
+  const buf = await cachedFetchBytes(url);
+  return JSON.parse(new TextDecoder().decode(buf));
+}
+
+function spawnOneWorker(wasmModule, binBuf, meta, isPrimary, t0, onPrimaryReady) {
+  const w = new Worker('hw_worker_v5.js');
+  w.onmessage = (e) => {
+    const msg = e.data;
+    if (msg.type === 'ready') {
+      readyWorkers.push(w);
+      if (isPrimary) {
+        const ms = (performance.now() - t0).toFixed(0);
+        setStatus(`Ready · ${getStyle().label} · single-click to type, 600ms multi-stroke (loaded in ${ms}ms)`);
+        // Flush any typing/labels queued while downloading!
+        while (preReadyQueue.length) {
+          const fn = preReadyQueue.shift();
+          fn();
+        }
+        if (onPrimaryReady) onPrimaryReady();
+      }
+    } else if (msg.type === 'chunk') {
+      onWorkerChunk(msg);
+    } else if (msg.type === 'error') {
+      setStatus('WASM error: ' + msg.error);
+    }
+  };
+  const copy = binBuf.slice(0);
+  w.postMessage({ type: 'init', wasmModule, binBuf: copy, meta }, [copy]);
+}
 
 async function initWasmPool() {
   const t0 = performance.now();
-  const [metaRes, binRes, wasmRes] = await Promise.all([
-    fetch('../exports/handwriting/graves_v5_meta.json'),
-    fetch('../exports/handwriting/graves_v5.bin'),
-    fetch('../exports/handwriting/graves_v5.wasm')
+  setStatus('Loading cursive engine...');
+  const [meta, wasmBytes, binBuf] = await Promise.all([
+    cachedFetchJSON('../exports/handwriting/graves_v5_meta.json'),
+    cachedFetchBytes('../exports/handwriting/graves_v5.wasm'),
+    cachedFetchBytes('../exports/handwriting/graves_v5.bin', (loaded, total) => {
+      const pct = Math.min(99, Math.round((loaded / total) * 100));
+      setStatus(`Loading cursive model ${pct}% (cached locally after first load · canvas already interactive)`);
+    })
   ]);
-  const [meta, binBuf, wasmBytes] = await Promise.all([metaRes.json(), binRes.arrayBuffer(), wasmRes.arrayBuffer()]);
   const wasmModule = await WebAssembly.compile(wasmBytes);
 
+  // Boot Worker #0 immediately so typing works right away, then lazily add parallel workers!
   return new Promise((resolve) => {
-    for (let i = 0; i < POOL_SIZE; i++) {
-      const w = new Worker('hw_worker_v5.js');
-      w.onmessage = (e) => {
-        const msg = e.data;
-        if (msg.type === 'ready') {
-          workersReady++;
-          if (workersReady === POOL_SIZE) {
-            const ms = (performance.now() - t0).toFixed(0);
-            setStatus(`Ready · ${getStyle().label} · single-click to type, 600ms multi-stroke (${POOL_SIZE}× WAT workers in ${ms}ms)`);
-            resolve();
-          }
-        } else if (msg.type === 'chunk') {
-          onWorkerChunk(msg);
-        } else if (msg.type === 'error') {
-          setStatus('WASM error: ' + msg.error);
-        }
-      };
-      const copy = binBuf.slice(0);
-      w.postMessage({ type: 'init', wasmModule, binBuf: copy, meta }, [copy]);
-      workers.push(w);
-    }
+    spawnOneWorker(wasmModule, binBuf, meta, true, t0, () => {
+      resolve();
+      for (let i = 1; i < POOL_SIZE; i++) {
+        setTimeout(() => spawnOneWorker(wasmModule, binBuf, meta, false, t0, null), i * 160);
+      }
+    });
   });
 }
 
@@ -659,11 +723,20 @@ function onWorkerChunk(msg) {
 function synthesizeCursiveStreaming(text, cx, cy, targetH, maxW, color, targetShape = null, textItem = null, styleKey = currentStyleKey, align = 'center') {
   const words = text.trim().split(/\s+/).filter(Boolean);
   const owner = targetShape || textItem;
-  if (!words.length || !workers.length) {
+  if (!words.length) {
     if (targetShape) { targetShape.textStrokes = []; targetShape.wordCache = []; }
     else if (textItem) { textItem.strokes = []; textItem.wordCache = []; }
     scheduleRender();
     return Promise.resolve();
+  }
+  if (!readyWorkers.length) {
+    // Queue and automatically synthesize the instant Worker #0 finishes booting!
+    return new Promise((resolve) => {
+      preReadyQueue.push(() => {
+        const liveText = targetShape ? (targetShape.label || '') : (textItem ? (textItem.text || '') : text);
+        synthesizeCursiveStreaming(liveText, cx, cy, targetH, maxW, color, targetShape, textItem, styleKey, align).then(resolve);
+      });
+    });
   }
   const st = WRITING_STYLES[styleKey] || getStyle();
   const reqId = ++reqCounter;
@@ -679,12 +752,10 @@ function synthesizeCursiveStreaming(text, cx, cy, targetH, maxW, color, targetSh
   for (let i = 0; i < words.length; i++) {
     const prev = prevCache[i];
     if (prev && prev.word === words[i] && prev.buf && prev.buf.length > 0) {
-      // Exact cache hit -> 0ms!
       wordBufs.push(prev.buf);
       wordSeeds.push(prev.seed);
       wordStarted.push(true);
     } else {
-      // Changed word (e.g. last word being typed): keep previous strokes as zero-flicker placeholder + stable seed!
       wordBufs.push(prev && prev.buf ? prev.buf : []);
       const seed = (prev && prev.seed) ? prev.seed : (Math.floor(Math.random() * 1e9) + 1);
       wordSeeds.push(seed);
@@ -706,21 +777,19 @@ function synthesizeCursiveStreaming(text, cx, cy, targetH, maxW, color, targetSh
     resolve: null
   };
 
-  // All words cached (e.g. user pressed Space or deleted trailing word) -> instant 0ms re-layout!
   if (toSynth.length === 0) {
     applyJobStrokes(job);
     setStatus(`${st.label}: "${text}" · instant (${words.length} cached)`);
     return Promise.resolve();
   }
 
-  // Immediately render any cached prefix words (and placeholders) so there's zero blink
   applyJobStrokes(job);
 
   return new Promise((resolve) => {
     job.resolve = resolve;
     activeJobs.set(reqId, job);
     toSynth.forEach(({ wordIdx, word, seed }) => {
-      const w = workers[(workerRR++) % workers.length];
+      const w = readyWorkers[(workerRR++) % readyWorkers.length];
       w.postMessage({
         type: 'synth_word',
         reqId,
@@ -962,37 +1031,10 @@ function recognizeMultiStroke(rawList) {
   return buildFreehandObject(rawList);
 }
 
-// Live re-apply selected writing style to BOTH handwritten & typed objects!
-async function onStyleChange() {
+// Writing style only applies to future typed & handwritten texts (existing texts stay untouched)
+function onStyleChange() {
   currentStyleKey = document.getElementById('style-sel').value;
-  const st = getStyle();
-  const tasks = [];
-  let hwUpdated = 0;
-
-  for (const it of items) {
-    if (it.kind === 'handwrite' && it.rawList) {
-      it.styleKey = currentStyleKey;
-      const res = styleHandwritingStrokes(it.rawList, currentStyleKey, it.color);
-      it.strokes = res.strokes;
-      it.x = res.bbox.x; it.y = res.bbox.y; it.w = res.bbox.w; it.h = res.bbox.h;
-      hwUpdated++;
-    } else if (it.kind === 'shape' && it.label) {
-      it.styleKey = currentStyleKey;
-      it.wordCache = []; // Force re-synth in new style
-      const maxW = it.shapeType === 'diamond' ? it.w * 0.62 : it.w * 0.84;
-      const targetH = Math.min(30, Math.max(18, it.h * 0.48));
-      tasks.push(synthesizeCursiveStreaming(it.label, it.x + it.w / 2, it.y + it.h / 2, targetH, maxW, it.color, it, null, currentStyleKey, 'center'));
-    } else if (it.kind === 'text' && it.text) {
-      it.styleKey = currentStyleKey;
-      it.wordCache = [];
-      const ax = it.anchorX !== undefined ? it.anchorX : it.x;
-      const ay = it.anchorY !== undefined ? it.anchorY : (it.y + it.h / 2);
-      tasks.push(synthesizeCursiveStreaming(it.text, ax, ay, 32, 640, it.color, null, it, currentStyleKey, 'left'));
-    }
-  }
-  scheduleRender();
-  if (tasks.length) await Promise.all(tasks);
-  setStatus(`Writing style → ${st.label}` + (hwUpdated ? ` (updated ${hwUpdated} handwritten)` : ''));
+  setStatus(`Writing style → ${getStyle().label} (applies to new text & handwriting)`);
 }
 
 // ============================================================================
@@ -1187,7 +1229,7 @@ function openTextBox(x, y, shapeRef = null, existingTextItem = null) {
     items.push(textItem);
   }
 
-  typingTarget = { x, y, shapeRef, textItem, wasNew, snapshot };
+  typingTarget = { x, y, shapeRef, textItem, wasNew, snapshot, openedAt: performance.now() };
 
   // Place compact typing pill neatly below the live handwritten baseline so it never obscures ink!
   const r = canvas.getBoundingClientRect();
@@ -1197,8 +1239,13 @@ function openTextBox(x, y, shapeRef = null, existingTextItem = null) {
   inlineInput.style.top = Math.max(10, Math.min(r.height - 36, pillY)) + 'px';
   inlineInput.style.display = 'block';
   inlineInput.value = shapeRef ? (shapeRef.label || '') : (textItem.text || '');
+  // Focus on next frame so pointerdown/mouseup never steals focus back to canvas!
   inlineInput.focus();
-  inlineInput.setSelectionRange(inlineInput.value.length, inlineInput.value.length);
+  requestAnimationFrame(() => {
+    if (!typingTarget) return;
+    inlineInput.focus();
+    inlineInput.setSelectionRange(inlineInput.value.length, inlineInput.value.length);
+  });
 
   caretVisible = true;
   caretTimer = setInterval(() => { caretVisible = !caretVisible; scheduleRender(); }, 530);
@@ -1282,7 +1329,14 @@ inlineInput.addEventListener('keydown', e => {
   if (e.key === 'Enter') { e.preventDefault(); commitTextBox(); }
   if (e.key === 'Escape') { e.preventDefault(); cancelTextBox(); }
 });
-inlineInput.addEventListener('blur', commitTextBox);
+inlineInput.addEventListener('blur', () => {
+  // Ignore synthetic blur fired during the same click that opened the box
+  if (typingTarget && (performance.now() - typingTarget.openedAt) < 160) {
+    inlineInput.focus();
+    return;
+  }
+  commitTextBox();
+});
 
 function getPos(e) {
   const r = canvas.getBoundingClientRect();
@@ -1300,16 +1354,18 @@ canvas.addEventListener('pointerdown', e => {
   if (typingTarget) { commitTextBox(); return; }
   const p = getPos(e);
   downPos = p;
-  canvas.setPointerCapture(e.pointerId);
 
-  // Single click in Text mode immediately opens live keystroke typing!
+  // Single click in Text mode immediately opens live keystroke typing (preventDefault stops canvas stealing focus!)
   if (tool === 'text') {
+    e.preventDefault();
     const hit = hitItem(p.x, p.y);
     if (hit && hit.kind === 'shape') openTextBox(hit.x + hit.w / 2, hit.y + hit.h / 2, hit, null);
     else if (hit && hit.kind === 'text') openTextBox(hit.anchorX ?? hit.x, hit.anchorY ?? (hit.y + hit.h / 2), null, hit);
     else openTextBox(p.x, p.y, null, null);
     return;
   }
+
+  canvas.setPointerCapture(e.pointerId);
 
   if (tool === 'move') {
     const hit = hitItem(p.x, p.y);
@@ -1500,10 +1556,17 @@ async function loadStarterScene() {
 
 window.addEventListener('resize', scheduleRender);
 
-Promise.all([
-  fetch('../exports/opensketch_residual_vae.json').then(r => r.json()).then(j => { VAE = j; }),
-  initWasmPool()
-]).then(() => loadStarterScene());
+// 1. Render textured kraft napkin IMMEDIATELY on frame 1 (0ms!)
+scheduleRender();
+
+// 2. Load tiny OpenSketch VAE (cached!) -> draw starter shapes immediately without waiting for cursive model
+cachedFetchJSON('../exports/opensketch_residual_vae.json').then(j => {
+  VAE = j;
+  loadStarterScene();
+});
+
+// 3. Load & cache WASM cursive engine in background (Worker #0 boots first and flushes queued labels!)
+initWasmPool();
 </script>
 </body>
 </html>
