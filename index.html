@@ -4,6 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <title>Napkin Sketch</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%231d3557' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 19l7-7 3 3-7 7-3-3z'/%3E%3Cpath d='M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z'/%3E%3Cpath d='M2 2l7.586 7.586'/%3E%3C/svg%3E" />
   <script type="module">
     // Conditional polyfills per Chrome Modern Web Guidance (only loaded when native support is missing)
     if (!Object.hasOwn(HTMLElement.prototype, 'popover')) {
@@ -393,7 +394,7 @@
 
     <div class="group">
       <button id="pen-btn" class="tool-btn" commandfor="pen-menu" command="toggle-popover" title="Choose Pen & Handwriting Style">
-        <img id="pen-btn-img" class="pen-mini" src="../docs/vfx/pens/ballpoint.webp" alt="Selected pen" />
+        <img id="pen-btn-img" class="pen-mini" src="./docs/vfx/pens/ballpoint.webp" alt="Selected pen" />
         <span class="lbl" id="pen-btn-lbl">Ballpoint</span>
       </button>
 
@@ -498,6 +499,11 @@ const DEFAULTS = {
 };
 
 const WRITING_STYLES = {
+  upright: {
+    label: 'Clean Upright',
+    wasmStyleId: 7, bias: 0.98, dkMult: 1.00,
+    hwSlant: 0.0, hwChaikin: 1, hwMinDist: 2.4, hwBaseW: 1.72, hwMinP: 0.30, hwVelDrop: 0.030, hwBaselinePull: 0.14
+  },
   cursive: {
     label: 'Designer Cursive',
     wasmStyleId: 9, bias: 0.95, dkMult: 1.00,
@@ -508,11 +514,6 @@ const WRITING_STYLES = {
     wasmStyleId: 1, bias: 0.98, dkMult: 1.00,
     hwSlant: 0.02, hwChaikin: 0, hwMinDist: 2.6, hwBaseW: 1.62, hwMinP: 0.42, hwVelDrop: 0.022, hwBaselinePull: 0.08
   },
-  upright: {
-    label: 'Clean Upright',
-    wasmStyleId: 7, bias: 0.98, dkMult: 1.00,
-    hwSlant: 0.0, hwChaikin: 1, hwMinDist: 2.4, hwBaseW: 1.72, hwMinP: 0.30, hwVelDrop: 0.030, hwBaselinePull: 0.14
-  },
   journal: {
     label: 'Fast Journal',
     wasmStyleId: 12, bias: 0.94, dkMult: 1.00,
@@ -521,18 +522,18 @@ const WRITING_STYLES = {
 };
 
 const PEN_TYPES = [
-  { id: 'ballpoint', name: 'Ballpoint Pen', short: 'Ballpoint', hint: 'Smooth crisp roll', img: '../docs/vfx/pens/ballpoint.webp' },
-  { id: 'pencil',    name: '2B Graphite Pencil', short: '2B Pencil', hint: 'Soft dry paper tooth', img: '../docs/vfx/pens/pencil.webp' },
-  { id: 'marker',    name: 'Felt-Tip Marker', short: 'Marker', hint: 'Bold translucent ink', img: '../docs/vfx/pens/marker.webp' },
-  { id: 'fountain',  name: 'Fountain Pen', short: 'Fountain', hint: 'Thick/thin calligraphy nib', img: '../docs/vfx/pens/fountain.webp' },
-  { id: 'mech',      name: '0.5mm Mechanical', short: '0.5mm', hint: 'Fine precision lead', img: '../docs/vfx/pens/mech.webp' }
+  { id: 'ballpoint', name: 'Ballpoint Pen', short: 'Ballpoint', hint: 'Smooth crisp roll', img: './docs/vfx/pens/ballpoint.webp' },
+  { id: 'pencil',    name: '2B Graphite Pencil', short: '2B Pencil', hint: 'Soft dry paper tooth', img: './docs/vfx/pens/pencil.webp' },
+  { id: 'marker',    name: 'Felt-Tip Marker', short: 'Marker', hint: 'Bold translucent ink', img: './docs/vfx/pens/marker.webp' },
+  { id: 'fountain',  name: 'Fountain Pen', short: 'Fountain', hint: 'Thick/thin calligraphy nib', img: './docs/vfx/pens/fountain.webp' },
+  { id: 'mech',      name: '0.5mm Mechanical', short: '0.5mm', hint: 'Fine precision lead', img: './docs/vfx/pens/mech.webp' }
 ];
 
 let currentColor = '#1b3d8f';
-let currentStyleKey = 'cursive';
+let currentStyleKey = 'upright';
 let currentPenId = 'ballpoint';
 
-function getStyle() { return WRITING_STYLES[currentStyleKey] || WRITING_STYLES.cursive; }
+function getStyle() { return WRITING_STYLES[currentStyleKey] || WRITING_STYLES.upright; }
 
 function restoreFocus(sel) {
   requestAnimationFrame(() => { document.querySelector(sel)?.focus(); });
@@ -1158,7 +1159,7 @@ async function cachedFetchJSON(url) {
 }
 
 function spawnOneWorker(wasmModule, binBuf, meta, isPrimary, onPrimaryReady) {
-  const w = new Worker('hw_worker_v5.js');
+  const w = new Worker('./web/hw_worker_v5.js');
   w.onmessage = (e) => {
     const msg = e.data;
     if (msg.type === 'ready') {
@@ -1177,9 +1178,9 @@ function spawnOneWorker(wasmModule, binBuf, meta, isPrimary, onPrimaryReady) {
 
 async function initWasmPool() {
   const [meta, wasmBytes, binBuf] = await Promise.all([
-    cachedFetchJSON('../exports/handwriting/graves_v5_meta.json'),
-    cachedFetchBytes('../exports/handwriting/graves_v5.wasm'),
-    cachedFetchBytes('../exports/handwriting/graves_v5.bin')
+    cachedFetchJSON('./exports/handwriting/graves_v5_meta.json'),
+    cachedFetchBytes('./exports/handwriting/graves_v5.wasm'),
+    cachedFetchBytes('./exports/handwriting/graves_v5.bin')
   ]);
   const wasmModule = await WebAssembly.compile(wasmBytes);
   return new Promise((resolve) => {
@@ -1720,10 +1721,10 @@ const NapkinAudio = (() => {
   function preloadCrumple() {
     if (crumbleFetchPromise) return crumbleFetchPromise;
     try {
-      fallbackCrumpleEl = new Audio('./crumble.mp3');
+      fallbackCrumpleEl = new Audio('./web/crumble.mp3');
       fallbackCrumpleEl.preload = 'auto';
     } catch (_) {}
-    crumbleFetchPromise = fetch('./crumble.mp3')
+    crumbleFetchPromise = fetch('./web/crumble.mp3')
       .then(res => res.ok ? res.arrayBuffer() : null)
       .then(buf => {
         crumbleRawBytes = buf;
@@ -2027,7 +2028,12 @@ const NapkinAudio = (() => {
     if (!crumbleRawBytes) await preloadCrumple();
     if (actx && crumbleRawBytes && !crumbleBuffer) await decodeCrumple();
     if (actx && actx.state === 'suspended') {
-      try { await actx.resume(); } catch (_) {}
+      try {
+        await Promise.race([
+          actx.resume(),
+          new Promise(r => setTimeout(r, 120))
+        ]);
+      } catch (_) {}
     }
   }
 
@@ -2066,20 +2072,20 @@ const NapkinAudio = (() => {
 
   // Curated ElevenLabs companion clips (lazy prefetched, calibrated loudness)
   const COMPANION_CLIPS = {
-    hmm_pause:      { file: './sfx/hmm_pause.mp3',      gain: 0.72, dur: 1.76 },
-    mm_ponder:      { file: './sfx/mm_ponder.mp3',      gain: 1.40, dur: 2.00 },
-    sigh_block:     { file: './sfx/sigh_block.mp3',     gain: 0.88, dur: 2.00 },
-    ooo_intrigued:  { file: './sfx/ooo_intrigued.mp3',  gain: 0.40, dur: 1.48 },
-    aha_spark:      { file: './sfx/aha_spark.mp3',      gain: 0.54, dur: 1.36 },
-    eureka_win:     { file: './sfx/eureka_win.mp3',     gain: 0.46, dur: 2.08 },
-    sip_coffee:     { file: './sfx/sip_coffee.mp3',     gain: 2.35, dur: 2.00 },
-    swallow_liquid: { file: './sfx/swallow_liquid.mp3', gain: 2.45, dur: 1.76 },
-    sip_ahhh:       { file: './sfx/sip_ahhh.mp3',       gain: 1.75, dur: 2.48 },
-    cup_setdown:    { file: './sfx/cup_setdown.mp3',    gain: 0.80, dur: 1.20 },
-    refill_pour:    { file: './sfx/refill_pour.mp3',    gain: 2.45, dur: 2.40 },
-    coffee_drip:    { file: './sfx/coffee_drip.mp3',    gain: 3.50, dur: 1.08 },
-    oops_drip:      { file: './sfx/oops_drip.mp3',      gain: 0.54, dur: 0.88 },
-    argh_stain:     { file: './sfx/argh_stain.mp3',     gain: 0.48, dur: 1.36 }
+    hmm_pause:      { file: './web/sfx/hmm_pause.mp3',      gain: 0.72, dur: 1.76 },
+    mm_ponder:      { file: './web/sfx/mm_ponder.mp3',      gain: 1.40, dur: 2.00 },
+    sigh_block:     { file: './web/sfx/sigh_block.mp3',     gain: 0.88, dur: 2.00 },
+    ooo_intrigued:  { file: './web/sfx/ooo_intrigued.mp3',  gain: 0.40, dur: 1.48 },
+    aha_spark:      { file: './web/sfx/aha_spark.mp3',      gain: 0.54, dur: 1.36 },
+    eureka_win:     { file: './web/sfx/eureka_win.mp3',     gain: 0.46, dur: 2.08 },
+    sip_coffee:     { file: './web/sfx/sip_coffee.mp3',     gain: 2.35, dur: 2.00 },
+    swallow_liquid: { file: './web/sfx/swallow_liquid.mp3', gain: 2.45, dur: 1.76 },
+    sip_ahhh:       { file: './web/sfx/sip_ahhh.mp3',       gain: 1.75, dur: 2.48 },
+    cup_setdown:    { file: './web/sfx/cup_setdown.mp3',    gain: 0.80, dur: 1.20 },
+    refill_pour:    { file: './web/sfx/refill_pour.mp3',    gain: 2.45, dur: 2.40 },
+    coffee_drip:    { file: './web/sfx/coffee_drip.mp3',    gain: 3.50, dur: 1.08 },
+    oops_drip:      { file: './web/sfx/oops_drip.mp3',      gain: 0.54, dur: 0.88 },
+    argh_stain:     { file: './web/sfx/argh_stain.mp3',     gain: 0.48, dur: 1.36 }
   };
   const clipRaw = new Map();
   const clipBuf = new Map();
@@ -2265,7 +2271,7 @@ const NapkinCup = (() => {
     angVel: 0,
     lift: 0,
     targetLift: 0,
-    // 'idle' | 'entering' | 'replacing_out' | 'exiting' | 'drinking' | 'returning' | 'refilling' | 'crumple_aside'
+    // 'idle' | 'entering' | 'replacing_out' | 'exiting' | 'drinking' | 'returning' | 'refilling' | 'crumple_lift' | 'crumple_wait' | 'crumple_return'
     phase: 'idle',
     phaseStart: 0,
     drinkDurMs: 2100,
@@ -2274,8 +2280,11 @@ const NapkinCup = (() => {
     dripFired: false,
     setdownPlayed: false,
     refillFrom: 0.05,
+    refillProgress: null,
     stains: []
   };
+
+  let crumpleLiftResolvers = [];
 
   // Press-and-hold vs Click interaction state
   const HOLD_MS = 185;
@@ -2305,8 +2314,9 @@ const NapkinCup = (() => {
   const REPLACE_OUT_MS = 350;
   const EXIT_MS = 420;
   const RETURN_MS = 440;
-  const REFILL_MS = 2350;
-  const CRUMPLE_ASIDE_MS = 1480;
+  const REFILL_MS = 2250;
+  const CRUMPLE_LIFT_MS = 380;
+  const CRUMPLE_RETURN_MS = 440;
 
   function scheduleTimer(fn, ms) {
     const t = setTimeout(() => {
@@ -2328,7 +2338,7 @@ const NapkinCup = (() => {
         const key = `${dId}_${s.key}`;
         const img = new Image();
         img.onload = () => { loadedCups++; scheduleRender(); };
-        img.src = `../docs/vfx/cups/${key}.webp`;
+        img.src = `./docs/vfx/cups/${key}.webp`;
         cupImages.set(key, img);
       }
     }
@@ -2466,17 +2476,27 @@ const NapkinCup = (() => {
     return st;
   }
 
+  function randomNapkinDripPos(w, h) {
+    // Pick a natural random position anywhere across the napkin interior
+    const padX = Math.max(48, Math.min(96, w * 0.10));
+    const padY = Math.max(48, Math.min(84, h * 0.10));
+    return {
+      x: padX + Math.random() * Math.max(20, w - padX * 2),
+      y: padY + Math.random() * Math.max(20, h - padY * 2)
+    };
+  }
+
   function addStain(kind, x, y, scale = 1.0) {
     const { w, h } = getStageSize();
     const bowlR = getCupSizePx(w, h) * 0.335;
     if (kind === 'trail') {
-      const ang = Math.PI * (0.35 + Math.random() * 0.9);
+      const ang = Math.random() * 6.2831853;
       const count = 3 + (Math.random() < 0.48 ? 1 : 0);
       for (let i = 0; i < count; i++) {
-        const d = i * (18 + Math.random() * 13);
-        const p = Math.sin(i * 1.15) * 8.5;
-        const sx = Math.max(24, Math.min(w - 24, x + Math.cos(ang) * d - Math.sin(ang) * p));
-        const sy = Math.max(24, Math.min(h - 24, y + Math.sin(ang) * d + Math.cos(ang) * p));
+        const d = i * (20 + Math.random() * 14);
+        const p = Math.sin(i * 1.15) * 9.0;
+        const sx = Math.max(28, Math.min(w - 28, x + Math.cos(ang) * d - Math.sin(ang) * p));
+        const sy = Math.max(28, Math.min(h - 28, y + Math.sin(ang) * d + Math.cos(ang) * p));
         const st = createStain('drip', sx, sy, state.drinkId, scale * (0.98 - i * 0.16), bowlR);
         st.tStart = performance.now() + i * 90;
         state.stains.push(st);
@@ -2625,7 +2645,7 @@ const NapkinCup = (() => {
   }
 
   // ---- Top-Down Cup Sprite Renderer ----
-  function drawCupSprite(ctx, cx, cy, sz, drinkId, volume, rotDeg, lift, opacity) {
+  function drawCupSprite(ctx, cx, cy, sz, drinkId, volume, rotDeg, lift, opacity, directRefillT = null) {
     if (opacity <= 0.005) return;
     const rad = (rotDeg * Math.PI) / 180;
     const scale = 1 + lift * 0.16;
@@ -2671,29 +2691,44 @@ const NapkinCup = (() => {
     ctx.restore();
     ctx.restore();
 
-    const v = Math.max(0.05, Math.min(1.0, volume));
-    let hi = VOLUME_STOPS[0], lo = VOLUME_STOPS[VOLUME_STOPS.length - 1];
-    for (let i = 0; i < VOLUME_STOPS.length - 1; i++) {
-      if (v <= VOLUME_STOPS[i].val && v >= VOLUME_STOPS[i + 1].val) {
-        hi = VOLUME_STOPS[i]; lo = VOLUME_STOPS[i + 1]; break;
-      }
-    }
-    const t = Math.max(0, Math.min(1, (hi.val - v) / Math.max(0.001, hi.val - lo.val)));
-    const imgHi = cupImages.get(`${drinkId}_${hi.key}`);
-    const imgLo = cupImages.get(`${drinkId}_${lo.key}`);
-
     ctx.save();
     ctx.translate(cx, cy);
     ctx.rotate(rad);
     ctx.scale(scale, scale);
     const half = sz * 0.5;
-    if (imgHi && imgHi.complete && imgHi.naturalWidth) {
-      ctx.globalAlpha = opacity;
-      ctx.drawImage(imgHi, -half, -half, sz, sz);
-    }
-    if (t > 0.005 && imgLo && imgLo.complete && imgLo.naturalWidth) {
-      ctx.globalAlpha = opacity * t;
-      ctx.drawImage(imgLo, -half, -half, sz, sz);
+
+    if (directRefillT !== null) {
+      // Single direct refill animation: smooth 0% (empty/dregs) -> 100% (fresh full) skipping drank-down 30%/65% stops
+      const imgEmpty = cupImages.get(`${drinkId}_05`);
+      const imgFull = cupImages.get(`${drinkId}_100`);
+      const fillT = Math.max(0, Math.min(1, directRefillT));
+      if (imgEmpty && imgEmpty.complete && imgEmpty.naturalWidth) {
+        ctx.globalAlpha = opacity;
+        ctx.drawImage(imgEmpty, -half, -half, sz, sz);
+      }
+      if (fillT > 0.004 && imgFull && imgFull.complete && imgFull.naturalWidth) {
+        ctx.globalAlpha = opacity * fillT;
+        ctx.drawImage(imgFull, -half, -half, sz, sz);
+      }
+    } else {
+      const v = Math.max(0.05, Math.min(1.0, volume));
+      let hi = VOLUME_STOPS[0], lo = VOLUME_STOPS[VOLUME_STOPS.length - 1];
+      for (let i = 0; i < VOLUME_STOPS.length - 1; i++) {
+        if (v <= VOLUME_STOPS[i].val && v >= VOLUME_STOPS[i + 1].val) {
+          hi = VOLUME_STOPS[i]; lo = VOLUME_STOPS[i + 1]; break;
+        }
+      }
+      const t = Math.max(0, Math.min(1, (hi.val - v) / Math.max(0.001, hi.val - lo.val)));
+      const imgHi = cupImages.get(`${drinkId}_${hi.key}`);
+      const imgLo = cupImages.get(`${drinkId}_${lo.key}`);
+      if (imgHi && imgHi.complete && imgHi.naturalWidth) {
+        ctx.globalAlpha = opacity;
+        ctx.drawImage(imgHi, -half, -half, sz, sz);
+      }
+      if (t > 0.005 && imgLo && imgLo.complete && imgLo.naturalWidth) {
+        ctx.globalAlpha = opacity * t;
+        ctx.drawImage(imgLo, -half, -half, sz, sz);
+      }
     }
     ctx.restore();
   }
@@ -2747,23 +2782,28 @@ const NapkinCup = (() => {
       drawY = y + inv * dy * 0.65;
       drawLift = inv * 2.05;
       drawOpacity = Math.min(1, Math.pow(t, 0.65));
-    } else if (state.phase === 'crumple_aside') {
-      const elapsed = now - state.phaseStart;
+    } else if (state.phase === 'crumple_lift') {
+      const t = Math.min(1, (now - state.phaseStart) / CRUMPLE_LIFT_MS);
+      const ease = t * t * (3 - 2 * t);
       const { dx, dy } = exitOffset(x, y, w, h, sz);
-      if (elapsed < 320) {
-        const t = elapsed / 320, ease = t * t * (3 - 2 * t);
-        drawX = x + ease * dx * 0.68; drawY = y + ease * dy * 0.65;
-        drawLift = ease * 1.80; drawOpacity = Math.max(0, 1 - Math.pow(t, 1.5));
-      } else if (elapsed < CRUMPLE_ASIDE_MS - 360) {
-        drawOpacity = 0;
-      } else {
-        const t = Math.min(1, (elapsed - (CRUMPLE_ASIDE_MS - 360)) / 360);
-        const inv = 1 - (1 - Math.pow(1 - t, 3));
-        drawX = x + inv * dx * 0.68; drawY = y + inv * dy * 0.65;
-        drawLift = inv * 1.80; drawOpacity = Math.min(1, Math.pow(t, 0.65));
-      }
+      drawX = x + ease * dx * 0.72;
+      drawY = y + ease * dy * 0.65;
+      drawLift = Math.max(state.lift, ease * 1.95);
+      drawOpacity = Math.max(0, 1 - Math.pow(t, 1.35));
+    } else if (state.phase === 'crumple_wait') {
+      drawOpacity = 0;
+    } else if (state.phase === 'crumple_return') {
+      const t = Math.min(1, (now - state.phaseStart) / CRUMPLE_RETURN_MS);
+      const ease = 1 - Math.pow(1 - t, 3);
+      const inv = 1 - ease;
+      const { dx, dy } = exitOffset(x, y, w, h, sz);
+      drawX = x + inv * dx * 0.72;
+      drawY = y + inv * dy * 0.65;
+      drawLift = inv * 1.90;
+      drawOpacity = Math.min(1, Math.pow(t, 0.65));
     }
-    drawCupSprite(ctx, drawX, drawY, sz, state.drinkId, state.volume, state.rotDeg, drawLift, drawOpacity);
+    const directRefillT = state.phase === 'refilling' ? state.refillProgress : null;
+    drawCupSprite(ctx, drawX, drawY, sz, state.drinkId, state.volume, state.rotDeg, drawLift, drawOpacity, directRefillT);
   }
 
   // Render cup on the unclipped full-stage overlay canvas so napkin edges NEVER clip the mug!
@@ -2790,10 +2830,12 @@ const NapkinCup = (() => {
 
   // ---- Smooth On-Demand Animation Loop (0 idle CPU when settled) ----
   function needsAnimation(now) {
-    if (state.phase !== 'idle') return true;
-    if (Math.abs(state.targetLift - state.lift) > 0.004) return true;
-    if (Math.abs(state.targetVolume - state.volume) > 0.002) return true;
-    if (Math.abs(state.angVel) > 0.03) return true;
+    if (state.phase !== 'idle' && state.phase !== 'crumple_wait') return true;
+    if (state.phase === 'idle') {
+      if (Math.abs(state.targetLift - state.lift) > 0.004) return true;
+      if (Math.abs(state.targetVolume - state.volume) > 0.002) return true;
+      if (Math.abs(state.angVel) > 0.03) return true;
+    }
     for (const st of state.stains) {
       if (now < st.tStart + st.dryDur + 40) return true;
     }
@@ -2856,13 +2898,8 @@ const NapkinCup = (() => {
       if (state.pendingDrip && !state.dripFired && t >= 0.56) {
         state.dripFired = true;
         const { w, h } = getStageSize();
-        const { x, y, sz } = getCupCenter(w, h);
-        const b = getBowlCenter(x, y, sz, state.rotDeg);
-        const ang = Math.PI * (0.65 + Math.random() * 0.75);
-        const dist = sz * (0.28 + Math.random() * 0.16);
-        const sx = Math.max(36, Math.min(w - 36, b.x + Math.cos(ang) * dist));
-        const sy = Math.max(36, Math.min(h - 36, b.y + Math.sin(ang) * dist));
-        addStain(Math.random() < 0.46 ? 'drip' : 'trail', sx, sy, 1.18);
+        const pos = randomNapkinDripPos(w, h);
+        addStain(Math.random() < 0.46 ? 'drip' : 'trail', pos.x, pos.y, 1.18);
 
         // Drip stain always uses the crisp "Oops!" sound
         scheduleTimer(() => {
@@ -2887,21 +2924,30 @@ const NapkinCup = (() => {
       }
     } else if (state.phase === 'refilling') {
       const t = Math.min(1, (now - state.phaseStart) / REFILL_MS);
-      const ease = 1 - Math.pow(1 - t, 2.0);
-      state.volume = state.refillFrom + (1.0 - state.refillFrom) * ease;
+      // Smooth S-curve 0 -> 100% single pour animation (no intermediate drank-down states)
+      const ease = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+      state.refillProgress = ease;
+      state.volume = 0.05 + 0.95 * ease;
       if (t >= 1) {
+        state.refillProgress = null;
         state.volume = 1.0; state.targetVolume = 1.0;
         state.isDrinkDone = false;
         state.phase = 'idle';
         syncMenuBtn();
       }
-    } else if (state.phase === 'crumple_aside') {
-      const elapsed = now - state.phaseStart;
-      if (!state.setdownPlayed && elapsed >= CRUMPLE_ASIDE_MS - 70) {
+    } else if (state.phase === 'crumple_lift') {
+      if ((now - state.phaseStart) >= CRUMPLE_LIFT_MS) {
+        state.phase = 'crumple_wait';
+        const resolvers = crumpleLiftResolvers.splice(0);
+        resolvers.forEach(fn => fn());
+      }
+    } else if (state.phase === 'crumple_return') {
+      const t = Math.min(1, (now - state.phaseStart) / CRUMPLE_RETURN_MS);
+      if (!state.setdownPlayed && t >= 0.84) {
         state.setdownPlayed = true;
         if (state.hasDrink) NapkinAudio.playClip('cup_setdown', { channel: 'foley', volumeMul: 0.92 });
       }
-      if (elapsed >= CRUMPLE_ASIDE_MS) {
+      if (t >= 1) {
         state.phase = 'idle';
         state.lift = 0; state.targetLift = 0;
       }
@@ -2922,6 +2968,10 @@ const NapkinCup = (() => {
     if (!DRINKS[id]) return;
     clearPendingTimers();
     if (pointerState) finishPointer(true);
+    state.refillProgress = null;
+    if (crumpleLiftResolvers.length) {
+      crumpleLiftResolvers.splice(0).forEach(fn => fn('cancelled'));
+    }
 
     if (!state.hasDrink) {
       state.drinkId = id;
@@ -2951,7 +3001,8 @@ const NapkinCup = (() => {
     if (!state.hasDrink || state.phase !== 'idle') return false;
     state.phase = 'refilling';
     state.phaseStart = performance.now();
-    state.refillFrom = state.volume;
+    state.refillFrom = 0.05;
+    state.refillProgress = 0;
     state.targetVolume = 1.0;
     state.isDrinkDone = false;
     lastDrinkAt = performance.now();
@@ -3095,10 +3146,9 @@ const NapkinCup = (() => {
             addStain('ring', ps.originBowlX, ps.originBowlY, 0.98);
             const splashProb = mugMoveCount >= 3 ? 0.64 : (mugMoveCount >= 2 ? 0.46 : (hasInteractedWithDrawing ? 0.22 : 0));
             if (Math.random() < splashProb) {
-              const ang = Math.random() * 6.283;
-              const d = sz * 0.34;
+              const pos = randomNapkinDripPos(w, h);
               const kind = Math.random() < 0.52 ? 'trail' : 'drip';
-              addStain(kind, Math.max(24, Math.min(w - 24, bowl.x + Math.cos(ang) * d)), Math.max(24, Math.min(h - 24, bowl.y + Math.sin(ang) * d)), 1.05);
+              addStain(kind, pos.x, pos.y, 1.08);
               scheduleTimer(() => {
                 NapkinAudio.playClip('oops_drip', { channel: 'vocal', interrupt: true });
                 lastVocalAt = performance.now();
@@ -3216,21 +3266,43 @@ const NapkinCup = (() => {
     }
   }
 
-  function onCrumpleSheet() {
+  function liftForCrumple() {
     clearPendingTimers();
     if (pointerState) finishPointer(true);
+    state.refillProgress = null;
+    if (!state.hasDrink) return Promise.resolve(false);
+    // If mug is already completely off-napkin (e.g. mid-sip or already waiting), hold it off immediately
+    if (state.phase === 'drinking' || state.phase === 'crumple_wait') {
+      state.phase = 'crumple_wait';
+      renderCupLayer();
+      return Promise.resolve(true);
+    }
+    // Wait for an in-flight lift to finish cleanly
+    if (state.phase === 'crumple_lift') {
+      return new Promise(resolve => crumpleLiftResolvers.push(() => resolve(true)));
+    }
+    state.phase = 'crumple_lift';
+    state.phaseStart = performance.now();
+    state.setdownPlayed = false;
+    kickAnim();
+    return new Promise(resolve => crumpleLiftResolvers.push(() => resolve(true)));
+  }
+
+  function resetSheetForCrumple() {
     state.stains = [];
     hasInteractedWithDrawing = false;
     mugMoveCount = 0;
     hasEurekaOnSheet = false;
     recSinceVocal = 0;
     undoTimes = [];
-    if (state.hasDrink) {
-      state.phase = 'crumple_aside';
-      state.phaseStart = performance.now();
-      state.setdownPlayed = false;
-      kickAnim();
-    }
+  }
+
+  function returnAfterCrumple() {
+    if (!state.hasDrink || state.phase !== 'crumple_wait') return;
+    state.phase = 'crumple_return';
+    state.phaseStart = performance.now();
+    state.setdownPlayed = false;
+    kickAnim();
   }
 
   function init() {
@@ -3241,7 +3313,7 @@ const NapkinCup = (() => {
         const d = DRINKS[id];
         return `
           <button class="drink-opt" data-drink="${id}" commandfor="drink-menu" command="hide-popover" onclick="NapkinCup.orderDrink('${id}')">
-            <img src="../docs/vfx/cups/${id}_100.webp" alt="${d.name}" />
+            <img src="./docs/vfx/cups/${id}_100.webp" alt="${d.name}" />
             <span class="do-name">${d.name}</span>
             <span class="do-sub">${d.sub}</span>
           </button>
@@ -3300,7 +3372,10 @@ const NapkinCup = (() => {
     triggerRefill,
     onActivity,
     onUndo,
-    onCrumpleSheet,
+    hasDrink: () => state.hasDrink,
+    liftForCrumple,
+    resetSheetForCrumple,
+    returnAfterCrumple,
     getState: () => ({
       hasDrink: state.hasDrink,
       isDrinkDone: state.isDrinkDone,
@@ -3386,7 +3461,20 @@ async function clearAllWithCrumple() {
   hoverItem = null;
   NapkinAudio.stopDraw();
 
-  // 1. Snapshot the current napkin (with stains & ink, WITHOUT the ceramic mug!) before clearing
+  // 1. If a drink is on the napkin, lift & remove the mug COMPLETELY before crumpling the paper!
+  //    Decode ./crumble.mp3 in parallel so there is zero audio stall once the mug clears.
+  const preparePromise = NapkinAudio.prepareCrumple();
+  const liftedDrink = await NapkinCup.liftForCrumple();
+  if (token !== crumpleSeq || liftedDrink === 'cancelled') return;
+  if (liftedDrink) {
+    // Crisp brief beat once mug clears the napkin so the removal reads unmistakably before paper crunches
+    await new Promise(r => setTimeout(r, 45));
+    if (token !== crumpleSeq) return;
+  }
+  await preparePromise;
+  if (token !== crumpleSeq) return;
+
+  // 2. Snapshot the cleared-of-mug napkin (with stains & ink) right before crumpling
   const hadContent = items.length > 0;
   render({ skipCup: true });
   const frameRect = document.getElementById('wrap').getBoundingClientRect();
@@ -3395,15 +3483,11 @@ async function clearAllWithCrumple() {
   snap.height = Math.max(1, Math.round(frameRect.height));
   snap.getContext('2d').drawImage(canvas, 0, 0, snap.width, snap.height);
 
-  // 2. Clear the live napkin, lift mug aside while tossing old sheet, & generate fresh napkin!
+  // 3. Swap to a brand-new blank napkin underneath while the snapshot crumples away
   items = [];
-  NapkinCup.onCrumpleSheet();
+  NapkinCup.resetSheetForCrumple();
   nextNapkin();
-  scheduleRender();
-
-  // 3. Ensure ./crumble.mp3 AudioBuffer is decoded & ready for exact 0ms sync
-  await NapkinAudio.prepareCrumple();
-  if (token !== crumpleSeq) return;
+  render();
 
   // 4. Prepare triangulated crumpled paper mesh (10 x 7 grid)
   if (crumpleRaf) { cancelAnimationFrame(crumpleRaf); crumpleRaf = null; }
@@ -3473,10 +3557,17 @@ async function clearAllWithCrumple() {
     }, 140);
   }
   const tStart = performance.now();
+  let cupReturnFired = false;
 
   function step(now) {
     const ms = Math.max(0, now - tStart);
     const t = Math.min(1, ms / TOTAL_DUR);
+
+    // Once the tossed paper ball has practically exited the screen, smoothly bring the mug back down
+    if (!cupReturnFired && ms >= 1340) {
+      cupReturnFired = true;
+      if (token === crumpleSeq) NapkinCup.returnAfterCrumple();
+    }
     octx.setTransform(dpr, 0, 0, dpr, 0, 0);
     octx.clearRect(0, 0, window.innerWidth, window.innerHeight);
 
@@ -3597,6 +3688,10 @@ async function clearAllWithCrumple() {
     } else {
       overlay.style.display = 'none';
       crumpleRaf = null;
+      if (!cupReturnFired && token === crumpleSeq) {
+        cupReturnFired = true;
+        NapkinCup.returnAfterCrumple();
+      }
     }
   }
 
@@ -4868,7 +4963,7 @@ initPenAndStyleMenu();
 NapkinAudio.initUI();
 NapkinCup.init();
 scheduleRender();
-cachedFetchJSON('../exports/opensketch_residual_vae.json').then(j => {
+cachedFetchJSON('./exports/opensketch_residual_vae.json').then(j => {
   VAE = j;
   loadStarterScene();
 });

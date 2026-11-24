@@ -1,6 +1,6 @@
 # Napkin Sketch — Iteration Report (v1 → Latest)
 
-A concise technical log of iterating **Napkin Sketch** from an initial dual-pane browser ML demo (`web/v1_napkin.html`, originally `web/index.html`) to a tactile, zero-dependency café napkin sketching app (`web/index.html`, promoted from `v9`).
+A concise technical log of iterating **Napkin Sketch** from an initial dual-pane browser ML demo (`web/v1_napkin.html`, originally `web/index.html`) to a tactile, zero-dependency café napkin sketching app (`index.html` at repo root, promoted from `v9`).
 
 ---
 
@@ -16,7 +16,7 @@ A concise technical log of iterating **Napkin Sketch** from an initial dual-pane
 | **v6** | `web/v6_napkin.html` | Tactile kraft napkin & live typing | Textured paper napkin, ballpoint ink, minimalist icon toolbar, single-click live word-cached typing, writing styles |
 | **v7** | `web/v7_napkin.html` | Polish, audio & root fixes | 97.2% circle/box recognizer, resize & delete, unique procedural napkins, napkin-only typing, Web Audio pen foley, synced 3D crumple throw, fixed `f`/`t`/`i` strokes, PNG+SVG export |
 | **v8** | `web/v8_napkin.html` | Companion café cup & smooth stains | Gemini + SAM 3.1 top-down drink sprites (4×4 volumes), zero-node continuous-ribbon cup rings, press-and-hold torque drag, click-to-drink, ElevenLabs probabilistic companion SFX |
-| **Latest (v9)** | `web/index.html` | Pens, popovers, unclipped 3× mug & dynamic ink | Declarative Popover Pen+Style & Café Menu, 5 photo-segmented pens with live WASM style previews, node-free single-fill ink ribbons, unclipped full-stage 3× mug overhang, live hand-drawn shape dragging, 10 random starter diagrams |
+| **Latest (v9)** | `index.html` | Pens, popovers, unclipped 3× mug & dynamic ink | Declarative Popover Pen+Style (`Clean Upright` default) & Café Menu, 5 photo-segmented pens with live WASM style previews, node-free single-fill ink ribbons, unclipped full-stage 3× mug overhang, staged mug-first crumple, direct `0% → 100%` refill, live hand-drawn shape dragging, random napkin drips/trails, 10 random starter diagrams |
 
 Standalone exploration boards: `web/soundboard.html` (8 procedural pen surfaces, Speed Test Pad, 14 ElevenLabs vocal/foley clips, and cadence simulator) and `docs/vfx-board.html` (cup asset & programmatic stain explorer).
 
@@ -138,16 +138,18 @@ Rather than using pixel diffusion or hand-coded sine-wave jitter, Napkin Sketch 
 
 ---
 
-## Latest (`v9` → `web/index.html`) — Tactile Pens, Declarative Popovers, Unclipped 3× Mug & Dynamic Ink
+## Latest (`v9` → `index.html`) — Tactile Pens, Declarative Popovers, Unclipped 3× Mug & Dynamic Ink
+
+![Napkin Sketch 8x Demo](./napkin_demo.gif)
 
 ![Napkin Sketch Latest](./v9.webp)
 
-Promoted to `web/index.html` as the main entry point (with version badge removed from the header), refining visual craft, interaction physics, and playful polish:
+Promoted to `index.html` at the repository root as the main entry point (with version badge removed from the header), refining visual craft, interaction physics, and playful polish:
 
 - **Declarative Popovers (`commandfor` / `command="toggle-popover"`):**
-  - **Combined Pen & Handwriting Style Menu:** Unifies 5 photo-segmented top-down pen sprites (`docs/vfx/pens/*.webp`, Gemini + SAM 3.1: *Ballpoint Pen*, *2B Graphite Pencil*, *Felt-Tip Marker*, *Fountain Nib*, *0.5mm Mechanical*) with tailored ink physics and matched Web Audio drawing surfaces, alongside live WASM-synthesized `"Napkin"` preview cards for every handwriting style.
+  - **Combined Pen & Handwriting Style Menu:** Unifies 5 photo-segmented top-down pen sprites (`docs/vfx/pens/*.webp`, Gemini + SAM 3.1: *Ballpoint Pen*, *2B Graphite Pencil*, *Felt-Tip Marker*, *Fountain Nib*, *0.5mm Mechanical*) with tailored ink physics and matched Web Audio drawing surfaces, alongside live WASM-synthesized `"Napkin"` preview cards with *Clean Upright* promoted to first position and default.
   - **Café Drink Menu:** Starts with no drink on the napkin and highlights the **Menu** button (*"Get caffeinated for better ideas"*) whenever no drink is present or the cup is finished; ordering smoothly swaps in the chosen drink.
 - **Node-Free Single-Fill Ink Renderer (`buildStrokeOutline`):** Replaced per-segment round-cap `ctx.stroke()` loops—which created visible dark dot nodes wherever translucent strokes overlapped—with a continuous single closed variable-width outline polygon filled in one atomic `ctx.fill('nonzero')` call (with matching `<path>` geometry in Vector SVG export and a dry paper-tooth offset pass for 2B pencil).
-- **Unclipped 3× Life-Size Mug Overlay (`canvas#cup-layer`):** Scaled cups up 3× (`360–500 px`) and moved cup rendering onto a full-stage overlay canvas above `.napkin-frame` with capture-phase `#stage` pointer routing, so the mug bowl, handle, and drop shadow cleanly overhang all four napkin edges onto the café table without clipping—while keeping stains, crumple snapshots, and exports confined to the paper sheet. Added enlarged overhead lift scaling (`1 + lift * 0.16`) during moves/drinks, guaranteed `cup_setdown` foley on settle, `oops_drip` on drip/trail stains, `argh_stain` grunt on non-empty sheet crumples, drawing-gated stain rules, and livelier drip/trail and vocal probabilities.
+- **Unclipped 3× Life-Size Mug, Staged Crumple & Direct Refill:** Scaled cups up 3× (`360–500 px`) and moved cup rendering onto a full-stage overlay canvas (`#cup-layer`) with capture-phase `#stage` pointer routing so the mug bowl, handle, and drop shadow cleanly overhang all four napkin edges onto the café table without clipping. Added enlarged overhead lift scaling (`1 + lift * 0.16`), guaranteed `cup_setdown` foley, staged mug-first crumple choreography (lifting the mug completely off-napkin before crumpling and returning it once the tossed ball clears), a single direct `0% → 100%` refill pour animation (skipping drank-down `30%`/`65%` stops), random across-napkin drip/trail placement, `oops_drip` on drips/trails, and `argh_stain` grunt on non-empty crumples.
 - **Live Dynamic Shape & Arrow Drawing:** Added deterministic seeded RNG (`makeRng(seed)`) through `decodeResidual`, `designerLine`, and `designerBezier` so dragging `Box`, `Oval`, `Diamond`, or `Arrow` renders real hand-drawn ink dynamically in real time (zero dashed preview lines, bit-identical stroke commit on pointer release).
 - **Random Goofy Starter Diagrams:** Added 10 lightweight, humorous abstract café-napkin diagrams (`STARTER_DIAGRAMS`: *Billion Dollar Plan*, *Coffee Loop*, *Should I Tree*, *Meeting Flowchart*, *Software Bugs*, *Cat Logic*, *Weekend Plan*, *Brainstorm Funnel*, *Good / Fast / Cheap Triangle*, and *Classic Napkin Sketch*) rotating on refresh via `sessionStorage` without back-to-back repeats.
