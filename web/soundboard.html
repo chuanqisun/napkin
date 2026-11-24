@@ -35,7 +35,7 @@
     .row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
     .cols {
       display: grid;
-      grid-template-columns: 360px minmax(0, 1fr);
+      grid-template-columns: 350px minmax(0, 1fr);
       gap: 24px;
       align-items: start;
     }
@@ -55,6 +55,13 @@
       background: #111;
       color: #fff;
       border-color: #111;
+    }
+    input[type="number"] {
+      width: 48px;
+      font: inherit;
+      padding: 3px 5px;
+      border: 1px solid #ccc;
+      border-radius: 3px;
     }
 
     .preset-grid {
@@ -104,9 +111,24 @@
     }
     .slider-row span.val { text-align: right; font-family: ui-monospace, monospace; color: #555; }
 
+    .sim-box {
+      border: 1px solid #ddd;
+      padding: 10px 12px;
+      margin-bottom: 12px;
+      background: #fafafa;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .sim-log {
+      font-family: ui-monospace, monospace;
+      font-size: 12px;
+      color: #444;
+    }
+
     .sfx-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+      grid-template-columns: repeat(auto-fill, minmax(195px, 1fr));
       gap: 6px;
     }
     button.sfx-pad {
@@ -203,12 +225,26 @@
       </div>
     </section>
 
-    <!-- RIGHT: ELEVENLABS BRAINSTORMING & DRINK FOLEY -->
+    <!-- RIGHT: CURATED SPARING VOCAL & DRINK SFX -->
     <section>
-      <h2>Brainstorming &amp; Drink SFX (ElevenLabs)</h2>
-      <p class="note">Exploratory clips in <code>./sfx/*.mp3</code> (middle-aged male brainstorming + coffee/matcha foley). Keys <code>1</code>&ndash;<code>9</code> trigger pads; <code>Esc</code> stops all.</p>
+      <h2>Curated Vocal &amp; Drink SFX (Sparing Pacing)</h2>
+      <p class="note">Use sound sparingly for delight: most actions stay silent. Keys <code>1</code>&ndash;<code>9</code>, <code>0</code> audition single clips; <code>Esc</code> stops all.</p>
 
-      <div class="row" id="combo-btns" style="margin-bottom:8px;"></div>
+      <!-- Sparing Event-Cadence Simulator (no heavy multi-sound choreography) -->
+      <div class="sim-box">
+        <div class="row" style="font-size:12px;">
+          <label class="row" style="gap:4px;">Thinking every <strong>N</strong>=<input id="sim-n" type="number" min="1" max="20" value="3" /></label>
+          <label class="row" style="gap:4px;">Drink every <strong>M</strong>=<input id="sim-m" type="number" min="1" max="30" value="5" /></label>
+          <label class="row" style="gap:4px;">Stain chance=<input id="sim-p" type="number" min="0" max="100" value="30" />%</label>
+        </div>
+        <div class="row">
+          <button onclick="CadenceSim.recognizeSketch()">+1 Sketch Recognized</button>
+          <button onclick="CadenceSim.triggerDrink()">Test Drink Step</button>
+          <button onclick="CadenceSim.reset()">Reset</button>
+        </div>
+        <div class="sim-log" id="sim-log">Recognitions: 0 | Cup: 3/3 sips | Last: (silent)</div>
+      </div>
+
       <div id="sfx-categories"></div>
 
       <hr />
@@ -268,6 +304,7 @@ const SoundLab = (() => {
     DrawEngine.cancelDemo();
     DrawEngine.stopDraw();
     DrawEngine.stopCrumple();
+    CadenceSim.clearPending();
     ClipBoard.stopAll();
   }
 
@@ -646,59 +683,45 @@ const DrawEngine = (() => {
 
 const SFX_CATEGORIES = [
   {
-    title: 'Coffee / Matcha Sipping & Cup Foley',
+    title: '1. Thinking State (sparingly after N sketch recognitions)',
     clips: [
-      { id: 'sip_coffee',     file: './sfx/sip_coffee.mp3',     title: 'Sip Coffee',          event: 'Take a Sip',          dur: 2.00, gain: 2.45, key: '1' },
-      { id: 'swallow_liquid', file: './sfx/swallow_liquid.mp3', title: 'Swallow Liquid',      event: 'Post-Sip Swallow',    dur: 1.76, gain: 2.55, key: '2' },
-      { id: 'sip_ahhh',       file: './sfx/sip_ahhh.mp3',       title: 'Sip + "Ahhh"',        event: 'Drink Refresh',       dur: 2.48, gain: 1.85, key: '3' },
-      { id: 'cup_setdown',    file: './sfx/cup_setdown.mp3',    title: 'Mug Setdown',         event: 'Place Cup',           dur: 1.20, gain: 0.82 },
-      { id: 'coffee_drip',    file: './sfx/coffee_drip.mp3',    title: 'Liquid Drip',         event: 'New Drip Stain',      dur: 1.08, gain: 4.10 }
+      { id: 'hmm_pause',     file: './sfx/hmm_pause.mp3',     title: '"Hmmm..." Pause',  event: 'hmm_pause',     dur: 1.76, gain: 0.78, key: '1' },
+      { id: 'mm_ponder',     file: './sfx/mm_ponder.mp3',     title: '"Mm-hmm" Ponder',  event: 'mm_ponder',     dur: 2.00, gain: 1.55, key: '2' },
+      { id: 'sigh_block',    file: './sfx/sigh_block.mp3',    title: 'Sigh (Block)',     event: 'sigh_block',    dur: 2.00, gain: 0.96, key: '3' },
+      { id: 'ooo_intrigued', file: './sfx/ooo_intrigued.mp3', title: '"Oooo..."',        event: 'ooo_intrigued', dur: 1.48, gain: 0.42, key: '4' },
+      { id: 'aha_spark',     file: './sfx/aha_spark.mp3',     title: '"Aha!"',           event: 'aha_spark',     dur: 1.36, gain: 0.58, key: '5' },
+      { id: 'eureka_win',    file: './sfx/eureka_win.mp3',    title: '"EUREKA!"',        event: 'eureka_win (high excitement)', dur: 2.08, gain: 0.48, key: '6' }
     ]
   },
   {
-    title: 'Pausing & Creative Block',
+    title: '2. Drinking & Refill (after M recognitions; refill when empty)',
     clips: [
-      { id: 'hmm_pause',  file: './sfx/hmm_pause.mp3',  title: '"Hmmm..." Pause',     event: 'Idle Pause',     dur: 1.76, gain: 0.78, key: '4' },
-      { id: 'mm_ponder',  file: './sfx/mm_ponder.mp3',  title: '"Mm-hmm" Ponder',     event: 'Contemplating',  dur: 2.00, gain: 1.55 },
-      { id: 'sigh_block', file: './sfx/sigh_block.mp3', title: 'Thoughtful Sigh',     event: 'Creative Block', dur: 2.00, gain: 0.96 }
+      { id: 'sip_coffee',     file: './sfx/sip_coffee.mp3',     title: 'Sip Coffee',       event: 'sip_coffee',     dur: 2.00, gain: 2.45, key: '7' },
+      { id: 'swallow_liquid', file: './sfx/swallow_liquid.mp3', title: 'Swallow Liquid',   event: 'swallow_liquid', dur: 1.76, gain: 2.55 },
+      { id: 'sip_ahhh',       file: './sfx/sip_ahhh.mp3',       title: 'Sip + "Ahhh"',     event: 'sip_ahhh',       dur: 2.48, gain: 1.85 },
+      { id: 'cup_setdown',    file: './sfx/cup_setdown.mp3',    title: 'Cup Setdown',      event: 'cup_setdown',    dur: 1.20, gain: 0.82 },
+      { id: 'refill_pour',    file: './sfx/refill_pour.mp3',    title: 'Refill Pour',      event: 'refill_pour',    dur: 2.40, gain: 2.55, key: '8' },
+      { id: 'coffee_drip',    file: './sfx/coffee_drip.mp3',    title: 'Short Pour / Top-Up', event: 'coffee_drip (short pour)', dur: 1.08, gain: 3.80 }
     ]
   },
   {
-    title: 'Finishing a Shape & Breakthroughs',
+    title: '3. Accidental Stain Reaction (rare chance after drinking)',
     clips: [
-      { id: 'ooo_intrigued', file: './sfx/ooo_intrigued.mp3', title: '"Oooo..." Spark',   event: 'Shape Snapped',   dur: 1.48, gain: 0.42, key: '5' },
-      { id: 'aha_spark',     file: './sfx/aha_spark.mp3',     title: '"Aha!"',            event: 'Node Connected',  dur: 1.36, gain: 0.58, key: '6' },
-      { id: 'eureka_win',    file: './sfx/eureka_win.mp3',    title: '"Eureka!"',         event: 'Breakthrough',    dur: 1.76, gain: 0.56, key: '7' },
-      { id: 'ahhhh_relief',  file: './sfx/ahhhh_relief.mp3',  title: '"Ahhhh..." Relief', event: 'Save / Finished', dur: 2.00, gain: 0.56, key: '8' }
+      { id: 'oops_drip',  file: './sfx/oops_drip.mp3',  title: '"Oops!" (short)', event: 'oops_drip',  dur: 0.88, gain: 0.56, key: '9' },
+      { id: 'argh_stain', file: './sfx/argh_stain.mp3', title: '"Aaaargh!"',      event: 'argh_stain (frustration)', dur: 1.36, gain: 0.50, key: '0' }
     ]
   },
   {
-    title: 'Oops, Drip & Slip',
+    title: '4. Napkin Crumple',
     clips: [
-      { id: 'oops_drip', file: './sfx/oops_drip.mp3', title: '"Oops!"',      event: 'Accidental Drip', dur: 1.28, gain: 0.86, key: '9' },
-      { id: 'uhoh_slip', file: './sfx/uhoh_slip.mp3', title: '"Uh-oh"',      event: 'Undo / Slip',     dur: 1.36, gain: 1.05 }
-    ]
-  },
-  {
-    title: 'Starting on a New Napkin',
-    clips: [
-      { id: 'fresh_napkin', file: './sfx/fresh_napkin.mp3', title: 'Fresh Napkin Smooth', event: 'New Sheet Ready', dur: 2.00, gain: 3.80 },
-      { id: 'crumble',      file: './crumble.mp3',          title: 'Crumple Toss',        event: 'Crumple Sheet',   dur: 1.80, gain: 2.85 }
+      { id: 'crumble', file: './crumble.mp3', title: 'Crumple Toss', event: './crumble.mp3', dur: 1.80, gain: 2.85 }
     ]
   }
 ];
 
-const EVENT_COMBOS = [
-  { id: 'c1', label: 'Pause -> Sip -> Aha!', steps: [{ delay: 0, clipId: 'hmm_pause' }, { delay: 1450, clipId: 'sip_coffee' }, { delay: 3300, clipId: 'aha_spark' }] },
-  { id: 'c2', label: 'Drip -> Oops!',        steps: [{ delay: 0, clipId: 'coffee_drip' }, { delay: 420, clipId: 'oops_drip' }] },
-  { id: 'c3', label: 'Draw -> Oooo -> Eureka!', steps: [{ delay: 0, demoStroke: 'medium' }, { delay: 900, clipId: 'ooo_intrigued' }, { delay: 2200, clipId: 'eureka_win' }] },
-  { id: 'c4', label: 'Sip -> Swallow -> Set Cup', steps: [{ delay: 0, clipId: 'sip_coffee' }, { delay: 1400, clipId: 'swallow_liquid' }, { delay: 2850, clipId: 'cup_setdown' }] },
-  { id: 'c5', label: 'Crumple -> Fresh Napkin', steps: [{ delay: 0, clipId: 'crumble' }, { delay: 1450, clipId: 'fresh_napkin' }] }
-];
-
 const ClipBoard = (() => {
   const clipMap = new Map(), rawBytes = new Map(), decodedBuffers = new Map(), activePlays = new Map();
-  let comboTimers = [], activeComboId = null, clipScale = 1.0, loadedCount = 0;
+  let clipScale = 1.0, loadedCount = 0;
   for (const cat of SFX_CATEGORIES) for (const c of cat.clips) clipMap.set(c.id, c);
 
   function updateStatus() {
@@ -734,15 +757,7 @@ const ClipBoard = (() => {
     activePlays.delete(id);
     document.querySelector(`button.sfx-pad[data-clip="${id}"]`)?.classList.remove('playing');
   }
-  function stopCombo() {
-    comboTimers.forEach(t => clearTimeout(t)); comboTimers = [];
-    if (activeComboId) {
-      document.querySelector(`button[data-combo="${activeComboId}"]`)?.classList.remove('playing');
-      activeComboId = null;
-    }
-  }
   function stopAll() {
-    stopCombo();
     for (const id of Array.from(activePlays.keys())) stopClip(id);
   }
   async function playClip(id) {
@@ -764,31 +779,11 @@ const ClipBoard = (() => {
     };
     src.start(ctx.currentTime);
   }
-  function playCombo(cid) {
-    stopCombo();
-    if (SoundLab.isMuted()) return;
-    const combo = EVENT_COMBOS.find(c => c.id === cid); if (!combo) return;
-    activeComboId = cid;
-    document.querySelector(`button[data-combo="${cid}"]`)?.classList.add('playing');
-    let maxEnd = 0;
-    for (const st of combo.steps) {
-      const len = st.demoStroke ? 950 : ((clipMap.get(st.clipId)?.dur || 1.5) * 1000);
-      maxEnd = Math.max(maxEnd, st.delay + len);
-      comboTimers.push(setTimeout(() => {
-        if (st.demoStroke) DrawEngine.playDemoStroke(st.demoStroke);
-        else playClip(st.clipId);
-      }, st.delay));
-    }
-    comboTimers.push(setTimeout(stopCombo, maxEnd + 150));
-  }
   function setClipScale(v) {
     clipScale = v;
     document.getElementById('clip-vol-val').textContent = Math.round(v * 100) + '%';
   }
   function init() {
-    document.getElementById('combo-btns').innerHTML = EVENT_COMBOS.map(c =>
-      `<button data-combo="${c.id}" onclick="ClipBoard.playCombo('${c.id}')">&#9654; ${c.label}</button>`
-    ).join('');
     document.getElementById('sfx-categories').innerHTML = SFX_CATEGORIES.map(cat => `
       <h3>${cat.title}</h3>
       <div class="sfx-grid">
@@ -810,7 +805,73 @@ const ClipBoard = (() => {
     });
     prefetchAll();
   }
-  return { init, playClip, playCombo, stopAll, getBuffer, setClipScale, getClipCount: () => clipMap.size, getLoadedCount: () => loadedCount };
+  return { init, playClip, stopAll, getBuffer, setClipScale, getClipCount: () => clipMap.size, getLoadedCount: () => loadedCount };
+})();
+
+// Minimal sparing-pacing simulator (1 cue at a time, most strokes stay silent)
+const CadenceSim = (() => {
+  const MAX_SIPS = 3;
+  const THINKING_POOL = ['hmm_pause', 'mm_ponder', 'ooo_intrigued', 'aha_spark', 'sigh_block', 'eureka_win'];
+  const DRINK_POOL = ['sip_coffee', 'sip_ahhh', 'swallow_liquid'];
+  let recognitions = 0;
+  let thinkIdx = 0;
+  let sipsLeft = MAX_SIPS;
+  let timers = [];
+
+  function log(msg) {
+    document.getElementById('sim-log').textContent = `Recognitions: ${recognitions} | Cup: ${sipsLeft}/${MAX_SIPS} sips | Last: ${msg}`;
+  }
+  function clearPending() { timers.forEach(t => clearTimeout(t)); timers = []; }
+
+  function triggerDrink() {
+    clearPending();
+    if (sipsLeft <= 0) {
+      sipsLeft = MAX_SIPS;
+      ClipBoard.playClip('refill_pour');
+      log('cup empty -> refill_pour (cup refilled)');
+      return;
+    }
+    const sipClip = DRINK_POOL[Math.floor(Math.random() * DRINK_POOL.length)];
+    sipsLeft--;
+    ClipBoard.playClip(sipClip);
+
+    const stainPct = Math.max(0, Math.min(100, Number(document.getElementById('sim-p')?.value || 30)));
+    const didStain = (Math.random() * 100) < stainPct;
+    if (didStain) {
+      const react = Math.random() < 0.65 ? 'oops_drip' : 'argh_stain';
+      log(`${sipClip} -> stain! (${react})`);
+      timers.push(setTimeout(() => ClipBoard.playClip(react), 1650));
+    } else {
+      log(`${sipClip} (clean sip)`);
+    }
+  }
+
+  function recognizeSketch() {
+    recognitions++;
+    const N = Math.max(1, Number(document.getElementById('sim-n')?.value || 3));
+    const M = Math.max(1, Number(document.getElementById('sim-m')?.value || 5));
+
+    if (recognitions % M === 0) {
+      triggerDrink();
+    } else if (recognitions % N === 0) {
+      const clip = THINKING_POOL[thinkIdx % THINKING_POOL.length];
+      thinkIdx++;
+      ClipBoard.playClip(clip);
+      log(`thinking state -> ${clip}`);
+    } else {
+      log('(silent)');
+    }
+  }
+
+  function reset() {
+    clearPending();
+    recognitions = 0;
+    thinkIdx = 0;
+    sipsLeft = MAX_SIPS;
+    log('(silent)');
+  }
+
+  return { recognizeSketch, triggerDrink, reset, clearPending };
 })();
 
 DrawEngine.init();

@@ -50,6 +50,7 @@
       cursor: pointer;
     }
     button:hover { background: #eee; }
+    button:disabled { opacity: 0.45; cursor: default; }
     button.active { background: #111; color: #fff; border-color: #111; }
 
     canvas#stage {
@@ -79,7 +80,7 @@
 
     .slider-row {
       display: grid;
-      grid-template-columns: 78px 1fr 40px;
+      grid-template-columns: 82px 1fr 40px;
       align-items: center;
       gap: 8px;
       font-size: 12px;
@@ -150,17 +151,32 @@
       <div class="grid-2" id="drink-btns"></div>
 
       <hr />
-      <h2>2. Drink Volume (Same Cup)</h2>
+      <h2>2. Drinking &amp; Refill Lifecycle</h2>
+      <p class="note">Drinking lifts the cup off the napkin with a chance to drip, then sets it back down lower. Empty cups refill visually.</p>
+      <div class="grid-2" style="margin-bottom:6px;">
+        <button id="btn-sip" onclick="VFX.drinkSip(false)">Take a Sip</button>
+        <button id="btn-sip-drip" onclick="VFX.drinkSip(true)">Sip + Drip</button>
+      </div>
+      <div class="grid-2" style="margin-bottom:8px;">
+        <button id="btn-refill" onclick="VFX.triggerRefill()">Refill (100%)</button>
+        <button onclick="VFX.setVolume(0.05)">Jump to 5%</button>
+      </div>
+      <div class="slider-row">
+        <span>Drip Chance</span>
+        <input id="drip-chance-slider" type="range" min="0" max="100" value="35" oninput="VFX.setDripChance(this.value / 100)" />
+        <span id="drip-chance-val" class="val">35%</span>
+      </div>
+      <label class="row" style="margin:4px 0 8px; cursor:pointer; font-size:12px;">
+        <input id="chk-auto-refill" type="checkbox" checked onchange="VFX.setAutoRefill(this.checked)" />
+        <span>Auto-refill visually after last sip</span>
+      </label>
+
       <div class="slider-row">
         <span>Volume</span>
         <input id="vol-slider" type="range" min="5" max="100" value="100" oninput="VFX.setVolume(this.value / 100)" />
         <span id="vol-val" class="val">100%</span>
       </div>
       <div class="grid-4" id="vol-step-btns" style="margin:6px 0;"></div>
-      <div class="grid-2" style="margin-bottom:8px;">
-        <button onclick="VFX.takeSip()">Take a Sip</button>
-        <button onclick="VFX.refill()">Refill (100%)</button>
-      </div>
       <div class="slider-row">
         <span>Rotate</span>
         <input id="rot-slider" type="range" min="-180" max="180" value="22" oninput="VFX.setRotation(this.value)" />
@@ -180,10 +196,10 @@
       <h2>3. Programmatic Drip Stains</h2>
       <p class="note">Click anywhere on the napkin to drop a procedural stain.</p>
       <div class="grid-2" style="margin-bottom:8px;">
-        <button class="active" data-mode="drip" onclick="VFX.setStainMode('drip', this)">Small Drip</button>
-        <button data-mode="blotch" onclick="VFX.setStainMode('blotch', this)">Heavy Blotch</button>
-        <button data-mode="ring" onclick="VFX.setStainMode('ring', this)">Cup Ring</button>
-        <button data-mode="trail" onclick="VFX.setStainMode('trail', this)">Sip Trail</button>
+        <button class="active" data-mode="drip" onclick="VFX.setStainMode('drip')">Small Drip</button>
+        <button data-mode="blotch" onclick="VFX.setStainMode('blotch')">Heavy Blotch</button>
+        <button data-mode="ring" onclick="VFX.setStainMode('ring')">Cup Ring</button>
+        <button data-mode="trail" onclick="VFX.setStainMode('trail')">Sip Trail</button>
       </div>
       <div class="row" style="justify-content:space-between; margin-bottom:6px; font-size:12px;">
         <span>Stain Pigment</span>
@@ -210,7 +226,7 @@
 
 <script>
 // ============================================================================
-// 1. PRNG & SIMPLE TEXTURED KRAFT NAPKIN CANVAS
+// 1. PRNG & TEXTURED KRAFT NAPKIN CANVAS
 // ============================================================================
 function makeRng(seed) {
   let s = (seed >>> 0) || 1;
@@ -257,7 +273,6 @@ function buildNapkinCanvas(seed, w, h, dpr) {
   ctx.fillStyle = ctx.createPattern(tile, 'repeat');
   ctx.fillRect(0, 0, w, h);
 
-  // Subtle quarter-fold creases
   const drawCrease = (x1, y1, x2, y2, hw, str) => {
     const dx = x2 - x1, dy = y2 - y1, len = Math.hypot(dx, dy) || 1;
     const nx = -dy / len, ny = dx / len, mx = (x1 + x2) * 0.5, my = (y1 + y2) * 0.5;
@@ -310,19 +325,15 @@ const DRINKS = {
 };
 const DRINK_ORDER = ['black_coffee', 'coffee_latte', 'matcha_pure', 'matcha_latte'];
 
-function cupAssetUrl(drinkId, volKey) {
-  return `./vfx/cups/${drinkId}_${volKey}.webp`;
-}
+function cupAssetUrl(drinkId, volKey) { return `./vfx/cups/${drinkId}_${volKey}.webp`; }
 
 const cupImages = new Map();
-function preloadCupImages(onOneLoaded) {
+function preloadCupImages() {
   for (const dId of DRINK_ORDER) {
     for (const stop of VOLUME_STOPS) {
-      const key = `${dId}_${stop.key}`;
       const img = new Image();
-      img.onload = () => { if (onOneLoaded) onOneLoaded(); };
       img.src = cupAssetUrl(dId, stop.key);
-      cupImages.set(key, img);
+      cupImages.set(`${dId}_${stop.key}`, img);
     }
   }
 }
@@ -336,37 +347,31 @@ function nearestVolKey(v) {
   return best.key;
 }
 
-// Draw aligned transparent SAM 3.1 cup cutout with soft realistic drop shadow
-// and seamless crossfade between adjacent volume frames!
-function drawCupSprite(ctx, cx, cy, sizePx, drinkId, volume, rotDeg, lift) {
+function drawCupSprite(ctx, cx, cy, sizePx, drinkId, volume, rotDeg, lift, opacity = 1) {
+  if (opacity <= 0.005) return;
   const rad = (rotDeg * Math.PI) / 180;
-  const scale = 1 + lift * 0.04;
-  // In our 512x512 aligned asset (440px wide bbox = mug circle + right handle):
-  // mug circular bowl center sits at ~(-0.088 * sizePx, 0) from sprite center, bowl radius ~0.335 * sizePx
+  const scale = 1 + lift * 0.055;
   const bowlOffX = -sizePx * 0.088;
   const bowlR = sizePx * 0.335;
 
-  // 1. Realistic soft directional cast shadow on the napkin (stays aligned with overhead lighting)
+  // 1. Directional cast shadow on napkin (fades out cleanly as cup lifts off canvas)
   ctx.save();
   ctx.translate(cx, cy);
   ctx.scale(scale, scale);
   ctx.globalCompositeOperation = 'multiply';
-  const shDist = sizePx * (0.048 + lift * 0.085);
+  ctx.globalAlpha = opacity * Math.max(0, 1 - lift * 0.65);
+  const shDist = sizePx * (0.048 + lift * 0.11);
   const shDx = shDist * 0.9, shDy = shDist * 0.95;
+  const bx = Math.cos(rad) * bowlOffX, by = Math.sin(rad) * bowlOffX;
 
-  // Main mug bowl shadow (computed in rotated coords for bowl center)
-  const bx = Math.cos(rad) * bowlOffX;
-  const by = Math.sin(rad) * bowlOffX;
-
-  const penR = bowlR * (1.22 + lift * 0.16);
+  const penR = bowlR * (1.22 + lift * 0.22);
   const pen = ctx.createRadialGradient(bx + shDx, by + shDy, bowlR * 0.55, bx + shDx, by + shDy, penR);
-  pen.addColorStop(0, `rgba(52, 36, 20, ${(0.28 - lift * 0.07).toFixed(3)})`);
+  pen.addColorStop(0, `rgba(52, 36, 20, ${(0.28 - lift * 0.08).toFixed(3)})`);
   pen.addColorStop(0.7, `rgba(66, 46, 26, ${(0.12 - lift * 0.03).toFixed(3)})`);
   pen.addColorStop(1, 'rgba(66, 46, 26, 0)');
   ctx.fillStyle = pen;
   ctx.beginPath(); ctx.arc(bx + shDx, by + shDy, penR, 0, Math.PI * 2); ctx.fill();
 
-  // Tight contact occlusion shadow directly under the ceramic base
   if (lift < 0.85) {
     const occA = (1 - lift) * 0.28;
     const occ = ctx.createRadialGradient(bx + shDx * 0.25, by + shDy * 0.25, bowlR * 0.72, bx + shDx * 0.25, by + shDy * 0.25, bowlR * 1.04);
@@ -377,7 +382,6 @@ function drawCupSprite(ctx, cx, cy, sizePx, drinkId, volume, rotDeg, lift) {
     ctx.beginPath(); ctx.arc(bx + shDx * 0.25, by + shDy * 0.25, bowlR * 1.04, 0, Math.PI * 2); ctx.fill();
   }
 
-  // Handle shadow
   ctx.save();
   ctx.translate(shDx * 0.85, shDy * 0.9);
   ctx.rotate(rad);
@@ -388,19 +392,15 @@ function drawCupSprite(ctx, cx, cy, sizePx, drinkId, volume, rotDeg, lift) {
   ctx.restore();
   ctx.restore();
 
-  // 2. Find bracketing volume stops for smooth same-cup crossfade
+  // 2. Smooth same-cup crossfade across adjacent aligned Gemini + SAM 3.1 frames
   const v = Math.max(0.05, Math.min(1.0, volume));
   let hi = VOLUME_STOPS[0], lo = VOLUME_STOPS[VOLUME_STOPS.length - 1];
   for (let i = 0; i < VOLUME_STOPS.length - 1; i++) {
     if (v <= VOLUME_STOPS[i].val && v >= VOLUME_STOPS[i + 1].val) {
-      hi = VOLUME_STOPS[i];
-      lo = VOLUME_STOPS[i + 1];
-      break;
+      hi = VOLUME_STOPS[i]; lo = VOLUME_STOPS[i + 1]; break;
     }
   }
-  const span = Math.max(0.001, hi.val - lo.val);
-  const t = Math.max(0, Math.min(1, (hi.val - v) / span)); // 0 = hi, 1 = lo
-
+  const t = Math.max(0, Math.min(1, (hi.val - v) / Math.max(0.001, hi.val - lo.val)));
   const imgHi = cupImages.get(`${drinkId}_${hi.key}`);
   const imgLo = cupImages.get(`${drinkId}_${lo.key}`);
 
@@ -410,18 +410,18 @@ function drawCupSprite(ctx, cx, cy, sizePx, drinkId, volume, rotDeg, lift) {
   ctx.scale(scale, scale);
   const half = sizePx * 0.5;
   if (imgHi && imgHi.complete && imgHi.naturalWidth) {
-    ctx.globalAlpha = 1;
+    ctx.globalAlpha = opacity;
     ctx.drawImage(imgHi, -half, -half, sizePx, sizePx);
   }
   if (t > 0.005 && imgLo && imgLo.complete && imgLo.naturalWidth) {
-    ctx.globalAlpha = t;
+    ctx.globalAlpha = opacity * t;
     ctx.drawImage(imgLo, -half, -half, sizePx, sizePx);
   }
   ctx.restore();
 }
 
 // ============================================================================
-// 3. PROGRAMMATIC CAPILLARY COFFEE & MATCHA DRIP STAINS (MULTIPLY + RING DRY)
+// 3. PROGRAMMATIC CAPILLARY COFFEE & MATCHA DRIP STAINS (UNTOUCHED — GREAT!)
 // ============================================================================
 function buildBlobContour(cx, cy, baseR, seed, irr = 0.24, segs = 34) {
   const rnd = makeRng(seed);
@@ -472,7 +472,6 @@ function createStain(kind, x, y, drinkId, scale, instant, bowlRadius) {
     }
   } else if (kind === 'blotch') {
     const r = (28 + rnd() * 22) * scale;
-    // Single unified multi-lobe organic perimeter (avoids intersecting inner ring strokes)
     st.blobs.push({ x, y, r, irr: 0.56, seed: seed ^ 0x333 });
     const n = 5 + Math.floor(rnd() * 6);
     for (let i = 0; i < n; i++) {
@@ -588,7 +587,6 @@ function renderStain(ctx, st, now) {
   }
   ctx.restore();
 
-  // Brief wet glossy sheen right after droplet lands
   if (rawT < 0.6 && st.blobs.length) {
     const b0 = st.blobs[0], curR = b0.r * spread;
     ctx.save();
@@ -601,7 +599,7 @@ function renderStain(ctx, st, now) {
 }
 
 // ============================================================================
-// 4. INTERACTIVE CONTROLLER
+// 4. INTERACTIVE CONTROLLER (DRINK EXIT/RETURN + DRIP CHANCE + VISUAL REFILL)
 // ============================================================================
 const VFX = (() => {
   const state = {
@@ -610,6 +608,8 @@ const VFX = (() => {
     targetVolume: 1.0,
     rotDeg: 22,
     cupSize: 175,
+    dripChance: 0.35,
+    autoRefill: true,
     moveRing: true,
     stainMode: 'drip',
     stainPigment: 'match',
@@ -619,11 +619,23 @@ const VFX = (() => {
     cupNY: 0.38,
     lift: 0,
     targetLift: 0,
-    stains: []
+    stains: [],
+    // Lifecycle animation state: 'idle' | 'exiting' | 'drinking' | 'returning' | 'refilling'
+    phase: 'idle',
+    phaseStart: 0,
+    nextVolAfterSip: 0.65,
+    pendingDrip: false,
+    dripFired: false,
+    refillFrom: 0.05
   };
 
   let canvas, ctx, W = 0, H = 0, dpr = 1, napkinCache = null;
   let dragging = false, dragOffX = 0, dragOffY = 0, dragOriginX = 0, dragOriginY = 0, hoverCup = false;
+
+  const EXIT_MS = 380;
+  const DRINK_MS = 1050;
+  const RETURN_MS = 380;
+  const REFILL_MS = 1150;
 
   function cupPos() {
     const pad = state.cupSize * 0.45;
@@ -684,18 +696,30 @@ const VFX = (() => {
     addStainAt(Math.max(105, x - state.cupSize * 1.75), Math.max(85, y - state.cupSize * 0.18), 'drip', true, 'matcha_pure');
   }
 
+  function statusNote() {
+    const pct = Math.round(state.targetVolume * 100);
+    if (state.phase === 'exiting' || state.phase === 'drinking') return `${DRINKS[state.drinkId].name} | Drinking off-canvas...`;
+    if (state.phase === 'returning') return `${DRINKS[state.drinkId].name} | Setting cup down (${pct}%)`;
+    if (state.phase === 'refilling') return `${DRINKS[state.drinkId].name} | Refilling to 100%...`;
+    return `${DRINKS[state.drinkId].name} | ${pct}% | Drag cup to move, click napkin to add stain`;
+  }
+
   function syncUI() {
     const pct = Math.round(state.targetVolume * 100);
     const vKey = nearestVolKey(state.targetVolume);
     document.getElementById('vol-slider').value = pct;
     document.getElementById('vol-val').textContent = pct + '%';
     document.getElementById('cmp-vol').textContent = pct + '%';
-    document.getElementById('stage-info').textContent = `${DRINKS[state.drinkId].name} | ${pct}% | Drag cup to move, click napkin to add stain`;
+    document.getElementById('stage-info').textContent = statusNote();
+
+    const busy = state.phase !== 'idle';
+    document.getElementById('btn-sip').disabled = busy;
+    document.getElementById('btn-sip-drip').disabled = busy;
+    document.getElementById('btn-refill').disabled = busy;
 
     document.querySelectorAll('#drink-btns button').forEach(b => b.classList.toggle('active', b.dataset.drink === state.drinkId));
     document.querySelectorAll('#vol-step-btns button').forEach(b => b.classList.toggle('active', b.dataset.vkey === vKey));
 
-    // Update Same-Cup Volume Thumbnails
     document.querySelectorAll('#vol-thumbs button.thumb').forEach(b => {
       const k = b.dataset.vkey;
       b.classList.toggle('active', k === vKey);
@@ -704,7 +728,6 @@ const VFX = (() => {
       if (img && img.getAttribute('src') !== url) img.setAttribute('src', url);
     });
 
-    // Update 4-Drink Comparison Thumbnails
     document.querySelectorAll('#drink-thumbs button.thumb').forEach(b => {
       const dId = b.dataset.drink;
       b.classList.toggle('active', dId === state.drinkId);
@@ -714,29 +737,128 @@ const VFX = (() => {
     });
   }
 
+  function triggerRefill() {
+    if (state.phase !== 'idle') return;
+    state.phase = 'refilling';
+    state.phaseStart = performance.now();
+    state.refillFrom = state.volume;
+    state.targetVolume = 1.0;
+    syncUI();
+  }
+
+  function drinkSip(forceDrip = false) {
+    if (state.phase !== 'idle') return;
+    // If cup is already down to 5% dregs -> trigger refill visually!
+    if (state.targetVolume <= 0.07) {
+      triggerRefill();
+      return;
+    }
+    const idx = VOLUME_STOPS.findIndex(s => s.val <= state.targetVolume + 0.02);
+    const nextIdx = (idx === -1) ? 1 : Math.min(VOLUME_STOPS.length - 1, idx + 1);
+    state.nextVolAfterSip = VOLUME_STOPS[nextIdx].val;
+    state.pendingDrip = forceDrip || (Math.random() < state.dripChance);
+    state.dripFired = false;
+    state.phase = 'exiting';
+    state.phaseStart = performance.now();
+    syncUI();
+  }
+
   function tick(now) {
-    state.volume += (state.targetVolume - state.volume) * 0.18;
-    if (Math.abs(state.targetVolume - state.volume) < 0.001) state.volume = state.targetVolume;
-    state.lift += (state.targetLift - state.lift) * 0.22;
+    const basePos = cupPos();
+    let drawX = basePos.x, drawY = basePos.y;
+    let drawOpacity = 1;
+    let drawLift = state.lift;
+
+    if (state.phase === 'idle') {
+      state.volume += (state.targetVolume - state.volume) * 0.18;
+      if (Math.abs(state.targetVolume - state.volume) < 0.001) state.volume = state.targetVolume;
+      state.lift += (state.targetLift - state.lift) * 0.22;
+      drawLift = state.lift;
+    } else if (state.phase === 'exiting') {
+      const t = Math.min(1, (now - state.phaseStart) / EXIT_MS);
+      const ease = t * t * (3 - 2 * t);
+      // Slide cup smoothly off the bottom-right edge and fade completely away
+      drawX = basePos.x + ease * (W - basePos.x + state.cupSize * 0.65) * 0.72;
+      drawY = basePos.y + ease * (H - basePos.y + state.cupSize * 0.45) * 0.55;
+      drawLift = ease;
+      drawOpacity = Math.max(0, 1 - Math.pow(t, 1.5));
+      if (t >= 1) {
+        state.phase = 'drinking';
+        state.phaseStart = now;
+        state.volume = state.nextVolAfterSip;
+        state.targetVolume = state.nextVolAfterSip;
+        syncUI();
+      }
+    } else if (state.phase === 'drinking') {
+      // Cup is completely off the canvas while drinking!
+      drawOpacity = 0;
+      const t = Math.min(1, (now - state.phaseStart) / DRINK_MS);
+      // Mid-sip drip chance onto the napkin near where the cup sat
+      if (state.pendingDrip && !state.dripFired && t >= 0.45) {
+        state.dripFired = true;
+        const b = cupBowlCenter(basePos.x, basePos.y);
+        const ang = Math.PI * (0.55 + Math.random() * 0.85);
+        const dist = state.cupSize * (0.18 + Math.random() * 0.35);
+        const sx = Math.max(36, Math.min(W - 36, b.x + Math.cos(ang) * dist));
+        const sy = Math.max(36, Math.min(H - 36, b.y + Math.sin(ang) * dist));
+        addStainAt(sx, sy, Math.random() < 0.72 ? 'drip' : 'trail', false, state.drinkId);
+      }
+      if (t >= 1) {
+        state.phase = 'returning';
+        state.phaseStart = now;
+        syncUI();
+      }
+    } else if (state.phase === 'returning') {
+      const t = Math.min(1, (now - state.phaseStart) / RETURN_MS);
+      const ease = 1 - Math.pow(1 - t, 3);
+      const inv = 1 - ease;
+      drawX = basePos.x + inv * (W - basePos.x + state.cupSize * 0.65) * 0.72;
+      drawY = basePos.y + inv * (H - basePos.y + state.cupSize * 0.45) * 0.55;
+      drawLift = inv;
+      drawOpacity = Math.min(1, Math.pow(t, 0.7));
+      if (t >= 1) {
+        state.phase = 'idle';
+        state.lift = 0; state.targetLift = 0;
+        syncUI();
+        // If cup just hit 5% dregs and Auto-refill is enabled, visually refill after a brief beat
+        if (state.autoRefill && state.targetVolume <= 0.07) {
+          setTimeout(() => {
+            if (state.phase === 'idle' && state.targetVolume <= 0.07) triggerRefill();
+          }, 650);
+        }
+      }
+    } else if (state.phase === 'refilling') {
+      const t = Math.min(1, (now - state.phaseStart) / REFILL_MS);
+      const ease = 1 - Math.pow(1 - t, 2.2);
+      state.volume = state.refillFrom + (1.0 - state.refillFrom) * ease;
+      if (t >= 1) {
+        state.volume = 1.0;
+        state.targetVolume = 1.0;
+        state.phase = 'idle';
+        syncUI();
+      }
+    }
 
     if (W > 0 && H > 0) {
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.drawImage(ensureNapkin(), 0, 0, W, H);
       for (const st of state.stains) if (now >= st.tStart) renderStain(ctx, st, now);
-      const { x, y } = cupPos();
-      drawCupSprite(ctx, x, y, state.cupSize, state.drinkId, state.volume, state.rotDeg, state.lift);
+      drawCupSprite(ctx, drawX, drawY, state.cupSize, state.drinkId, state.volume, state.rotDeg, drawLift, drawOpacity);
     }
     requestAnimationFrame(tick);
   }
 
   function setDrink(id) { state.drinkId = id; syncUI(); }
-  function setVolume(v) { state.targetVolume = Math.max(0.05, Math.min(1.0, v)); syncUI(); }
-  function takeSip() {
-    const idx = VOLUME_STOPS.findIndex(s => s.val <= state.targetVolume + 0.02);
-    const nextIdx = (idx === -1 || idx >= VOLUME_STOPS.length - 1) ? 0 : idx + 1;
-    setVolume(VOLUME_STOPS[nextIdx].val);
+  function setVolume(v) {
+    if (state.phase !== 'idle') return;
+    state.targetVolume = Math.max(0.05, Math.min(1.0, v));
+    syncUI();
   }
-  function refill() { setVolume(1.0); }
+  function setDripChance(v) {
+    state.dripChance = Math.max(0, Math.min(1, v));
+    document.getElementById('drip-chance-val').textContent = Math.round(state.dripChance * 100) + '%';
+  }
+  function setAutoRefill(on) { state.autoRefill = !!on; }
   function setRotation(deg) { state.rotDeg = Number(deg) || 0; document.getElementById('rot-val').textContent = state.rotDeg + '\u00b0'; }
   function setCupSize(px) { state.cupSize = Number(px) || 175; document.getElementById('size-val').textContent = state.cupSize + 'px'; }
   function setMoveRing(on) { state.moveRing = !!on; }
@@ -786,6 +908,7 @@ const VFX = (() => {
 
     const pos = e => { const r = canvas.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; };
     const hitsCup = (px, py) => {
+      if (state.phase !== 'idle') return false;
       const { x, y } = cupPos();
       return Math.hypot(px - x, py - y) <= state.cupSize * 0.45;
     };
@@ -834,8 +957,9 @@ const VFX = (() => {
   }
 
   return {
-    init, setDrink, setVolume, takeSip, refill, setRotation, setCupSize, setMoveRing,
-    setStainMode, setStainPigment, setBleedScale, spawnNearCup, stampCupRingNow, clearStains, newNapkin,
+    init, setDrink, setVolume, drinkSip, triggerRefill, setDripChance, setAutoRefill,
+    setRotation, setCupSize, setMoveRing, setStainMode, setStainPigment, setBleedScale,
+    spawnNearCup, stampCupRingNow, clearStains, newNapkin,
     getState: () => ({ ...state, stainCount: state.stains.length, loadedCups: Array.from(cupImages.values()).filter(i => i.complete && i.naturalWidth > 0).length })
   };
 })();
