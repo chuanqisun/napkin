@@ -22,6 +22,7 @@ body {
   height: 100dvh;
   width: 100vw;
   overflow: hidden;
+  overscroll-behavior: none;
   background: var(--bg);
   color: var(--ink-ui);
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, sans-serif;
@@ -34,6 +35,13 @@ body {
   flex-direction: column;
   height: 100dvh;
   width: 100vw;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
+button {
+  -webkit-tap-highlight-color: transparent;
 }
 
 header.toolbar {
@@ -225,6 +233,9 @@ button#drink-menu-btn.menu-prominent .menu-dot {
   top: 52px;
   right: 16px;
   max-width: calc(100vw - 24px);
+  max-height: calc(100dvh - 72px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .napkin-popover:is(:popover-open, .\:popover-open) {
@@ -466,6 +477,7 @@ main.stage {
   padding: 24px 38px;
   background: radial-gradient(circle at 50% 45%, #d8c9b2 0%, #c8b69b 100%);
   overflow: hidden;
+  touch-action: none;
 }
 
 .napkin-frame {
@@ -517,6 +529,50 @@ canvas#cup-layer {
   opacity: 0;
   pointer-events: none;
   font-size: 16px;
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+/* Touch contextual action bar for selected item (hidden on desktop mouse) */
+.sel-actions {
+  position: absolute;
+  left: 0;
+  top: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px;
+  border-radius: 10px;
+  background: rgba(248, 243, 234, 0.96);
+  border: 1px solid rgba(92, 74, 52, 0.26);
+  box-shadow: 0 6px 18px rgba(45, 32, 18, 0.18), 0 1px 4px rgba(45, 32, 18, 0.08);
+  backdrop-filter: blur(8px);
+  z-index: 12;
+  touch-action: manipulation;
+}
+
+.sel-actions[hidden] {
+  display: none;
+}
+
+.sel-act-btn {
+  height: 32px;
+  padding: 0 12px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--ink-ui);
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.sel-act-btn:active {
+  background: var(--hover-bg);
+}
+
+.sel-act-danger {
+  color: #b91c1c;
 }
 
 /* Single Sound On/Off toolbar toggle */
@@ -633,17 +689,110 @@ canvas#crumple-overlay {
 
 @media (max-width: 680px) {
   header.toolbar {
-    padding: 6px 8px;
-    gap: 5px;
+    padding: calc(6px + env(safe-area-inset-top, 0px)) calc(8px + env(safe-area-inset-right, 0px)) 6px calc(8px + env(safe-area-inset-left, 0px));
+    gap: 5px 6px;
+    justify-content: flex-start;
+  }
+  header.toolbar .group {
+    width: 100%;
+    justify-content: space-between;
+    overflow-x: auto;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+  }
+  header.toolbar .group::-webkit-scrollbar {
+    display: none;
+  }
+  .brand,
+  .brand + .divider {
+    display: none;
   }
   main.stage {
-    padding: 6px;
+    padding: 8px calc(8px + env(safe-area-inset-right, 0px)) calc(8px + env(safe-area-inset-bottom, 0px)) calc(8px + env(safe-area-inset-left, 0px));
   }
   .divider {
-    margin: 0 2px;
+    height: 18px;
+    margin: 0 1px;
   }
   button.tool-btn {
-    height: 30px;
+    height: 36px;
+    min-width: 36px;
+    padding: 0 8px;
+    flex-shrink: 0;
+  }
+  button.tool-btn svg {
+    width: 18px;
+    height: 18px;
+  }
+  button#pen-btn {
     padding: 0 7px;
+    gap: 4px;
+  }
+  button#pen-btn .pen-mini {
+    width: 32px;
+    height: 14px;
+  }
+  .swatches {
+    gap: 8px;
+    padding: 0 4px;
+    flex-shrink: 0;
+  }
+  button.swatch {
+    width: 24px;
+    height: 24px;
+  }
+  .napkin-popover,
+  #pen-menu,
+  #drink-menu {
+    position-anchor: auto;
+    inset: auto;
+    top: var(--toolbar-bottom, 94px);
+    left: 50%;
+    right: auto;
+    transform: translateX(-50%);
+    width: min(340px, calc(100vw - 20px));
+    max-width: calc(100vw - 20px);
+    max-height: calc(100dvh - var(--toolbar-bottom, 94px) - 16px - env(safe-area-inset-bottom, 0px));
+  }
+  .pop-close {
+    width: 34px;
+    height: 34px;
+    font-size: 18px;
+  }
+  button.pen-opt {
+    padding: 8px 10px;
+    min-height: 44px;
+  }
+  button.style-opt {
+    padding: 7px;
+  }
+  button.drink-opt {
+    padding: 10px 8px;
+  }
+  .save-menu {
+    position: fixed;
+    top: var(--toolbar-bottom, 94px);
+    right: calc(10px + env(safe-area-inset-right, 0px));
+    min-width: 210px;
+  }
+  .save-menu button {
+    padding: 10px 11px;
+  }
+}
+
+@media (max-height: 520px) and (pointer: coarse) {
+  main.stage {
+    padding: 8px calc(12px + env(safe-area-inset-right, 0px)) calc(8px + env(safe-area-inset-bottom, 0px)) calc(12px + env(safe-area-inset-left, 0px));
+  }
+}
+
+@media (pointer: coarse) {
+  button.tool-btn {
+    min-height: 36px;
+    min-width: 36px;
+  }
+  button.swatch {
+    width: 24px;
+    height: 24px;
   }
 }

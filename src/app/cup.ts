@@ -94,6 +94,7 @@ interface StainItem {
 
 interface PointerDragState {
   pointerId: number;
+  dragPx: number;
   downX: number;
   downY: number;
   lastX: number;
@@ -251,7 +252,11 @@ export function createNapkinCup(deps: NapkinCupDeps): NapkinCupController {
   }
 
   function getCupSizePx(w: number, h: number): number {
-    return Math.max(360, Math.min(500, Math.min(w, h) * 0.66));
+    const m = Math.min(w, h);
+    if (m >= 545) return Math.min(500, m * 0.66);
+    const t = Math.max(0, Math.min(1, (m - 320) / 225));
+    const ratio = 0.48 + 0.18 * t;
+    return Math.max(155, Math.min(360, m * ratio));
   }
 
   function getCupCenter(w: number, h: number): { x: number; y: number; sz: number } {
@@ -273,19 +278,19 @@ export function createNapkinCup(deps: NapkinCupDeps): NapkinCupController {
     return { x: cx + Math.cos(rad) * off, y: cy + Math.sin(rad) * off };
   }
 
-  function hitsCup(px: number, py: number): boolean {
+  function hitsCup(px: number, py: number, isTouch = false): boolean {
     if (!state.hasDrink || state.phase !== 'idle') return false;
     const { w, h } = getStageSize();
     const { x, y, sz } = getCupCenter(w, h);
     const bowl = getBowlCenter(x, y, sz, state.rotDeg);
     const bowlR = sz * 0.335;
-    if (Math.hypot(px - bowl.x, py - bowl.y) <= bowlR * 1.03) return true;
+    if (Math.hypot(px - bowl.x, py - bowl.y) <= bowlR * (isTouch ? 1.08 : 1.03)) return true;
     const rad = -(state.rotDeg * Math.PI) / 180;
     const dx = px - x;
     const dy = py - y;
     const lx = dx * Math.cos(rad) - dy * Math.sin(rad);
     const ly = dx * Math.sin(rad) + dy * Math.cos(rad);
-    return lx >= sz * 0.2 && lx <= sz * 0.45 && Math.abs(ly) <= sz * 0.09;
+    return lx >= sz * 0.2 && lx <= sz * 0.45 && Math.abs(ly) <= sz * (isTouch ? 0.12 : 0.09);
   }
 
   function syncMenuBtn(): void {
@@ -1040,7 +1045,9 @@ export function createNapkinCup(deps: NapkinCupDeps): NapkinCupController {
   }
 
   function onPointerDown(e: PointerEvent, p: Point2D, captureEl: HTMLElement): boolean {
-    if (!hitsCup(p.x, p.y)) return false;
+    const isTouch = e.pointerType === 'touch';
+    if (pointerState) return true;
+    if (!hitsCup(p.x, p.y, isTouch)) return false;
     e.preventDefault();
     try {
       captureEl.setPointerCapture(e.pointerId);
@@ -1053,6 +1060,7 @@ export function createNapkinCup(deps: NapkinCupDeps): NapkinCupController {
 
     pointerState = {
       pointerId: e.pointerId,
+      dragPx: isTouch ? 12 : DRAG_PX,
       downX: p.x,
       downY: p.y,
       lastX: p.x,
@@ -1075,15 +1083,16 @@ export function createNapkinCup(deps: NapkinCupDeps): NapkinCupController {
     return true;
   }
 
-  function onPointerMove(_e: PointerEvent, p: Point2D): boolean {
+  function onPointerMove(e: PointerEvent, p: Point2D): boolean {
     if (pointerState) {
+      if (e.pointerId !== pointerState.pointerId) return true;
       const dx = p.x - pointerState.lastX;
       const dy = p.y - pointerState.lastY;
       pointerState.lastX = p.x;
       pointerState.lastY = p.y;
       pointerState.movedDist += Math.hypot(dx, dy);
 
-      if (!pointerState.dragging && pointerState.movedDist > DRAG_PX) {
+      if (!pointerState.dragging && pointerState.movedDist > pointerState.dragPx) {
         clearTimeout(pointerState.holdTimer);
         pointerState.dragging = true;
         state.targetLift = 1;
@@ -1114,7 +1123,7 @@ export function createNapkinCup(deps: NapkinCupDeps): NapkinCupController {
       return true;
     }
 
-    if (!deps.isCanvasBusy()) {
+    if (e.pointerType !== 'touch' && !deps.isCanvasBusy()) {
       const over = hitsCup(p.x, p.y);
       if (over !== hoveringCup) {
         hoveringCup = over;
@@ -1125,8 +1134,9 @@ export function createNapkinCup(deps: NapkinCupDeps): NapkinCupController {
     return false;
   }
 
-  function finishPointer(cancelled = false): boolean {
+  function finishPointer(cancelled = false, pointerId?: number): boolean {
     if (!pointerState) return false;
+    if (pointerId !== undefined && pointerId !== pointerState.pointerId) return true;
     const ps = pointerState;
     pointerState = null;
     clearTimeout(ps.holdTimer);
@@ -1160,7 +1170,7 @@ export function createNapkinCup(deps: NapkinCupDeps): NapkinCupController {
         }
       }
       kickAnim();
-    } else if (!cancelled && ps.movedDist <= DRAG_PX) {
+    } else if (!cancelled && ps.movedDist <= ps.dragPx) {
       triggerDrink({ manual: true });
     }
     return true;
@@ -1367,12 +1377,12 @@ export function createNapkinCup(deps: NapkinCupDeps): NapkinCupController {
     deps.stageEl.addEventListener(
       'pointerup',
       e => {
-        if (finishPointer(false)) e.stopPropagation();
+        if (finishPointer(false, e.pointerId)) e.stopPropagation();
       },
       true,
     );
-    deps.stageEl.addEventListener('pointercancel', () => finishPointer(true), true);
-    deps.stageEl.addEventListener('lostpointercapture', () => finishPointer(true), false);
+    deps.stageEl.addEventListener('pointercancel', e => finishPointer(true, e.pointerId), true);
+    deps.stageEl.addEventListener('lostpointercapture', e => finishPointer(true, e.pointerId), false);
     deps.stageEl.addEventListener('pointerleave', () => {
       if (!pointerState && hoveringCup) {
         hoveringCup = false;

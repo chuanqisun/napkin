@@ -39,21 +39,34 @@ import {
   type WordCacheEntry,
 } from './types';
 
-// Conditional polyfills per Chrome Modern Web Guidance (only loaded when native support is missing)
+// Conditional polyfills / offline fallback for Popover & Invoker Commands
 if (!Object.hasOwn(HTMLElement.prototype, 'popover')) {
   const popoverPolyfillUrl = 'https://unpkg.com/@oddbird/popover-polyfill@latest/dist/popover.min.js';
   void import(/* @vite-ignore */ popoverPolyfillUrl);
 }
 if (!('commandForElement' in HTMLButtonElement.prototype)) {
-  const invokersPolyfillUrl = 'https://esm.run/invokers-polyfill';
-  void import(/* @vite-ignore */ invokersPolyfillUrl);
+  document.addEventListener('click', e => {
+    const btn = (e.target as HTMLElement | null)?.closest<HTMLButtonElement>('button[commandfor][command]');
+    if (!btn) return;
+    const targetId = btn.getAttribute('commandfor');
+    const cmd = btn.getAttribute('command');
+    const el = targetId ? document.getElementById(targetId) : null;
+    if (!el || typeof el.togglePopover !== 'function') return;
+    if (cmd === 'toggle-popover') el.togglePopover();
+    else if (cmd === 'show-popover') el.showPopover();
+    else if (cmd === 'hide-popover') el.hidePopover();
+  });
 }
 
+const toolbarEl = document.querySelector('header.toolbar') as HTMLElement;
 const canvas = document.getElementById('c') as HTMLCanvasElement;
 const cupCanvas = document.getElementById('cup-layer') as HTMLCanvasElement;
 const stageEl = document.getElementById('stage') as HTMLElement;
 const wrapEl = document.getElementById('wrap') as HTMLElement;
 const inlineInput = document.getElementById('inline-text') as HTMLInputElement;
+const selActionsEl = document.getElementById('sel-actions') as HTMLElement | null;
+const selEditBtn = document.getElementById('sel-edit-btn') as HTMLButtonElement | null;
+const selDeleteBtn = document.getElementById('sel-delete-btn') as HTMLButtonElement | null;
 const crumpleOverlay = document.getElementById('crumple-overlay') as HTMLCanvasElement;
 
 let currentColor = '#1b3d8f';
@@ -101,7 +114,12 @@ let selectedItem: NapkinItem | null = null;
 let hoverItem: NapkinItem | null = null;
 let dragItem: NapkinItem | null = null;
 let dragOff: [number, number] = [0, 0];
+let dragStartPos: [number, number] = [0, 0];
 let resizeState: { item: NapkinItem; handle: HandleId; snap: ResizeSnapshot } | null = null;
+let lastPointerType = 'mouse';
+let activePointerId: number | null = null;
+let pendingTextTap: { pointerId: number; x: number; y: number } | null = null;
+let lastMoveTap: { time: number; x: number; y: number; item: NapkinItem } | null = null;
 
 interface TypingSnapshot {
   text: string;
@@ -328,12 +346,48 @@ function getResizeHandles(it: NapkinItem): Array<{ id: HandleId; x: number; y: n
   ];
 }
 
-function hitResizeHandle(it: NapkinItem | null, px: number, py: number) {
+function hitResizeHandle(it: NapkinItem | null, px: number, py: number, isTouch = false) {
   if (!it) return null;
+  const tol = isTouch ? 22 : 7;
   for (const h of getResizeHandles(it)) {
-    if (Math.abs(px - h.x) <= 7 && Math.abs(py - h.y) <= 7) return h;
+    if (Math.abs(px - h.x) <= tol && Math.abs(py - h.y) <= tol) return h;
   }
   return null;
+}
+
+function syncToolbarBottom(): void {
+  if (!toolbarEl) return;
+  const bottom = Math.round(toolbarEl.getBoundingClientRect().bottom + 8);
+  document.documentElement.style.setProperty('--toolbar-bottom', `${bottom}px`);
+}
+
+function updateSelectionActions(): void {
+  if (!selActionsEl) return;
+  const show =
+    lastPointerType === 'touch' &&
+    tool === 'move' &&
+    !!selectedItem &&
+    items.includes(selectedItem) &&
+    !dragItem &&
+    !resizeState &&
+    !typingTarget;
+  if (!show || !selectedItem) {
+    selActionsEl.hidden = true;
+    return;
+  }
+  const canEdit = selectedItem.kind === 'shape' || selectedItem.kind === 'text';
+  if (selEditBtn) selEditBtn.hidden = !canEdit;
+  selActionsEl.hidden = false;
+
+  const r = canvas.getBoundingClientRect();
+  const barW = selActionsEl.offsetWidth || (canEdit ? 124 : 74);
+  const barH = selActionsEl.offsetHeight || 42;
+  const cx = selectedItem.x + selectedItem.w * 0.5;
+  const left = Math.max(8, Math.min(r.width - barW - 8, cx - barW * 0.5));
+  const above = selectedItem.y - barH - 14;
+  const top = above >= 8 ? above : Math.min(r.height - barH - 8, selectedItem.y + selectedItem.h + 14);
+  selActionsEl.style.left = `${Math.round(left)}px`;
+  selActionsEl.style.top = `${Math.round(Math.max(8, top))}px`;
 }
 
 function snapshotItemGeometry(it: NapkinItem): ResizeSnapshot {
@@ -577,15 +631,18 @@ function render(opts: { skipCup?: boolean } = {}): void {
     ctx.setLineDash([4, 3]);
     ctx.strokeRect(selectedItem.x - 5, selectedItem.y - 5, selectedItem.w + 10, selectedItem.h + 10);
     ctx.setLineDash([]);
+    const hs = lastPointerType === 'touch' ? 10 : 7;
+    const hh = hs * 0.5;
     for (const h of getResizeHandles(selectedItem)) {
       ctx.fillStyle = '#f8f3ea';
       ctx.strokeStyle = '#23201c';
       ctx.lineWidth = 1.4;
-      ctx.fillRect(h.x - 3.5, h.y - 3.5, 7, 7);
-      ctx.strokeRect(h.x - 3.5, h.y - 3.5, 7, 7);
+      ctx.fillRect(h.x - hh, h.y - hh, hs, hs);
+      ctx.strokeRect(h.x - hh, h.y - hh, hs, hs);
     }
     ctx.restore();
   }
+  updateSelectionActions();
 
   for (const ps of pendingStrokes) drawRawPreview(ctx, ps, currentColor, currentPenId);
   if (activeRaw) drawRawPreview(ctx, activeRaw, currentColor, currentPenId);
@@ -727,12 +784,14 @@ function onLiveTextInput(): void {
     const ti = typingTarget.textItem;
     ti.text = val;
     ti.styleKey = currentStyleKey;
+    const r = canvas.getBoundingClientRect();
+    const freeMaxW = Math.max(120, Math.min(640, r.width - ti.anchorX - 16));
     void handwriting.synthesizeCursiveStreaming(
       val,
       ti.anchorX,
       ti.anchorY,
       32,
-      640,
+      freeMaxW,
       ti.color,
       null,
       ti,
@@ -975,18 +1034,39 @@ async function loadStarterScene(forcedIdx: number | null = null): Promise<string
   const diagram =
     forcedIdx != null && STARTER_DIAGRAMS[forcedIdx] ? STARTER_DIAGRAMS[forcedIdx]! : pickStarterDiagram();
 
-  const ox = Math.max(36, Math.min(r.width - diagram.w - 36, (r.width - diagram.w) * 0.44));
-  const oy = Math.max(32, Math.min(r.height - diagram.h - 32, (r.height - diagram.h) * 0.46));
+  const marginX = r.width < 520 ? 16 : 36;
+  const marginY = r.height < 420 ? 16 : 32;
+  const availW = Math.max(140, r.width - marginX * 2);
+  const availH = Math.max(140, r.height - marginY * 2);
+  const scale = Math.max(0.35, Math.min(1, availW / diagram.w, availH / diagram.h));
+
+  const scaledW = diagram.w * scale;
+  const scaledH = diagram.h * scale;
+  const ox =
+    scale < 1
+      ? Math.max(marginX, (r.width - scaledW) * 0.5)
+      : Math.max(36, Math.min(r.width - diagram.w - 36, (r.width - diagram.w) * 0.44));
+  const oy =
+    scale < 1
+      ? Math.max(marginY, (r.height - scaledH) * 0.44)
+      : Math.max(32, Math.min(r.height - diagram.h - 32, (r.height - diagram.h) * 0.46));
+
+  const sx = (v: number) => ox + (v - ox) * scale;
+  const sy = (v: number) => oy + (v - oy) * scale;
 
   items = [];
   const synthJobs: Array<() => Promise<void>> = [];
   diagram.build(ox, oy, {
     shape(type: ShapeType, x: number, y: number, w: number, h: number, label: string, color = '#1d3557') {
-      const sh = buildShapeItem(type, x, y, w, h, label, color, currentPenId, currentStyleKey);
+      const rx = sx(x);
+      const ry = sy(y);
+      const rw = w * scale;
+      const rh = h * scale;
+      const sh = buildShapeItem(type, rx, ry, rw, rh, label, color, currentPenId, currentStyleKey);
       items.push(sh);
       if (label) {
-        const th = type === 'diamond' ? 25 : 27;
-        const maxW = type === 'diamond' ? w * 0.62 : w * 0.84;
+        const th = Math.max(15, Math.round((type === 'diamond' ? 25 : 27) * scale));
+        const maxW = type === 'diamond' ? rw * 0.64 : rw * 0.84;
         synthJobs.push(() =>
           handwriting.synthesizeCursiveStreaming(
             label,
@@ -1006,22 +1086,26 @@ async function loadStarterScene(forcedIdx: number | null = null): Promise<string
       return sh;
     },
     arrow(x1: number, y1: number, x2: number, y2: number, color = '#1d3557') {
-      const ar = buildArrowItem(x1, y1, x2, y2, color, currentPenId);
+      const ar = buildArrowItem(sx(x1), sy(y1), sx(x2), sy(y2), color, currentPenId);
       items.push(ar);
       return ar;
     },
     note(cx: number, cy: number, text: string, targetH = 23, maxW = 200, color = '#1d3557') {
+      const rcx = sx(cx);
+      const rcy = sy(cy);
+      const rth = Math.max(14, Math.round(targetH * scale));
+      const rMaxW = maxW * scale;
       const ti: TextItem = {
         kind: 'text',
         text,
         styleKey: currentStyleKey,
         penId: currentPenId,
-        anchorX: cx,
-        anchorY: cy,
-        x: cx - maxW * 0.4,
-        y: cy - targetH * 0.6,
-        w: maxW * 0.8,
-        h: targetH * 1.2,
+        anchorX: rcx,
+        anchorY: rcy,
+        x: rcx - rMaxW * 0.4,
+        y: rcy - rth * 0.6,
+        w: rMaxW * 0.8,
+        h: rth * 1.2,
         color,
         strokes: [],
         wordCache: [],
@@ -1031,10 +1115,10 @@ async function loadStarterScene(forcedIdx: number | null = null): Promise<string
       synthJobs.push(() =>
         handwriting.synthesizeCursiveStreaming(
           text,
-          cx,
-          cy,
-          targetH,
-          maxW,
+          rcx,
+          rcy,
+          rth,
+          rMaxW,
           color,
           null,
           ti,
@@ -1057,12 +1141,22 @@ function getPos(e: PointerEvent | MouseEvent): Point2D {
   return { x: e.clientX - r.left, y: e.clientY - r.top };
 }
 
-function hitItem(x: number, y: number): NapkinItem | null {
+function hitItem(x: number, y: number, isTouch = false): NapkinItem | null {
+  const pad = isTouch ? 18 : 8;
   for (let i = items.length - 1; i >= 0; i--) {
     const it = items[i]!;
-    if (x >= it.x - 8 && x <= it.x + it.w + 8 && y >= it.y - 8 && y <= it.y + it.h + 8) return it;
+    if (x >= it.x - pad && x <= it.x + it.w + pad && y >= it.y - pad && y <= it.y + it.h + pad) return it;
   }
   return null;
+}
+
+function deleteSelectedItem(): void {
+  if (!selectedItem) return;
+  const idx = items.indexOf(selectedItem);
+  if (idx !== -1) items.splice(idx, 1);
+  selectedItem = null;
+  hoverItem = null;
+  scheduleRender();
 }
 
 // ---- Wire DOM Listeners ----
@@ -1099,6 +1193,9 @@ inlineInput.addEventListener('blur', () => {
 });
 
 canvas.addEventListener('pointerdown', e => {
+  if (e.pointerType === 'mouse' && e.button !== 0) return;
+  const isTouch = e.pointerType === 'touch';
+  lastPointerType = e.pointerType || 'mouse';
   const p = getPos(e);
 
   if (typingTarget) {
@@ -1114,19 +1211,29 @@ canvas.addEventListener('pointerdown', e => {
   }
 
   if (tool === 'text') {
+    if (isTouch) {
+      pendingTextTap = { pointerId: e.pointerId, x: p.x, y: p.y };
+      return;
+    }
     e.preventDefault();
-    const hit = hitItem(p.x, p.y);
+    const hit = hitItem(p.x, p.y, false);
     if (hit && hit.kind === 'shape') openTextBox(hit.x + hit.w / 2, hit.y + hit.h / 2, hit, null);
     else if (hit && hit.kind === 'text') openTextBox(hit.anchorX, hit.anchorY, null, hit);
     else openTextBox(p.x, p.y, null, null);
     return;
   }
 
-  canvas.setPointerCapture(e.pointerId);
+  if (activePointerId !== null && activePointerId !== e.pointerId) return;
+  activePointerId = e.pointerId;
+  try {
+    canvas.setPointerCapture(e.pointerId);
+  } catch {
+    // Ignore capture errors
+  }
 
   if (tool === 'move') {
     if (selectedItem) {
-      const h = hitResizeHandle(selectedItem, p.x, p.y);
+      const h = hitResizeHandle(selectedItem, p.x, p.y, isTouch);
       if (h) {
         resizeState = { item: selectedItem, handle: h.id, snap: snapshotItemGeometry(selectedItem) };
         canvas.style.cursor = h.cursor;
@@ -1134,11 +1241,12 @@ canvas.addEventListener('pointerdown', e => {
         return;
       }
     }
-    const hit = hitItem(p.x, p.y);
+    const hit = hitItem(p.x, p.y, isTouch);
     selectedItem = hit;
     if (hit) {
       dragItem = hit;
       dragOff = [p.x, p.y];
+      dragStartPos = [p.x, p.y];
       canvas.style.cursor = 'grabbing';
     }
     scheduleRender();
@@ -1175,6 +1283,15 @@ canvas.addEventListener('pointerdown', e => {
 
 canvas.addEventListener('pointermove', e => {
   const p = getPos(e);
+
+  if (pendingTextTap && e.pointerId === pendingTextTap.pointerId) {
+    if (Math.hypot(p.x - pendingTextTap.x, p.y - pendingTextTap.y) > 14) {
+      pendingTextTap = null;
+    }
+    return;
+  }
+
+  if (activePointerId !== null && e.pointerId !== activePointerId) return;
 
   if (resizeState) {
     const { item, handle, snap } = resizeState;
@@ -1233,12 +1350,13 @@ canvas.addEventListener('pointermove', e => {
   }
 
   if (tool === 'move') {
-    const rh = hitResizeHandle(selectedItem, p.x, p.y);
+    if (e.pointerType === 'touch') return;
+    const rh = hitResizeHandle(selectedItem, p.x, p.y, false);
     if (rh) {
       canvas.style.cursor = rh.cursor;
       return;
     }
-    const h = hitItem(p.x, p.y);
+    const h = hitItem(p.x, p.y, false);
     canvas.style.cursor = h ? 'grab' : 'default';
     if (h !== hoverItem) {
       hoverItem = h;
@@ -1261,7 +1379,23 @@ canvas.addEventListener('pointermove', e => {
 });
 
 canvas.addEventListener('pointerup', e => {
+  const isTouch = e.pointerType === 'touch';
   const p = getPos(e);
+
+  if (pendingTextTap && e.pointerId === pendingTextTap.pointerId) {
+    const tap = pendingTextTap;
+    pendingTextTap = null;
+    if (Math.hypot(p.x - tap.x, p.y - tap.y) <= 14) {
+      const hit = hitItem(p.x, p.y, true);
+      if (hit && hit.kind === 'shape') openTextBox(hit.x + hit.w / 2, hit.y + hit.h / 2, hit, null);
+      else if (hit && hit.kind === 'text') openTextBox(hit.anchorX, hit.anchorY, null, hit);
+      else openTextBox(p.x, p.y, null, null);
+    }
+    return;
+  }
+
+  if (activePointerId !== null && e.pointerId !== activePointerId) return;
+  activePointerId = null;
   audio.stopDraw();
 
   if (resizeState) {
@@ -1274,11 +1408,31 @@ canvas.addEventListener('pointerup', e => {
   }
 
   if (dragItem) {
+    const movedIt = dragItem;
     dragItem = null;
     canvas.style.cursor = 'grab';
+    if (isTouch && Math.hypot(p.x - dragStartPos[0], p.y - dragStartPos[1]) < 12) {
+      const now = performance.now();
+      if (
+        lastMoveTap &&
+        lastMoveTap.item === movedIt &&
+        now - lastMoveTap.time < 360 &&
+        Math.hypot(p.x - lastMoveTap.x, p.y - lastMoveTap.y) < 32
+      ) {
+        lastMoveTap = null;
+        if (movedIt.kind === 'shape') openTextBox(movedIt.x + movedIt.w / 2, movedIt.y + movedIt.h / 2, movedIt, null);
+        else if (movedIt.kind === 'text') openTextBox(movedIt.anchorX, movedIt.anchorY, null, movedIt);
+        return;
+      }
+      lastMoveTap = { time: now, x: p.x, y: p.y, item: movedIt };
+    } else {
+      lastMoveTap = null;
+    }
     scheduleRender();
     return;
   }
+
+  const tapThresh = isTouch ? 12 : 5;
 
   if (dragShape && dragShape.cur) {
     const ds = dragShape;
@@ -1288,8 +1442,8 @@ canvas.addEventListener('pointerup', e => {
     const y2 = ds.cur.y;
     dragShape = null;
     const dist = Math.hypot(x2 - x1, y2 - y1);
-    if (dist < 5) {
-      const hit = hitItem(p.x, p.y);
+    if (dist < tapThresh) {
+      const hit = hitItem(p.x, p.y, isTouch);
       if (hit && hit.kind === 'shape') openTextBox(hit.x + hit.w / 2, hit.y + hit.h / 2, hit, null);
       else if (hit && hit.kind === 'text') openTextBox(hit.anchorX, hit.anchorY, null, hit);
       else openTextBox(p.x, p.y, null, null);
@@ -1325,9 +1479,9 @@ canvas.addEventListener('pointerup', e => {
       arc += Math.hypot(pts[i]!.x - pts[i - 1]!.x, pts[i]!.y - pts[i - 1]!.y);
     }
 
-    if (pendingMode === 'sketch' && !pendingStrokes.length && arc < 5) {
+    if (pendingMode === 'sketch' && !pendingStrokes.length && arc < tapThresh) {
       pendingMode = null;
-      const hit = hitItem(p.x, p.y);
+      const hit = hitItem(p.x, p.y, isTouch);
       if (hit && hit.kind === 'shape') openTextBox(hit.x + hit.w / 2, hit.y + hit.h / 2, hit, null);
       else if (hit && hit.kind === 'text') openTextBox(hit.anchorX, hit.anchorY, null, hit);
       else openTextBox(p.x, p.y, null, null);
@@ -1344,12 +1498,19 @@ canvas.addEventListener('pointerup', e => {
   }
 });
 
-canvas.addEventListener('pointercancel', () => {
+canvas.addEventListener('pointercancel', e => {
+  if (pendingTextTap && e.pointerId === pendingTextTap.pointerId) pendingTextTap = null;
+  if (activePointerId !== null && e.pointerId !== activePointerId) return;
+  activePointerId = null;
   audio.stopDraw();
   activeRaw = null;
   dragShape = null;
+  dragItem = null;
+  resizeState = null;
+  scheduleRender();
 });
-canvas.addEventListener('lostpointercapture', () => {
+canvas.addEventListener('lostpointercapture', e => {
+  if (activePointerId === e.pointerId) activePointerId = null;
   audio.stopDraw();
 });
 
@@ -1379,11 +1540,25 @@ document.querySelectorAll<HTMLButtonElement>('button.swatch[data-color]').forEac
 document.getElementById('sound-toggle')?.addEventListener('click', () => audio.toggleMute());
 document.getElementById('undo-btn')?.addEventListener('click', () => undo());
 document.getElementById('clear-btn')?.addEventListener('click', () => void clearAllWithCrumple());
-document.getElementById('save-btn')?.addEventListener('click', e => toggleSaveMenu(e));
+document.getElementById('save-btn')?.addEventListener('click', e => {
+  syncToolbarBottom();
+  toggleSaveMenu(e);
+});
+document.getElementById('pen-btn')?.addEventListener('click', () => syncToolbarBottom());
+document.getElementById('drink-menu-btn')?.addEventListener('click', () => syncToolbarBottom());
 document.getElementById('export-png-btn')?.addEventListener('click', () => exportPNG());
 document.getElementById('export-svg-btn')?.addEventListener('click', () => exportSVG());
 document.getElementById('pen-close-btn')?.addEventListener('click', () => restoreFocus('#pen-btn'));
 document.getElementById('drink-close-btn')?.addEventListener('click', () => restoreFocus('#drink-menu-btn'));
+
+selActionsEl?.addEventListener('pointerdown', e => e.stopPropagation());
+selEditBtn?.addEventListener('click', () => {
+  if (!selectedItem) return;
+  const it = selectedItem;
+  if (it.kind === 'shape') openTextBox(it.x + it.w / 2, it.y + it.h / 2, it, null);
+  else if (it.kind === 'text') openTextBox(it.anchorX, it.anchorY, null, it);
+});
+selDeleteBtn?.addEventListener('click', () => deleteSelectedItem());
 
 window.addEventListener('pointerdown', e => {
   const menu = document.getElementById('save-menu');
@@ -1399,11 +1574,7 @@ window.addEventListener('keydown', e => {
   if (target && /^(INPUT|SELECT|TEXTAREA)$/.test(target.tagName)) return;
   if ((e.key === 'Backspace' || e.key === 'Delete') && selectedItem) {
     e.preventDefault();
-    const idx = items.indexOf(selectedItem);
-    if (idx !== -1) items.splice(idx, 1);
-    selectedItem = null;
-    hoverItem = null;
-    scheduleRender();
+    deleteSelectedItem();
     return;
   }
   if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'z') {
@@ -1422,9 +1593,25 @@ window.addEventListener('keydown', e => {
   else if (k === 'v' || k === 'm') setTool('move');
 });
 
-window.addEventListener('resize', () => scheduleRender());
+window.addEventListener('resize', () => {
+  syncToolbarBottom();
+  scheduleRender();
+});
+window.visualViewport?.addEventListener('resize', () => {
+  syncToolbarBottom();
+  scheduleRender();
+});
+if (typeof ResizeObserver !== 'undefined') {
+  const ro = new ResizeObserver(() => {
+    syncToolbarBottom();
+    scheduleRender();
+  });
+  ro.observe(wrapEl);
+  if (toolbarEl) ro.observe(toolbarEl);
+}
 
 // Bootstrap app
+syncToolbarBottom();
 initPenAndStyleMenu();
 audio.initUI();
 cup.init();

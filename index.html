@@ -2,7 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
     <title>Napkin</title>
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>💡</text></svg>" />
   </head>
@@ -158,7 +158,11 @@
       <main class="stage" id="stage">
         <div class="napkin-frame" id="wrap">
           <canvas id="c"></canvas>
-          <input id="inline-text" type="text" autocomplete="off" autocorrect="off" spellcheck="false" aria-label="Napkin text input" />
+          <input id="inline-text" type="text" enterkeyhint="done" autocomplete="off" autocorrect="off" spellcheck="false" aria-label="Napkin text input" />
+          <div id="sel-actions" class="sel-actions" role="toolbar" aria-label="Selected item actions" hidden>
+            <button id="sel-edit-btn" type="button" class="sel-act-btn">Edit</button>
+            <button id="sel-delete-btn" type="button" class="sel-act-btn sel-act-danger">Delete</button>
+          </div>
         </div>
         <canvas id="cup-layer"></canvas>
       </main>
