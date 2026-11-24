@@ -1,0 +1,581 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>v2 Rapid Prototype — OpenSketch Residuals (dx,dy,p) + IAM-OnDB Handwriting</title>
+  <style>
+    body { font-family: monospace; font-size: 13px; margin: 12px; background: #fff; color: #111; }
+    .bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 8px; padding-bottom: 8px; border-bottom: 1px solid #ccc; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    canvas { border: 1px solid #bbb; display: block; width: 100%; height: 460px; background: #fcfbf7; }
+    #c-clean { background: #fff; }
+    button, select, input { font-family: monospace; font-size: 12px; }
+    #status { color: #555; }
+  </style>
+</head>
+<body>
+  <div class="bar">
+    <strong>v2 Napkin Engine</strong>
+    <span id="status">Loading OpenSketch VAE + IAM-OnDB handwriting...</span>
+  </div>
+
+  <div class="bar">
+    <button onclick="addNode('rect')">+ Box</button>
+    <button onclick="addNode('diamond')">+ Diamond</button>
+    <button onclick="addNode('oval')">+ Oval</button>
+    <button id="link-btn" onclick="toggleLink()">Link</button>
+    <input id="label-in" type="text" placeholder="Selected label" style="width:150px;" />
+    <button onclick="applyLabel()">Set Text</button>
+    <button onclick="deleteSelected()">Del</button>
+    <span>|</span>
+    <label>Mode: <input id="pres-sl" type="range" min="0" max="1" step="0.1" value="0.7" oninput="resampleDrawing()" /> <span id="pres-v">0.7</span> (0=concept,1=pres)</label>
+    <label>Temp τ: <input id="tau-sl" type="range" min="0.1" max="1.4" step="0.1" value="0.7" oninput="resampleDrawing()" /> <span id="tau-v">0.7</span></label>
+    <label><input id="under-cb" type="checkbox" checked onchange="resampleDrawing()" /> Under-sketch</label>
+    <button onclick="resampleDrawing()">Resample Lines</button>
+  </div>
+
+  <div class="bar">
+    <label>Handwriting Style:
+      <select id="style-sel" onchange="onStyleChange()"></select>
+    </label>
+    <label>Neatness Bias: <input id="bias-sl" type="range" min="0.2" max="1.4" step="0.1" value="0.9" onchange="onStyleChange()" /> <span id="bias-v">0.9</span></label>
+    <button onclick="regenerateAllWriting()">Resample Writing</button>
+    <button onclick="exportSVG()">Export SVG</button>
+  </div>
+
+  <div class="grid">
+    <div>
+      <div>Computerized Input (drag nodes, click to select)</div>
+      <canvas id="c-clean"></canvas>
+    </div>
+    <div>
+      <div>Napkin Output (OpenSketch dx,dy,pressure residuals + IAM-OnDB handwriting)</div>
+      <canvas id="c-ink"></canvas>
+    </div>
+  </div>
+
+<script>
+// ============================================================================
+// 1. OPENSKETCH DESIGNER STROKE-RESIDUAL VAE DECODER (pure JS)
+// ============================================================================
+let VAE = null;
+
+function randn() {
+  let u = 0, v = 0;
+  while (!u) u = Math.random();
+  while (!v) v = Math.random();
+  return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
+}
+function silu(x) { return x / (1 + Math.exp(-x)); }
+function sigmoid(x) { return 1 / (1 + Math.exp(-Math.max(-20, Math.min(20, x)))); }
+
+function decodeDesignerResidual(isCurved, isPres, chordLen, tau = 0.7) {
+  const normLogLen = Math.max(-1.5, Math.min(1.5, (Math.log(Math.max(chordLen, 25)) - Math.log(140)) / 1.2));
+  let h = [];
+  for (let i = 0; i < VAE.latent_dim; i++) h.push(randn() * tau);
+  h.push(isCurved, isPres, normLogLen);
+
+  for (let li = 0; li < VAE.layers.length; li++) {
+    const { w, b } = VAE.layers[li];
+    const out = new Array(b.length);
+    for (let i = 0; i < b.length; i++) {
+      let sum = b[i];
+      const row = w[i];
+      for (let j = 0; j < row.length; j++) sum += row[j] * h[j];
+      out[i] = li < VAE.layers.length - 1 ? silu(sum) : sum;
+    }
+    h = out;
+  }
+  const K = VAE.k, sc = VAE.res_scale;
+  const res = [];
+  for (let i = 0; i < K; i++) {
+    res.push([h[i * 3] * sc, h[i * 3 + 1] * sc, sigmoid(h[i * 3 + 2])]);
+  }
+  return res;
+}
+
+// Apply learned (rx, ry, pressure) residual onto any straight segment (x1,y1)->(x2,y2)
+function designerLine(x1, y1, x2, y2, isPres, tau, overshootPx = 0) {
+  const dx = x2 - x1, dy = y2 - y1;
+  const len = Math.hypot(dx, dy) || 1;
+  const ux = dx / len, uy = dy / len;
+  const nx = -uy, ny = ux;
+  const sx = x1 - ux * overshootPx * Math.random();
+  const sy = y1 - uy * overshootPx * Math.random();
+  const ex = x2 + ux * overshootPx * Math.random();
+  const ey = y2 + uy * overshootPx * Math.random();
+  const res = decodeDesignerResidual(0, isPres, len, tau);
+  const K = res.length;
+  return res.map(([ru, rv, p], i) => {
+    const t = i / (K - 1);
+    const u = t + ru;
+    const v = rv;
+    return [sx + (ex - sx) * u + nx * v * len, sy + (ey - sy) * u + ny * v * len, p];
+  });
+}
+
+// Apply learned (rx, ry, pressure) residual onto any quadratic Bezier (P0, P1, P2)
+function designerBezier(x0, y0, cx, cy, x2, y2, isPres, tau) {
+  const chord = Math.hypot(x2 - x0, y2 - y0) || 1;
+  const ux = (x2 - x0) / chord, uy = (y2 - y0) / chord;
+  const nx = -uy, ny = ux;
+  const res = decodeDesignerResidual(1, isPres, chord, tau);
+  const K = res.length;
+  return res.map(([ru, rv, p], i) => {
+    const t = i / (K - 1), mt = 1 - t;
+    const env = Math.sin(t * Math.PI);
+    const bx = mt * mt * x0 + 2 * mt * t * cx + t * t * x2;
+    const by = mt * mt * y0 + 2 * mt * t * cy + t * t * y2;
+    return [bx + (ux * ru + nx * rv) * chord * env, by + (uy * ru + ny * rv) * chord * env, p];
+  });
+}
+
+// ============================================================================
+// 2. IAM-ONDB GRAVES (2013) NEURAL HANDWRITING IN PURE JS (Float32Array)
+// ============================================================================
+const ALPHABET = [
+  '\x00',' ','!','"','#',"'",'(',')',',','-','.','0','1','2','3','4','5','6','7','8','9',':',';','?',
+  'A','B','C','D','E','F','G','H','I','J','K','L','M','N','O','P','R','S','T','U','V','W','Y',
+  'a','b','c','d','e','f','g','h','i','j','k','l','m','n','o','p','q','r','s','t','u','v','w','x','y','z'
+];
+const CHAR_MAP = Object.fromEntries(ALPHABET.map((c, i) => [c, i]));
+
+let HW = null; // { T, styles }
+const hwCache = new Map();
+
+function matvec(x, W, b, rows, cols) {
+  const out = new Float32Array(cols);
+  for (let c = 0; c < cols; c++) out[c] = b[c];
+  for (let r = 0; r < rows; r++) {
+    const xr = x[r];
+    if (xr === 0) continue;
+    const base = r * cols;
+    for (let c = 0; c < cols; c++) out[c] += xr * W[base + c];
+  }
+  return out;
+}
+
+function lstmStep(xIn, cPrev, W, b, inDim) {
+  const g = matvec(xIn, W, b, inDim, 1600);
+  const h = new Float32Array(400), c = new Float32Array(400);
+  for (let k = 0; k < 400; k++) {
+    const i = sigmoid(g[k]);
+    const j = Math.tanh(g[400 + k]);
+    const f = sigmoid(g[800 + k] + 1.0);
+    const o = sigmoid(g[1200 + k]);
+    c[k] = cPrev[k] * f + i * j;
+    h[k] = Math.tanh(c[k]) * o;
+  }
+  return [h, c];
+}
+
+function softplus(x) { return x > 20 ? x : Math.log1p(Math.exp(x)); }
+
+function synthesizeHandwriting(text, styleId = 9, bias = 0.9) {
+  const cacheKey = `${text}|${styleId}|${bias}`;
+  if (hwCache.has(cacheKey)) return hwCache.get(cacheKey);
+  if (!HW || !text.trim()) return [];
+
+  const { T, styles } = HW;
+  const st = styles[styleId];
+  // Use shorter priming tail for snappy browser speed while preserving writer style
+  const fullText = (st.text + ' ' + text + ' ').replace(/Q/g,'q').replace(/X/g,'x').replace(/Z/g,'z');
+  const charIdxs = [...fullText].map(ch => CHAR_MAP[ch] ?? 1);
+  charIdxs.push(0);
+  const U = charIdxs.length;
+
+  let h1 = new Float32Array(400), c1 = new Float32Array(400);
+  let h2 = new Float32Array(400), c2 = new Float32Array(400);
+  let h3 = new Float32Array(400), c3 = new Float32Array(400);
+  let kappa = new Float32Array(10), w = new Float32Array(73);
+  const s1In = new Float32Array(476), attnIn = new Float32Array(476);
+  const s2In = new Float32Array(876), s3In = new Float32Array(876);
+  const phi = new Float32Array(U);
+
+  function stepCell(dx, dy, eos) {
+    s1In.set(w, 0); s1In[73] = dx; s1In[74] = dy; s1In[75] = eos; s1In.set(h1, 76);
+    [h1, c1] = lstmStep(s1In, c1, T.lstm1_W, T.lstm1_b, 476);
+
+    attnIn.set(w, 0); attnIn[73] = dx; attnIn[74] = dy; attnIn[75] = eos; attnIn.set(h1, 76);
+    const ap = matvec(attnIn, T.attn_W, T.attn_b, 476, 30);
+    phi.fill(0);
+    for (let k = 0; k < 10; k++) {
+      const a = softplus(ap[k]);
+      const b = Math.max(0.01, softplus(ap[10 + k]));
+      kappa[k] += softplus(ap[20 + k]) / 25.0;
+      const kk = kappa[k];
+      for (let u = 0; u < U; u++) {
+        const d = kk - u;
+        phi[u] += a * Math.exp(-(d * d) / b);
+      }
+    }
+    w.fill(0);
+    for (let u = 0; u < U; u++) w[charIdxs[u]] += phi[u];
+
+    s2In[0] = dx; s2In[1] = dy; s2In[2] = eos; s2In.set(h1, 3); s2In.set(w, 403); s2In.set(h2, 476);
+    [h2, c2] = lstmStep(s2In, c2, T.lstm2_W, T.lstm2_b, 876);
+
+    s3In[0] = dx; s3In[1] = dy; s3In[2] = eos; s3In.set(h2, 3); s3In.set(w, 403); s3In.set(h3, 476);
+    [h3, c3] = lstmStep(s3In, c3, T.lstm3_W, T.lstm3_b, 876);
+  }
+
+  // Prime with writer's real IAM-OnDB sample
+  const offs = st.offsets;
+  for (let i = 0; i < offs.length; i += 3) stepCell(offs[i], offs[i + 1], offs[i + 2]);
+
+  // Sample target text
+  let x = 0, y = 0, dx = 0, dy = 0, eos = 1;
+  const rawStrokes = [];
+  let cur = [];
+  const maxSteps = Math.min(820, Math.max(220, text.length * 48));
+
+  for (let step = 0; step < maxSteps; step++) {
+    stepCell(dx, dy, eos);
+    const g = matvec(h3, T.gmm_W, T.gmm_b, 400, 121);
+
+    let maxPi = -1e9;
+    const pis = new Float32Array(20);
+    for (let k = 0; k < 20; k++) { pis[k] = g[k] * (1 + bias); if (pis[k] > maxPi) maxPi = pis[k]; }
+    let sumPi = 0;
+    for (let k = 0; k < 20; k++) { pis[k] = Math.exp(pis[k] - maxPi); sumPi += pis[k]; }
+    let sumPi2 = 0;
+    for (let k = 0; k < 20; k++) { pis[k] /= sumPi; if (pis[k] < 0.01) pis[k] = 0; sumPi2 += pis[k]; }
+
+    let r = Math.random() * sumPi2, acc = 0, chosen = 0;
+    for (let k = 0; k < 20; k++) { acc += pis[k]; if (r <= acc) { chosen = k; break; } }
+
+    const s1 = Math.max(1e-4, Math.exp(g[20 + chosen] - bias));
+    const s2 = Math.max(1e-4, Math.exp(g[40 + chosen] - bias));
+    const rho = Math.max(-0.999, Math.min(0.999, Math.tanh(g[60 + chosen])));
+    const mu1 = g[80 + chosen], mu2 = g[100 + chosen];
+    let es = sigmoid(g[120]);
+    if (es < 0.01) es = 0;
+
+    const z1 = randn(), z2 = randn();
+    dx = mu1 + s1 * z1;
+    dy = mu2 + s2 * (rho * z1 + Math.sqrt(1 - rho * rho) * z2);
+    eos = Math.random() < es ? 1 : 0;
+
+    x += dx; y -= dy; // flip Y for canvas coords
+    const speed = Math.hypot(dx, dy);
+    // Velocity-derived pen pressure: slower curves = firmer ink, fast flicks = crisp taper
+    const p = Math.max(0.28, Math.min(0.95, 0.96 - speed * 0.22));
+    cur.push([x, y, p]);
+
+    if (eos > 0.5) {
+      if (cur.length >= 2) {
+        // Taper start and end of each pen stroke
+        cur[0][2] *= 0.45;
+        cur[cur.length - 1][2] *= 0.4;
+        rawStrokes.push(cur);
+      }
+      cur = [];
+    }
+
+    let argMaxPhi = 0, maxPhiVal = -1;
+    for (let u = 0; u < U; u++) { if (phi[u] > maxPhiVal) { maxPhiVal = phi[u]; argMaxPhi = u; } }
+    if (argMaxPhi >= U - 2 && eos > 0.5) break;
+  }
+  if (cur.length >= 2) rawStrokes.push(cur);
+
+  // Align baseline slant softly & normalize into unit box centered at (0,0)
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+  for (const s of rawStrokes) for (const [px, py] of s) {
+    if (px < minX) minX = px; if (px > maxX) maxX = px;
+    if (py < minY) minY = py; if (py > maxY) maxY = py;
+  }
+  const cx = (minX + maxX) / 2, cy = (minY + maxY) / 2;
+  const wSpan = Math.max(maxX - minX, 1), hSpan = Math.max(maxY - minY, 1);
+  const norm = { strokes: rawStrokes.map(s => s.map(([px, py, p]) => [px - cx, py - cy, p])), w: wSpan, h: hSpan };
+  hwCache.set(cacheKey, norm);
+  return norm;
+}
+
+// ============================================================================
+// 3. CANVAS STATE & VARIABLE-PRESSURE INK RENDERER
+// ============================================================================
+const S = {
+  nodes: [
+    { id: 1, type: 'oval',    x: 155, y: 30,  w: 190, h: 62, label: 'Raw Idea',       ink: null, hw: null },
+    { id: 2, type: 'rect',    x: 145, y: 145, w: 210, h: 66, label: 'Parse Strokes',  ink: null, hw: null },
+    { id: 3, type: 'diamond', x: 155, y: 262, w: 190, h: 82, label: 'Clear?',         ink: null, hw: null },
+    { id: 4, type: 'rect',    x: 150, y: 382, w: 200, h: 58, label: 'Transform Text', ink: null, hw: null }
+  ],
+  edges: [{ from: 1, to: 2 }, { from: 2, to: 3 }, { from: 3, to: 4 }],
+  edgeInk: [],
+  selected: 2, linkMode: false, linkSrc: null, dragging: null, off: [0, 0]
+};
+
+function hiDPI(c) {
+  const r = c.getBoundingClientRect();
+  const dpr = window.devicePixelRatio || 1;
+  c.width = r.width * dpr; c.height = r.height * dpr;
+  const ctx = c.getContext('2d');
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  return { ctx, w: r.width, h: r.height };
+}
+
+function drawPressureStroke(ctx, pts, baseW = 2.0, color = '#1b2430', alphaScale = 1.0) {
+  if (!pts || pts.length < 2) return;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  ctx.strokeStyle = color;
+  for (let i = 1; i < pts.length; i++) {
+    const [x0, y0, p0] = pts[i - 1];
+    const [x1, y1, p1] = pts[i];
+    const p = (p0 + p1) * 0.5;
+    ctx.lineWidth = Math.max(0.45, baseW * (0.28 + 1.12 * p));
+    ctx.globalAlpha = Math.min(1, (0.42 + 0.58 * p) * alphaScale);
+    ctx.beginPath();
+    ctx.moveTo(x0, y0);
+    ctx.lineTo(x1, y1);
+    ctx.stroke();
+  }
+  ctx.globalAlpha = 1;
+}
+
+function anchor(a, b) {
+  const fx = a.x + a.w / 2, fy = a.y + a.h / 2, tx = b.x + b.w / 2, ty = b.y + b.h / 2;
+  const dx = tx - fx, dy = ty - fy;
+  const s = Math.min(Math.abs(dx) > 1e-3 ? (a.w / 2 + 5) / Math.abs(dx) : 999, Math.abs(dy) > 1e-3 ? (a.h / 2 + 5) / Math.abs(dy) : 999);
+  return [fx + dx * s, fy + dy * s];
+}
+
+function buildNodeDesignerInk(n) {
+  const isPres = parseFloat(document.getElementById('pres-sl').value);
+  const tau = parseFloat(document.getElementById('tau-sl').value);
+  const under = document.getElementById('under-cb').checked;
+  const strokes = [];
+
+  function addPass(passPres, passTau, ov, alphaScale, baseW) {
+    const { x, y, w, h } = n;
+    if (n.type === 'rect') {
+      strokes.push({ pts: designerLine(x, y, x + w, y, passPres, passTau, ov), alphaScale, baseW });
+      strokes.push({ pts: designerLine(x + w, y, x + w, y + h, passPres, passTau, ov), alphaScale, baseW });
+      strokes.push({ pts: designerLine(x + w, y + h, x, y + h, passPres, passTau, ov), alphaScale, baseW });
+      strokes.push({ pts: designerLine(x, y + h, x, y, passPres, passTau, ov), alphaScale, baseW });
+    } else if (n.type === 'diamond') {
+      const cx = x + w / 2, cy = y + h / 2;
+      strokes.push({ pts: designerLine(cx, y, x + w, cy, passPres, passTau, ov), alphaScale, baseW });
+      strokes.push({ pts: designerLine(x + w, cy, cx, y + h, passPres, passTau, ov), alphaScale, baseW });
+      strokes.push({ pts: designerLine(cx, y + h, x, cy, passPres, passTau, ov), alphaScale, baseW });
+      strokes.push({ pts: designerLine(x, cy, cx, y, passPres, passTau, ov), alphaScale, baseW });
+    } else {
+      // Smooth 4-arc designer ellipse using curved OpenSketch residuals
+      const cx = x + w / 2, cy = y + h / 2, rx = w / 2, ry = h / 2;
+      strokes.push({ pts: designerBezier(cx - rx, cy, cx - rx, cy - ry, cx, cy - ry, passPres, passTau), alphaScale, baseW });
+      strokes.push({ pts: designerBezier(cx, cy - ry, cx + rx, cy - ry, cx + rx, cy, passPres, passTau), alphaScale, baseW });
+      strokes.push({ pts: designerBezier(cx + rx, cy, cx + rx, cy + ry, cx, cy + ry, passPres, passTau), alphaScale, baseW });
+      strokes.push({ pts: designerBezier(cx, cy + ry, cx - rx, cy + ry, cx - rx, cy, passPres, passTau), alphaScale, baseW });
+    }
+  }
+
+  // Optional faint concept construction under-stroke (authentic industrial designer technique!)
+  if (under) addPass(0.0, tau * 1.15, 7, 0.28, 1.3);
+  addPass(isPres, tau, 3.5 * (1.2 - isPres), 1.0, 2.0);
+  return strokes;
+}
+
+function buildEdgeDesignerInk(e) {
+  const a = S.nodes.find(n => n.id === e.from), b = S.nodes.find(n => n.id === e.to);
+  if (!a || !b) return [];
+  const isPres = parseFloat(document.getElementById('pres-sl').value);
+  const tau = parseFloat(document.getElementById('tau-sl').value);
+  const [x1, y1] = anchor(a, b), [x2, y2] = anchor(b, a);
+  const ang = Math.atan2(y2 - y1, x2 - x1);
+  const hl = 11;
+  return [
+    { pts: designerLine(x1, y1, x2, y2, isPres, tau, 1.5), alphaScale: 0.95, baseW: 1.8 },
+    { pts: designerLine(x2 - hl * Math.cos(ang - 0.45), y2 - hl * Math.sin(ang - 0.45), x2, y2, isPres, tau, 1), alphaScale: 0.95, baseW: 1.7 },
+    { pts: designerLine(x2 - hl * Math.cos(ang + 0.45), y2 - hl * Math.sin(ang + 0.45), x2, y2, isPres, tau, 1), alphaScale: 0.95, baseW: 1.7 }
+  ];
+}
+
+function resampleDrawing() {
+  if (!VAE) return;
+  document.getElementById('pres-v').textContent = document.getElementById('pres-sl').value;
+  document.getElementById('tau-v').textContent = document.getElementById('tau-sl').value;
+  for (const n of S.nodes) n.ink = buildNodeDesignerInk(n);
+  S.edgeInk = S.edges.map(buildEdgeDesignerInk);
+  renderAll();
+}
+
+function regenerateAllWriting() {
+  hwCache.clear();
+  onStyleChange();
+}
+
+function onStyleChange() {
+  if (!HW) return;
+  const sid = parseInt(document.getElementById('style-sel').value, 10);
+  const bias = parseFloat(document.getElementById('bias-sl').value);
+  document.getElementById('bias-v').textContent = bias.toFixed(1);
+  document.getElementById('status').textContent = 'Synthesizing IAM-OnDB handwriting...';
+  setTimeout(() => {
+    const t0 = performance.now();
+    for (const n of S.nodes) n.hw = synthesizeHandwriting(n.label, sid, bias);
+    const ms = Math.round(performance.now() - t0);
+    document.getElementById('status').textContent = `Ready | OpenSketch VAE (${VAE.metrics.decoder_params} params) + IAM-OnDB Style #${sid} (${ms} ms)`;
+    renderAll();
+  }, 15);
+}
+
+function renderAll() {
+  // Left: Clean canvas
+  const c1 = hiDPI(document.getElementById('c-clean'));
+  c1.ctx.clearRect(0, 0, c1.w, c1.h);
+  for (const e of S.edges) {
+    const a = S.nodes.find(n => n.id === e.from), b = S.nodes.find(n => n.id === e.to);
+    if (!a || !b) continue;
+    const [x1, y1] = anchor(a, b), [x2, y2] = anchor(b, a);
+    c1.ctx.strokeStyle = '#666'; c1.ctx.lineWidth = 1.2;
+    c1.ctx.beginPath(); c1.ctx.moveTo(x1, y1); c1.ctx.lineTo(x2, y2); c1.ctx.stroke();
+  }
+  for (const n of S.nodes) {
+    c1.ctx.strokeStyle = n.id === S.selected ? '#0055cc' : '#222';
+    c1.ctx.lineWidth = n.id === S.selected ? 2 : 1;
+    c1.ctx.fillStyle = '#fff';
+    c1.ctx.beginPath();
+    if (n.type === 'rect') c1.ctx.rect(n.x, n.y, n.w, n.h);
+    else if (n.type === 'oval') c1.ctx.ellipse(n.x + n.w / 2, n.y + n.h / 2, n.w / 2, n.h / 2, 0, 0, Math.PI * 2);
+    else {
+      c1.ctx.moveTo(n.x + n.w / 2, n.y); c1.ctx.lineTo(n.x + n.w, n.y + n.h / 2);
+      c1.ctx.lineTo(n.x + n.w / 2, n.y + n.h); c1.ctx.lineTo(n.x, n.y + n.h / 2); c1.ctx.closePath();
+    }
+    c1.ctx.fill(); c1.ctx.stroke();
+    c1.ctx.fillStyle = '#111'; c1.ctx.font = '12px monospace'; c1.ctx.textAlign = 'center'; c1.ctx.textBaseline = 'middle';
+    c1.ctx.fillText(n.label, n.x + n.w / 2, n.y + n.h / 2);
+  }
+
+  // Right: Organic Napkin Ink canvas
+  const c2 = hiDPI(document.getElementById('c-ink'));
+  c2.ctx.clearRect(0, 0, c2.w, c2.h);
+  for (const es of S.edgeInk) {
+    for (const s of es) drawPressureStroke(c2.ctx, s.pts, s.baseW, '#1b2430', s.alphaScale);
+  }
+  for (const n of S.nodes) {
+    if (n.ink) for (const s of n.ink) drawPressureStroke(c2.ctx, s.pts, s.baseW, '#1b2430', s.alphaScale);
+    if (n.hw && n.hw.strokes) {
+      const padX = n.type === 'diamond' ? n.w * 0.44 : n.w * 0.22;
+      const padY = n.type === 'diamond' ? n.h * 0.48 : n.h * 0.34;
+      const scale = Math.min((n.w - padX) / n.hw.w, (n.h - padY) / n.hw.h, 2.4);
+      const cx = n.x + n.w / 2, cy = n.y + n.h / 2;
+      for (const st of n.hw.strokes) {
+        const mapped = st.map(([px, py, p]) => [cx + px * scale, cy + py * scale, p]);
+        drawPressureStroke(c2.ctx, mapped, 1.55, '#111827', 0.96);
+      }
+    }
+  }
+}
+
+function addNode(type) {
+  const id = Math.max(0, ...S.nodes.map(n => n.id)) + 1;
+  const n = { id, type, x: 30 + (id * 45) % 240, y: 30 + (id * 55) % 300, w: 185, h: 62, label: 'New Step', ink: null, hw: null };
+  n.ink = buildNodeDesignerInk(n);
+  n.hw = synthesizeHandwriting(n.label, parseInt(document.getElementById('style-sel').value, 10), parseFloat(document.getElementById('bias-sl').value));
+  S.nodes.push(n); S.selected = id;
+  document.getElementById('label-in').value = n.label;
+  renderAll();
+}
+function applyLabel() {
+  const n = S.nodes.find(x => x.id === S.selected);
+  if (!n) return;
+  n.label = document.getElementById('label-in').value || 'Step';
+  n.hw = synthesizeHandwriting(n.label, parseInt(document.getElementById('style-sel').value, 10), parseFloat(document.getElementById('bias-sl').value));
+  renderAll();
+}
+function deleteSelected() {
+  S.nodes = S.nodes.filter(n => n.id !== S.selected);
+  S.edges = S.edges.filter(e => e.from !== S.selected && e.to !== S.selected);
+  S.edgeInk = S.edges.map(buildEdgeDesignerInk);
+  S.selected = S.nodes[0]?.id || null;
+  renderAll();
+}
+function toggleLink() {
+  S.linkMode = !S.linkMode; S.linkSrc = null;
+  document.getElementById('link-btn').textContent = S.linkMode ? 'Click Src->Dst' : 'Link';
+}
+
+function exportSVG() {
+  const paths = [];
+  const emit = (pts, baseW, alpha) => {
+    for (let i = 1; i < pts.length; i++) {
+      const [x0, y0, p0] = pts[i - 1], [x1, y1, p1] = pts[i];
+      const p = (p0 + p1) * 0.5;
+      paths.push(`<line x1="${x0.toFixed(1)}" y1="${y0.toFixed(1)}" x2="${x1.toFixed(1)}" y2="${y1.toFixed(1)}" stroke="#1b2430" stroke-width="${(baseW * (0.28 + 1.12 * p)).toFixed(2)}" stroke-opacity="${((0.42 + 0.58 * p) * alpha).toFixed(2)}" stroke-linecap="round"/>`);
+    }
+  };
+  for (const es of S.edgeInk) for (const s of es) emit(s.pts, s.baseW, s.alphaScale);
+  for (const n of S.nodes) {
+    if (n.ink) for (const s of n.ink) emit(s.pts, s.baseW, s.alphaScale);
+    if (n.hw && n.hw.strokes) {
+      const padX = n.type === 'diamond' ? n.w * 0.44 : n.w * 0.22;
+      const padY = n.type === 'diamond' ? n.h * 0.48 : n.h * 0.34;
+      const sc = Math.min((n.w - padX) / n.hw.w, (n.h - padY) / n.hw.h, 2.4);
+      const cx = n.x + n.w / 2, cy = n.y + n.h / 2;
+      for (const st of n.hw.strokes) emit(st.map(([px, py, p]) => [cx + px * sc, cy + py * sc, p]), 1.55, 0.96);
+    }
+  }
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 480">${paths.join('')}</svg>`], { type: 'image/svg+xml' }));
+  a.download = 'v2-napkin-designer.svg'; a.click();
+}
+
+(function bindClean() {
+  const c = document.getElementById('c-clean');
+  const pos = e => { const r = c.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; };
+  c.addEventListener('pointerdown', e => {
+    const [x, y] = pos(e);
+    const n = [...S.nodes].reverse().find(n => x >= n.x && x <= n.x + n.w && y >= n.y && y <= n.y + n.h);
+    if (!n) return;
+    if (S.linkMode) {
+      if (!S.linkSrc) S.linkSrc = n.id;
+      else if (S.linkSrc !== n.id) { S.edges.push({ from: S.linkSrc, to: n.id }); toggleLink(); S.edgeInk = S.edges.map(buildEdgeDesignerInk); }
+      renderAll(); return;
+    }
+    S.selected = n.id; S.dragging = n; S.off = [x - n.x, y - n.y];
+    document.getElementById('label-in').value = n.label;
+    c.setPointerCapture(e.pointerId); renderAll();
+  });
+  c.addEventListener('pointermove', e => {
+    if (!S.dragging) return;
+    const [x, y] = pos(e);
+    S.dragging.x = x - S.off[0]; S.dragging.y = y - S.off[1];
+    S.dragging.ink = buildNodeDesignerInk(S.dragging);
+    S.edgeInk = S.edges.map(buildEdgeDesignerInk);
+    renderAll();
+  });
+  c.addEventListener('pointerup', () => S.dragging = null);
+})();
+
+async function boot() {
+  const [vResp, mResp, bResp] = await Promise.all([
+    fetch('../exports/opensketch_residual_vae.json'),
+    fetch('../exports/handwriting/hand_synth.json'),
+    fetch('../exports/handwriting/hand_synth.bin')
+  ]);
+  VAE = await vResp.json();
+  const hwMeta = await mResp.json();
+  const raw = new Float32Array(await bResp.arrayBuffer());
+  const T = {};
+  for (const [k, info] of Object.entries(hwMeta.tensors)) {
+    const size = info.shape.reduce((a, b) => a * b, 1);
+    T[k] = raw.subarray(info.offset, info.offset + size);
+  }
+  HW = { T, styles: hwMeta.styles };
+
+  const sel = document.getElementById('style-sel');
+  HW.styles.forEach((s, i) => {
+    const opt = document.createElement('option');
+    opt.value = i; opt.textContent = `Style ${i}: "${s.text.slice(0, 22)}"`;
+    if (i === 9) opt.selected = true;
+    sel.appendChild(opt);
+  });
+  document.getElementById('label-in').value = S.nodes[1].label;
+  resampleDrawing();
+  onStyleChange();
+}
+boot();
+</script>
+</body>
+</html>

@@ -1,0 +1,1708 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Napkin Logic — Interactive UI/UX Variations</title>
+  <script src="https://www.gstatic.com/antigravity/web/dev/tailwindcss.min.js"></script>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; padding: 0; }
+    canvas { touch-action: none; }
+    .tab-active {
+      background: var(--primary);
+      color: var(--primary-foreground);
+      border-color: var(--primary);
+    }
+    .tab-idle {
+      background: var(--card);
+      color: var(--muted-foreground);
+      border-color: var(--border);
+    }
+    .tab-idle:hover {
+      color: var(--foreground);
+      border-color: var(--primary);
+    }
+    .pill-btn {
+      transition: transform 0.12s ease, border-color 0.15s ease, background-color 0.15s ease;
+    }
+    .pill-btn:active { transform: scale(0.97); }
+    .napkin-surface {
+      background-image: radial-gradient(color-mix(in srgb, var(--foreground) 7%, transparent) 1px, transparent 1px);
+      background-size: 18px 18px;
+    }
+    input[type="range"] {
+      accent-color: var(--primary);
+    }
+    .fade-in {
+      animation: fadeIn 0.22s ease-out;
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(3px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+  </style>
+</head>
+<body class="bg-[var(--background)] text-[var(--foreground)] antialiased min-h-screen">
+  <div class="max-w-[1380px] mx-auto px-4 py-4 space-y-4">
+
+    <!-- Top Header + Variation Switcher -->
+    <header class="flex flex-col lg:flex-row lg:items-center justify-between gap-3 pb-3 border-b border-[var(--border)]">
+      <div>
+        <div class="flex items-center gap-2.5">
+          <h1 class="text-lg font-semibold tracking-tight text-[var(--foreground)]">Napkin Logic — UI/UX Exploration</h1>
+          <span class="text-xs px-2 py-0.5 rounded-full border border-[var(--border)] bg-[var(--card)] text-[var(--muted-foreground)] font-mono">
+            Clean ➔ Sketch ⇔ Text
+          </span>
+        </div>
+        <p class="text-xs text-[var(--muted-foreground)] mt-1">
+          Interactive non-diffusion vector ink &amp; browser-first symbolic gesture prototypes. Switch tabs to compare 3 workflow models.
+        </p>
+      </div>
+
+      <nav class="flex flex-wrap gap-2" role="tablist" aria-label="UI Variations">
+        <button id="tab-v1" onclick="switchVariation('v1')" class="pill-btn tab-active px-3 py-1.5 rounded-lg border text-xs font-medium cursor-pointer">
+          1. Split-Pane Studio
+        </button>
+        <button id="tab-v2" onclick="switchVariation('v2')" class="pill-btn tab-idle px-3 py-1.5 rounded-lg border text-xs font-medium cursor-pointer">
+          2. Unified Living Napkin
+        </button>
+        <button id="tab-v3" onclick="switchVariation('v3')" class="pill-btn tab-idle px-3 py-1.5 rounded-lg border text-xs font-medium cursor-pointer">
+          3. Margin Sketchpad
+        </button>
+      </nav>
+    </header>
+
+    <!-- =================================================================== -->
+    <!-- VARIATION 1: SPLIT-PANE STUDIO                                      -->
+    <!-- =================================================================== -->
+    <section id="view-v1" class="space-y-3 fade-in">
+      <!-- Toolbar -->
+      <div class="bg-[var(--card)] border border-[var(--border)] rounded-xl p-3 flex flex-wrap items-center justify-between gap-3">
+        <div class="flex flex-wrap items-center gap-2">
+          <span class="text-xs font-medium text-[var(--muted-foreground)] mr-1">Add Primitive:</span>
+          <button onclick="v1AddNode('rect')" class="pill-btn px-2.5 py-1 rounded-md border border-[var(--border)] bg-[var(--background)] hover:border-[var(--primary)] text-xs cursor-pointer">+ Box</button>
+          <button onclick="v1AddNode('diamond')" class="pill-btn px-2.5 py-1 rounded-md border border-[var(--border)] bg-[var(--background)] hover:border-[var(--primary)] text-xs cursor-pointer">+ Decision</button>
+          <button onclick="v1AddNode('oval')" class="pill-btn px-2.5 py-1 rounded-md border border-[var(--border)] bg-[var(--background)] hover:border-[var(--primary)] text-xs cursor-pointer">+ Concept</button>
+          <button id="v1-connect-btn" onclick="v1ToggleConnect()" class="pill-btn px-2.5 py-1 rounded-md border border-[var(--border)] bg-[var(--background)] hover:border-[var(--primary)] text-xs cursor-pointer">↗ Link Nodes</button>
+          <button onclick="v1Reset()" class="pill-btn px-2.5 py-1 rounded-md border border-[var(--border)] bg-[var(--background)] text-[var(--muted-foreground)] hover:text-[var(--foreground)] text-xs cursor-pointer">Reset</button>
+        </div>
+
+        <div class="flex flex-wrap items-center gap-3 text-xs">
+          <span class="text-[var(--muted-foreground)]">Ink Persona:</span>
+          <div class="flex gap-1">
+            <button onclick="v1ApplyPreset('architect')" class="v1-preset px-2 py-1 rounded border border-[var(--border)] bg-[var(--background)] hover:border-[var(--primary)] cursor-pointer" data-preset="architect">Architect</button>
+            <button onclick="v1ApplyPreset('napkin')" class="v1-preset px-2 py-1 rounded border border-[var(--primary)] bg-[var(--primary)] text-[var(--primary-foreground)] cursor-pointer" data-preset="napkin">Coffee Napkin</button>
+            <button onclick="v1ApplyPreset('frantic')" class="v1-preset px-2 py-1 rounded border border-[var(--border)] bg-[var(--background)] hover:border-[var(--primary)] cursor-pointer" data-preset="frantic">Frantic</button>
+          </div>
+          <button onclick="v1ReplayPlotter()" class="pill-btn px-2.5 py-1 rounded-md bg-[var(--primary)] text-[var(--primary-foreground)] font-medium cursor-pointer">▶ Plotter Replay</button>
+          <button onclick="v1ExportSVG()" class="pill-btn px-2.5 py-1 rounded-md border border-[var(--border)] bg-[var(--background)] hover:border-[var(--primary)] cursor-pointer">Export SVG</button>
+        </div>
+      </div>
+
+      <!-- Main 3-Column Split -->
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-3">
+        <!-- Left: Computerized Canvas -->
+        <div class="lg:col-span-5 bg-[var(--card)] border border-[var(--border)] rounded-xl overflow-hidden flex flex-col">
+          <div class="px-3 py-2 border-b border-[var(--border)] flex items-center justify-between text-xs">
+            <span class="font-medium">A. Computerized Drawing <span class="text-[var(--muted-foreground)] font-normal">(drag nodes, double-click to edit)</span></span>
+            <span id="v1-status" class="font-mono text-[var(--muted-foreground)]">4 nodes · 3 edges</span>
+          </div>
+          <div class="relative flex-1 min-h-[370px] bg-[var(--background)]">
+            <canvas id="v1-clean" class="w-full h-[370px] block cursor-grab"></canvas>
+          </div>
+          <div class="px-3 py-2 border-t border-[var(--border)] flex items-center gap-2 text-xs">
+            <span class="text-[var(--muted-foreground)] shrink-0">Selected label:</span>
+            <input id="v1-label-input" type="text" placeholder="Click a node to rename..." class="flex-1 px-2 py-1 rounded border border-[var(--border)] bg-[var(--background)] text-[var(--foreground)] text-xs focus:outline-none focus:border-[var(--primary)]" />
+            <button onclick="v1DeleteSelected()" class="px-2 py-1 rounded border border-[var(--border)] text-[var(--muted-foreground)] hover:text-[var(--error)] cursor-pointer">Delete</button>
+          </div>
+        </div>
+
+        <!-- Center: Napkin Sketch Output -->
+        <div class="lg:col-span-5 bg-[var(--card)] border border-[var(--border)] rounded-xl overflow-hidden flex flex-col">
+          <div class="px-3 py-2 border-b border-[var(--border)] flex items-center justify-between text-xs">
+            <span class="font-medium">B. Napkin Sketch <span class="text-[var(--muted-foreground)] font-normal">(vector strokes · zero diffusion)</span></span>
+            <span id="v1-stroke-count" class="font-mono text-[var(--muted-foreground)]">0 strokes</span>
+          </div>
+          <div class="relative flex-1 min-h-[370px] napkin-surface">
+            <canvas id="v1-sketch" class="w-full h-[370px] block"></canvas>
+          </div>
+          <div class="px-3 py-2 border-t border-[var(--border)] grid grid-cols-3 gap-3 text-xs">
+            <label class="flex flex-col gap-1 text-[var(--muted-foreground)]">
+              <span>Wobble <strong id="v1-wobble-val" class="text-[var(--foreground)] font-mono">0.55</strong></span>
+              <input id="v1-wobble" type="range" min="0" max="1" step="0.05" value="0.55" oninput="v1UpdateInkParams()" />
+            </label>
+            <label class="flex flex-col gap-1 text-[var(--muted-foreground)]">
+              <span>Overshoot <strong id="v1-over-val" class="text-[var(--foreground)] font-mono">0.50</strong></span>
+              <input id="v1-overshoot" type="range" min="0" max="1" step="0.05" value="0.50" oninput="v1UpdateInkParams()" />
+            </label>
+            <label class="flex flex-col gap-1 text-[var(--muted-foreground)]">
+              <span>Tilt / Drift <strong id="v1-tilt-val" class="text-[var(--foreground)] font-mono">0.45</strong></span>
+              <input id="v1-tilt" type="range" min="0" max="1" step="0.05" value="0.45" oninput="v1UpdateInkParams()" />
+            </label>
+          </div>
+        </div>
+
+        <!-- Right: Semantic Text Bridge -->
+        <div class="lg:col-span-2 bg-[var(--card)] border border-[var(--border)] rounded-xl flex flex-col overflow-hidden">
+          <div class="px-3 py-2 border-b border-[var(--border)] text-xs font-medium">C. Text Sync</div>
+          <div class="p-3 flex-1 flex flex-col gap-2.5 text-xs">
+            <div class="text-[var(--muted-foreground)]">Apply semantic op to current graph:</div>
+            <div class="grid grid-cols-2 lg:grid-cols-1 gap-1.5">
+              <button onclick="v1RunTextOp('summarize')" class="pill-btn text-left px-2.5 py-1.5 rounded-lg border border-[var(--border)] bg-[var(--background)] hover:border-[var(--primary)] cursor-pointer"><span class="font-mono mr-1">}</span> Summarize</button>
+              <button onclick="v1RunTextOp('itemize')" class="pill-btn text-left px-2.5 py-1.5 rounded-lg border border-[var(--border)] bg-[var(--background)] hover:border-[var(--primary)] cursor-pointer"><span class="font-mono mr-1">≡</span> Itemize Steps</button>
+              <button onclick="v1RunTextOp('extract')" class="pill-btn text-left px-2.5 py-1.5 rounded-lg border border-[var(--border)] bg-[var(--background)] hover:border-[var(--primary)] cursor-pointer"><span class="font-mono mr-1">▽</span> Extract Logic</button>
+              <button onclick="v1RunTextOp('compare')" class="pill-btn text-left px-2.5 py-1.5 rounded-lg border border-[var(--border)] bg-[var(--background)] hover:border-[var(--primary)] cursor-pointer"><span class="font-mono mr-1">↔</span> Compare Paths</button>
+            </div>
+            <div class="mt-1 p-2.5 rounded-lg border border-[var(--border)] bg-[var(--background)] flex-1 overflow-y-auto leading-relaxed">
+              <div class="text-[11px] uppercase tracking-wider text-[var(--muted-foreground)] mb-1" id="v1-text-mode">Live Summary</div>
+              <div id="v1-text-out" class="text-xs text-[var(--foreground)] whitespace-pre-line"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Variation 1 UX Trade-off Strip -->
+      <div class="bg-[var(--card)] border border-[var(--border)] rounded-xl px-4 py-2.5 flex flex-wrap gap-x-6 gap-y-1 text-xs">
+        <span><strong class="text-[var(--success)]">Strengths:</strong> Zero ambiguity when editing topology; instant visual comparison of clean vs. ink; easy to debug ML stroke models.</span>
+        <span><strong class="text-[var(--warning)]">Trade-offs:</strong> Eyes bounce across 3 panes; feels like a style-filter utility rather than a thinking tool.</span>
+      </div>
+    </section>
+
+    <!-- =================================================================== -->
+    <!-- VARIATION 2: UNIFIED LIVING NAPKIN                                  -->
+    <!-- =================================================================== -->
+    <section id="view-v2" class="hidden space-y-3 fade-in">
+      <!-- Top Control Bar -->
+      <div class="bg-[var(--card)] border border-[var(--border)] rounded-xl p-3 flex flex-wrap items-center justify-between gap-3 text-xs">
+        <div class="flex flex-wrap items-center gap-3">
+          <div class="flex items-center gap-2 bg-[var(--background)] border border-[var(--border)] rounded-lg px-2.5 py-1">
+            <span class="text-[var(--muted-foreground)]">Clean</span>
+            <input id="v2-morph" type="range" min="0" max="100" value="85" class="w-28" oninput="v2Render()" />
+            <span class="font-medium text-[var(--foreground)]">Napkin <span id="v2-morph-val" class="font-mono text-[var(--muted-foreground)]">85%</span></span>
+          </div>
+
+          <div class="flex items-center gap-1">
+            <button id="v2-mode-draw" onclick="v2SetMode('draw')" class="pill-btn px-2.5 py-1 rounded-md border border-[var(--primary)] bg-[var(--primary)] text-[var(--primary-foreground)] font-medium cursor-pointer">✎ Draw Gesture</button>
+            <button id="v2-mode-move" onclick="v2SetMode('move')" class="pill-btn px-2.5 py-1 rounded-md border border-[var(--border)] bg-[var(--background)] cursor-pointer">✥ Move Cards</button>
+          </div>
+        </div>
+
+        <div class="flex flex-wrap items-center gap-1.5">
+          <span class="text-[var(--muted-foreground)] mr-1">Auto-Demo Gesture:</span>
+          <button onclick="v2DemoGesture('emphasize')" class="pill-btn px-2 py-1 rounded border border-[var(--border)] bg-[var(--background)] hover:border-[var(--primary)] cursor-pointer">◎ Emphasize</button>
+          <button onclick="v2DemoGesture('extract')" class="pill-btn px-2 py-1 rounded border border-[var(--border)] bg-[var(--background)] hover:border-[var(--primary)] cursor-pointer">▽ Extract</button>
+          <button onclick="v2DemoGesture('summarize')" class="pill-btn px-2 py-1 rounded border border-[var(--border)] bg-[var(--background)] hover:border-[var(--primary)] cursor-pointer">} Summarize</button>
+          <button onclick="v2DemoGesture('compare')" class="pill-btn px-2 py-1 rounded border border-[var(--border)] bg-[var(--background)] hover:border-[var(--primary)] cursor-pointer">↔ Compare</button>
+          <button onclick="v2DemoGesture('itemize')" class="pill-btn px-2 py-1 rounded border border-[var(--border)] bg-[var(--background)] hover:border-[var(--primary)] cursor-pointer">≡ Itemize</button>
+          <button onclick="v2ClearGestures()" class="pill-btn px-2 py-1 rounded border border-[var(--border)] bg-[var(--background)] text-[var(--muted-foreground)] hover:text-[var(--foreground)] cursor-pointer">Clear Ink</button>
+        </div>
+      </div>
+
+      <!-- Canvas + ml5 Classifier Inspector -->
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-3">
+        <!-- Big Unified Napkin -->
+        <div class="lg:col-span-8 bg-[var(--card)] border border-[var(--border)] rounded-xl overflow-hidden flex flex-col">
+          <div class="px-3 py-2 border-b border-[var(--border)] flex items-center justify-between text-xs">
+            <span class="font-medium">Living Napkin Canvas <span class="text-[var(--muted-foreground)] font-normal">— draw a circle, V-funnel, bracket, horizontal line, or zigzag right over any node</span></span>
+            <span id="v2-hint" class="font-mono text-[var(--muted-foreground)]">Pen ready</span>
+          </div>
+          <div class="relative napkin-surface">
+            <canvas id="v2-canvas" class="w-full h-[430px] block cursor-crosshair"></canvas>
+          </div>
+        </div>
+
+        <!-- Right Inspector: Live ml5 Classifier + Semantic Output + Teach Custom Symbol -->
+        <div class="lg:col-span-4 flex flex-col gap-3">
+          <!-- ml5.js 32-pt Gesture Classifier Readout -->
+          <div class="bg-[var(--card)] border border-[var(--border)] rounded-xl p-3 space-y-2.5">
+            <div class="flex items-center justify-between text-xs">
+              <span class="font-medium">ml5.neuralNetwork() Classifier</span>
+              <span class="font-mono text-[11px] px-1.5 py-0.5 rounded bg-[var(--background)] border border-[var(--border)] text-[var(--muted-foreground)]">32-pt online ink</span>
+            </div>
+            <div id="v2-probs" class="space-y-1.5 text-xs"></div>
+            <div id="v2-binding" class="text-xs px-2.5 py-1.5 rounded-lg bg-[var(--background)] border border-[var(--border)] text-[var(--muted-foreground)]">
+              Draw any symbol on the napkin (or click an Auto-Demo button above) to inspect recognition &amp; spatial binding.
+            </div>
+          </div>
+
+          <!-- Resulting Semantic Transformation -->
+          <div class="bg-[var(--card)] border border-[var(--border)] rounded-xl p-3 flex-1 flex flex-col gap-2">
+            <div class="flex items-center justify-between text-xs">
+              <span class="font-medium">Semantic Text Output</span>
+              <span id="v2-op-badge" class="font-mono text-[11px] px-2 py-0.5 rounded-full border border-[var(--border)] bg-[var(--background)] text-[var(--muted-foreground)]">idle</span>
+            </div>
+            <div id="v2-output" class="text-xs leading-relaxed p-2.5 rounded-lg bg-[var(--background)] border border-[var(--border)] flex-1 min-h-[115px] whitespace-pre-line text-[var(--muted-foreground)]">
+              Waiting for a semantic gesture on the napkin...
+            </div>
+          </div>
+
+          <!-- Teach Your Own Symbol (ml5.js superpower) -->
+          <div class="bg-[var(--card)] border border-[var(--border)] rounded-xl p-3 space-y-2 text-xs">
+            <div class="flex items-center justify-between">
+              <span class="font-medium">Teach Custom Symbol <span class="text-[var(--muted-foreground)] font-normal">(in-browser)</span></span>
+              <span id="v2-custom-count" class="font-mono text-[var(--muted-foreground)]">0 / 3 samples</span>
+            </div>
+            <div class="flex gap-1.5">
+              <input id="v2-custom-name" type="text" value="critique" placeholder="Operator name..." class="w-28 px-2 py-1 rounded border border-[var(--border)] bg-[var(--background)] text-xs" />
+              <button id="v2-record-btn" onclick="v2ToggleRecord()" class="pill-btn flex-1 px-2.5 py-1 rounded border border-[var(--border)] bg-[var(--background)] hover:border-[var(--primary)] cursor-pointer">
+                ● Record Stroke on Canvas
+              </button>
+            </div>
+            <div id="v2-custom-msg" class="text-[11px] text-[var(--muted-foreground)]">
+              Draw 3 examples of your own gesture to add a live operator to the classifier.
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Variation 2 UX Trade-off Strip -->
+      <div class="bg-[var(--card)] border border-[var(--border)] rounded-xl px-4 py-2.5 flex flex-wrap gap-x-6 gap-y-1 text-xs">
+        <span><strong class="text-[var(--success)]">Strengths:</strong> True thinking-canvas feel; morph slider bridges clean &amp; organic in one place; live user-teachable symbols shine with ml5.js.</span>
+        <span><strong class="text-[var(--warning)]">Trade-offs:</strong> Higher learning curve for symbol grammar; requires clear mode/confidence feedback so stray strokes don't misfire.</span>
+      </div>
+    </section>
+
+    <!-- =================================================================== -->
+    <!-- VARIATION 3: DOCUMENT-FIRST MARGIN SKETCHPAD                        -->
+    <!-- =================================================================== -->
+    <section id="view-v3" class="hidden space-y-3 fade-in">
+      <!-- Top Bar -->
+      <div class="bg-[var(--card)] border border-[var(--border)] rounded-xl p-3 flex flex-wrap items-center justify-between gap-3 text-xs">
+        <div class="flex flex-wrap items-center gap-2">
+          <span class="text-[var(--muted-foreground)]">Sample Document:</span>
+          <button onclick="v3LoadDoc('rfc')" class="v3-doc-btn px-2.5 py-1 rounded border border-[var(--primary)] bg-[var(--primary)] text-[var(--primary-foreground)] cursor-pointer" data-doc="rfc">Architecture RFC</button>
+          <button onclick="v3LoadDoc('memo')" class="v3-doc-btn px-2.5 py-1 rounded border border-[var(--border)] bg-[var(--background)] hover:border-[var(--primary)] cursor-pointer" data-doc="memo">Product Strategy</button>
+          <button onclick="v3LoadDoc('paper')" class="v3-doc-btn px-2.5 py-1 rounded border border-[var(--border)] bg-[var(--background)] hover:border-[var(--primary)] cursor-pointer" data-doc="paper">Research Notes</button>
+        </div>
+
+        <div class="flex flex-wrap items-center gap-2">
+          <span class="text-[var(--muted-foreground)]">Margin Ink Action:</span>
+          <button onclick="v3SketchSelectedToMargin()" class="pill-btn px-2.5 py-1 rounded bg-[var(--primary)] text-[var(--primary-foreground)] font-medium cursor-pointer">
+            ➔ Text to Margin Sketch
+          </button>
+          <button onclick="v3ResetTransforms()" class="pill-btn px-2.5 py-1 rounded border border-[var(--border)] bg-[var(--background)] text-[var(--muted-foreground)] hover:text-[var(--foreground)] cursor-pointer">
+            Reset Document
+          </button>
+        </div>
+      </div>
+
+      <!-- Document + Margin Sketch Rail -->
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-3">
+        <!-- Left: Editable Prose Blocks -->
+        <div class="lg:col-span-6 bg-[var(--card)] border border-[var(--border)] rounded-xl overflow-hidden flex flex-col">
+          <div class="px-3 py-2 border-b border-[var(--border)] flex items-center justify-between text-xs">
+            <span class="font-medium">Document Prose <span class="text-[var(--muted-foreground)] font-normal">(click a block to focus, or annotate in the right margin)</span></span>
+            <span class="font-mono text-[var(--muted-foreground)]">Bidirectional Text</span>
+          </div>
+          <div id="v3-doc-blocks" class="p-4 space-y-3 flex-1 overflow-y-auto max-h-[450px]"></div>
+        </div>
+
+        <!-- Right: Interactive Napkin Margin Rail -->
+        <div class="lg:col-span-6 bg-[var(--card)] border border-[var(--border)] rounded-xl overflow-hidden flex flex-col">
+          <div class="px-3 py-2 border-b border-[var(--border)] flex items-center justify-between text-xs">
+            <span class="font-medium">Napkin Margin Rail <span class="text-[var(--muted-foreground)] font-normal">(draw gesture beside a block, or click quick-mark)</span></span>
+            <span id="v3-margin-status" class="font-mono text-[var(--muted-foreground)]">Aligned to blocks</span>
+          </div>
+
+          <!-- Quick Margin Gesture Bar -->
+          <div class="px-3 py-2 border-b border-[var(--border)] bg-[var(--background)] flex flex-wrap items-center gap-1.5 text-xs">
+            <span class="text-[var(--muted-foreground)] mr-1">Quick-Draw on focused block:</span>
+            <button onclick="v3ApplyMarginOp('summarize')" class="pill-btn px-2 py-0.5 rounded border border-[var(--border)] bg-[var(--card)] hover:border-[var(--primary)] cursor-pointer">} Summarize</button>
+            <button onclick="v3ApplyMarginOp('itemize')" class="pill-btn px-2 py-0.5 rounded border border-[var(--border)] bg-[var(--card)] hover:border-[var(--primary)] cursor-pointer">≡ Itemize</button>
+            <button onclick="v3ApplyMarginOp('extract')" class="pill-btn px-2 py-0.5 rounded border border-[var(--border)] bg-[var(--card)] hover:border-[var(--primary)] cursor-pointer">▽ Extract</button>
+            <button onclick="v3ApplyMarginOp('emphasize')" class="pill-btn px-2 py-0.5 rounded border border-[var(--border)] bg-[var(--card)] hover:border-[var(--primary)] cursor-pointer">◎ Emphasize</button>
+            <button onclick="v3ApplyMarginOp('compare')" class="pill-btn px-2 py-0.5 rounded border border-[var(--border)] bg-[var(--card)] hover:border-[var(--primary)] cursor-pointer">↔ Compare All</button>
+          </div>
+
+          <div class="relative napkin-surface flex-1">
+            <canvas id="v3-canvas" class="w-full h-[395px] block cursor-crosshair"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <!-- Variation 3 UX Trade-off Strip -->
+      <div class="bg-[var(--card)] border border-[var(--border)] rounded-xl px-4 py-2.5 flex flex-wrap gap-x-6 gap-y-1 text-xs">
+        <span><strong class="text-[var(--success)]">Strengths:</strong> Lowest friction for real daily writing &amp; reading; spatial alignment makes symbol-to-text binding effortless; natural Feynman-notebook vibe.</span>
+        <span><strong class="text-[var(--warning)]">Trade-offs:</strong> Narrow margin constrains large 2D flowcharts; weaker showcase for freeform Computerized-to-Napkin diagram authoring.</span>
+      </div>
+    </section>
+
+  </div>
+
+<script>
+// ============================================================================
+// THEME HELPERS (Live Light / Dark Theme Sync)
+// ============================================================================
+function getThemeColors() {
+  const s = getComputedStyle(document.documentElement);
+  const fg = s.getPropertyValue('--foreground').trim() || '#222222';
+  const muted = s.getPropertyValue('--muted-foreground').trim() || '#666666';
+  const primary = s.getPropertyValue('--primary').trim() || '#2563eb';
+  const accent = s.getPropertyValue('--accent').trim() || '#e5e7eb';
+  const border = s.getPropertyValue('--border').trim() || '#d4d4d8';
+  const card = s.getPropertyValue('--card').trim() || '#ffffff';
+  const bg = s.getPropertyValue('--background').trim() || '#fafafa';
+  const success = s.getPropertyValue('--success').trim() || '#16a34a';
+  const warning = s.getPropertyValue('--warning').trim() || '#d97706';
+  const isLight = document.documentElement.classList.contains('light') || isColorLight(bg);
+  return {
+    fg, muted, primary, accent, border, card, bg, success, warning, isLight,
+    ink: isLight ? '#1e293b' : '#e2e8f0',
+    inkSubtle: isLight ? 'rgba(30,41,59,0.55)' : 'rgba(226,232,240,0.6)',
+    redInk: isLight ? '#c2410c' : '#fb923c',
+    blueInk: isLight ? '#1d4ed8' : '#60a5fa',
+    greenInk: isLight ? '#15803d' : '#4ade80',
+    paperFill: isLight ? 'rgba(255,253,247,0.75)' : 'rgba(255,255,255,0.02)'
+  };
+}
+
+function isColorLight(color) {
+  if (!color || !color.startsWith('#')) return true;
+  const hex = color.replace('#', '');
+  const full = hex.length === 3 ? hex.split('').map(c => c + c).join('') : hex;
+  const r = parseInt(full.slice(0, 2), 16);
+  const g = parseInt(full.slice(2, 4), 16);
+  const b = parseInt(full.slice(4, 6), 16);
+  return (r * 299 + g * 587 + b * 114) / 1000 > 135;
+}
+
+// ============================================================================
+// DETERMINISTIC PRNG + NON-DIFFUSION VECTOR INK ENGINE (Shapes + Hershey Font)
+// ============================================================================
+function mulberry32(seed) {
+  let a = seed >>> 0;
+  return function() {
+    a |= 0; a = a + 0x6D2B79F5 | 0;
+    let t = Math.imul(a ^ a >>> 15, 1 | a);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+
+// Compact single-stroke Hershey-style vector font (0..4 width, 0..6 height)
+const GLYPHS = {
+  'A': [[[0,6],[2,0],[4,6]], [[0.8,3.8],[3.2,3.8]]],
+  'B': [[[0,0],[0,6]], [[0,0],[2.8,0],[3.6,0.9],[3.6,2.1],[2.8,3],[0,3]], [[2.8,3],[3.8,3.8],[3.8,5.1],[2.8,6],[0,6]]],
+  'C': [[[4,1.2],[3,0],[1.2,0],[0,1.4],[0,4.6],[1.2,6],[3,6],[4,4.8]]],
+  'D': [[[0,0],[0,6]], [[0,0],[2.4,0],[3.8,1.5],[3.8,4.5],[2.4,6],[0,6]]],
+  'E': [[[3.6,0],[0,0],[0,6],[3.6,6]], [[0,3],[2.8,3]]],
+  'F': [[[3.6,0],[0,0],[0,6]], [[0,3],[2.6,3]]],
+  'G': [[[4,1.2],[2.9,0],[1.2,0],[0,1.4],[0,4.6],[1.2,6],[3,6],[4,4.8],[4,3.2],[2.2,3.2]]],
+  'H': [[[0,0],[0,6]], [[3.8,0],[3.8,6]], [[0,3],[3.8,3]]],
+  'I': [[[0.8,0],[3.2,0]], [[2,0],[2,6]], [[0.8,6],[3.2,6]]],
+  'J': [[[3.4,0],[3.4,4.6],[2.4,6],[1,6],[0,4.8]]],
+  'K': [[[0,0],[0,6]], [[3.8,0],[0,3.3]], [[1.4,2.1],[3.8,6]]],
+  'L': [[[0,0],[0,6],[3.6,6]]],
+  'M': [[[0,6],[0,0],[2,3.4],[4,0],[4,6]]],
+  'N': [[[0,6],[0,0],[3.8,6],[3.8,0]]],
+  'O': [[[1.3,0],[2.7,0],[4,1.5],[4,4.5],[2.7,6],[1.3,6],[0,4.5],[0,1.5],[1.3,0]]],
+  'P': [[[0,6],[0,0],[2.8,0],[3.8,1],[3.8,2.4],[2.8,3.3],[0,3.3]]],
+  'Q': [[[1.3,0],[2.7,0],[4,1.5],[4,4.5],[2.7,6],[1.3,6],[0,4.5],[0,1.5],[1.3,0]], [[2.4,4.4],[4.2,6.4]]],
+  'R': [[[0,6],[0,0],[2.8,0],[3.8,1],[3.8,2.3],[2.8,3.2],[0,3.2]], [[2.2,3.2],[3.9,6]]],
+  'S': [[[3.7,1],[2.8,0],[1,0],[0.1,1],[0.1,2.1],[1,2.8],[2.9,3.2],[3.8,4],[3.8,5.1],[2.8,6],[1,6],[0,5]]],
+  'T': [[[0,0],[4,0]], [[2,0],[2,6]]],
+  'U': [[[0,0],[0,4.6],[1.2,6],[2.8,6],[4,4.6],[4,0]]],
+  'V': [[[0,0],[2,6],[4,0]]],
+  'W': [[[0,0],[1,6],[2,2.4],[3,6],[4,0]]],
+  'X': [[[0,0],[4,6]], [[4,0],[0,6]]],
+  'Y': [[[0,0],[2,3],[4,0]], [[2,3],[2,6]]],
+  'Z': [[[0,0],[4,0],[0,6],[4,6]]],
+  '0': [[[1.2,0],[2.8,0],[3.8,1.5],[3.8,4.5],[2.8,6],[1.2,6],[0.2,4.5],[0.2,1.5],[1.2,0]], [[0.8,4.8],[3.2,1.2]]],
+  '1': [[[1,1.3],[2.2,0],[2.2,6]], [[1,6],[3.4,6]]],
+  '2': [[[0.2,1.4],[1.2,0],[2.9,0],[3.8,1.1],[3.8,2.3],[0.2,6],[3.9,6]]],
+  '3': [[[0.2,1],[1.2,0],[2.8,0],[3.7,1],[3.7,2.1],[2.6,2.9],[1.5,2.9]], [[2.6,2.9],[3.8,3.8],[3.8,5],[2.8,6],[1.1,6],[0.1,5]]],
+  '4': [[[3,6],[3,0],[0,4.1],[4,4.1]]],
+  '5': [[[3.6,0],[0.4,0],[0.2,2.8],[2.6,2.5],[3.8,3.5],[3.8,5],[2.7,6],[1,6],[0.1,5]]],
+  '6': [[[3.4,0.8],[2.4,0],[1.2,0],[0.2,1.5],[0.2,4.8],[1.2,6],[2.8,6],[3.8,4.8],[3.8,3.6],[2.8,2.8],[1.2,2.8],[0.2,3.8]]],
+  '7': [[[0.1,0],[3.9,0],[1.4,6]]],
+  '8': [[[1.2,2.9],[0.3,2.1],[0.3,0.9],[1.2,0],[2.8,0],[3.7,0.9],[3.7,2.1],[2.8,2.9],[1.2,2.9],[0.2,3.8],[0.2,5.1],[1.2,6],[2.8,6],[3.8,5.1],[3.8,3.8],[2.8,2.9]]],
+  '9': [[[3.8,2.4],[2.8,3.2],[1.2,3.2],[0.2,2.2],[0.2,1],[1.2,0],[2.8,0],[3.8,1.2],[3.8,4.6],[2.8,6],[1.2,6],[0.4,5.2]]],
+  '?': [[[0.4,1.3],[1.3,0],[2.9,0],[3.8,1],[3.8,2.1],[2,3.2],[2,4.3]], [[2,5.6],[2,6]]],
+  '-': [[[0.6,3],[3.4,3]]],
+  '/': [[[3.6,0],[0.4,6]]],
+  '+': [[[2,1.2],[2,4.8]], [[0.4,3],[3.6,3]]],
+  '>': [[[0.6,1.2],[3.4,3],[0.6,4.8]]],
+  '.': [[[1.8,5.5],[2.2,6]]],
+  ',': [[[2.2,5.4],[1.5,6.8]]],
+  ':': [[[2,1.6],[2,2.1]], [[2,4.6],[2,5.1]]],
+  '!': [[[2,0],[2,4.3]], [[2,5.6],[2,6]]],
+  '(': [[[2.8,0],[1.4,1.5],[1.4,4.5],[2.8,6]]],
+  ')': [[[1.2,0],[2.6,1.5],[2.6,4.5],[1.2,6]]],
+  ' ': []
+};
+
+function sketchLineStrokes(x1, y1, x2, y2, opts, rng) {
+  const { wobble = 0.55, overshoot = 0.5, passes = 1 } = opts;
+  const strokes = [];
+  const dx = x2 - x1, dy = y2 - y1;
+  const len = Math.hypot(dx, dy) || 1;
+  const ux = dx / len, uy = dy / len;
+  const nx = -uy, ny = ux;
+
+  for (let p = 0; p < passes; p++) {
+    const ovStart = (rng() - 0.35) * overshoot * 7;
+    const ovEnd = (rng() - 0.35) * overshoot * 7;
+    const sx = x1 - ux * ovStart + (rng() - 0.5) * wobble * 3.5;
+    const sy = y1 - uy * ovStart + (rng() - 0.5) * wobble * 3.5;
+    const ex = x2 + ux * ovEnd + (rng() - 0.5) * wobble * 3.5;
+    const ey = y2 + uy * ovEnd + (rng() - 0.5) * wobble * 3.5;
+
+    const steps = Math.max(5, Math.min(22, Math.floor(len / 14)));
+    const bow = (rng() - 0.5) * wobble * Math.min(11, len * 0.08);
+    const pts = [];
+    for (let i = 0; i <= steps; i++) {
+      const t = i / steps;
+      const arch = Math.sin(t * Math.PI) * bow;
+      const jitter = (rng() - 0.5) * wobble * 2.4 * (p === 0 ? 1 : 1.35);
+      pts.push([
+        sx + (ex - sx) * t + nx * (arch + jitter),
+        sy + (ey - sy) * t + ny * (arch + jitter)
+      ]);
+    }
+    strokes.push({ pts, width: p === 0 ? 1.85 : 1.15, alpha: p === 0 ? 0.94 : 0.45 });
+  }
+  return strokes;
+}
+
+function sketchRectStrokes(node, opts, rng) {
+  const { tilt = 0.45, wobble = 0.55 } = opts;
+  const cx = node.x + node.w / 2, cy = node.y + node.h / 2;
+  const angle = (rng() - 0.5) * tilt * 0.085;
+  const rot = (px, py) => {
+    const rx = px - cx, ry = py - cy;
+    return [cx + rx * Math.cos(angle) - ry * Math.sin(angle), cy + rx * Math.sin(angle) + ry * Math.cos(angle)];
+  };
+  const c1 = rot(node.x, node.y);
+  const c2 = rot(node.x + node.w, node.y);
+  const c3 = rot(node.x + node.w, node.y + node.h);
+  const c4 = rot(node.x, node.y + node.h);
+  const passes = wobble > 0.65 ? 2 : 1;
+  return [
+    ...sketchLineStrokes(c1[0], c1[1], c2[0], c2[1], { ...opts, passes }, rng),
+    ...sketchLineStrokes(c2[0], c2[1], c3[0], c3[1], { ...opts, passes }, rng),
+    ...sketchLineStrokes(c3[0], c3[1], c4[0], c4[1], { ...opts, passes }, rng),
+    ...sketchLineStrokes(c4[0], c4[1], c1[0], c1[1], { ...opts, passes }, rng)
+  ];
+}
+
+function sketchDiamondStrokes(node, opts, rng) {
+  const { tilt = 0.45, wobble = 0.55 } = opts;
+  const cx = node.x + node.w / 2, cy = node.y + node.h / 2;
+  const angle = (rng() - 0.5) * tilt * 0.09;
+  const rot = (px, py) => {
+    const rx = px - cx, ry = py - cy;
+    return [cx + rx * Math.cos(angle) - ry * Math.sin(angle), cy + rx * Math.sin(angle) + ry * Math.cos(angle)];
+  };
+  const top = rot(cx, node.y - 4);
+  const right = rot(node.x + node.w + 6, cy);
+  const bottom = rot(cx, node.y + node.h + 4);
+  const left = rot(node.x - 6, cy);
+  const passes = wobble > 0.65 ? 2 : 1;
+  return [
+    ...sketchLineStrokes(top[0], top[1], right[0], right[1], { ...opts, passes }, rng),
+    ...sketchLineStrokes(right[0], right[1], bottom[0], bottom[1], { ...opts, passes }, rng),
+    ...sketchLineStrokes(bottom[0], bottom[1], left[0], left[1], { ...opts, passes }, rng),
+    ...sketchLineStrokes(left[0], left[1], top[0], top[1], { ...opts, passes }, rng)
+  ];
+}
+
+function sketchOvalStrokes(node, opts, rng) {
+  const { wobble = 0.55, overshoot = 0.5, tilt = 0.45 } = opts;
+  const cx = node.x + node.w / 2, cy = node.y + node.h / 2;
+  const rx = node.w / 2 + 2, ry = node.h / 2 + 2;
+  const angle = (rng() - 0.5) * tilt * 0.1;
+  const startA = rng() * Math.PI * 2;
+  const extraA = overshoot * 0.55 + 0.15;
+  const steps = 32;
+  const pts = [];
+  for (let i = 0; i <= steps; i++) {
+    const t = i / steps;
+    const a = startA + t * (Math.PI * 2 + extraA);
+    const rJit = 1 + (Math.sin(a * 3 + startA) * 0.04 + (rng() - 0.5) * 0.05) * wobble;
+    const lx = Math.cos(a) * rx * rJit;
+    const ly = Math.sin(a) * ry * rJit;
+    pts.push([
+      cx + lx * Math.cos(angle) - ly * Math.sin(angle),
+      cy + lx * Math.sin(angle) + ly * Math.cos(angle)
+    ]);
+  }
+  return [{ pts, width: 1.85, alpha: 0.94 }];
+}
+
+function sketchArrowStrokes(x1, y1, x2, y2, opts, rng) {
+  const { wobble = 0.55 } = opts;
+  const dx = x2 - x1, dy = y2 - y1;
+  const len = Math.hypot(dx, dy) || 1;
+  const angle = Math.atan2(dy, dx);
+  const midX = (x1 + x2) / 2 - (dy / len) * (rng() - 0.5) * wobble * 16;
+  const midY = (y1 + y2) / 2 + (dx / len) * (rng() - 0.5) * wobble * 16;
+
+  const steps = 16;
+  const shaft = [];
+  for (let i = 0; i <= steps; i++) {
+    const t = i / steps;
+    const mt = 1 - t;
+    const px = mt * mt * x1 + 2 * mt * t * midX + t * t * x2 + (rng() - 0.5) * wobble * 1.8;
+    const py = mt * mt * y1 + 2 * mt * t * midY + t * t * y2 + (rng() - 0.5) * wobble * 1.8;
+    shaft.push([px, py]);
+  }
+  const headLen = 11 + rng() * 3;
+  const spread = 0.48 + (rng() - 0.5) * 0.12 * wobble;
+  const endAngle = Math.atan2(y2 - midY, x2 - midX);
+  const w1 = [x2 - Math.cos(endAngle - spread) * headLen, y2 - Math.sin(endAngle - spread) * headLen];
+  const w2 = [x2 - Math.cos(endAngle + spread) * headLen, y2 - Math.sin(endAngle + spread) * headLen];
+
+  return [
+    { pts: shaft, width: 1.75, alpha: 0.92 },
+    ...sketchLineStrokes(w1[0], w1[1], x2, y2, { wobble: wobble * 0.7, overshoot: 0.15, passes: 1 }, rng),
+    ...sketchLineStrokes(w2[0], w2[1], x2, y2, { wobble: wobble * 0.7, overshoot: 0.15, passes: 1 }, rng)
+  ];
+}
+
+function sketchTextStrokes(text, cx, cy, maxW, opts, rng) {
+  const { wobble = 0.55, tilt = 0.45 } = opts;
+  const upper = (text || '').toUpperCase().slice(0, 20);
+  const charScale = Math.min(2.15, Math.max(1.45, (maxW - 18) / Math.max(1, upper.length * 5.2)));
+  const charW = 5.1 * charScale;
+  const totalW = upper.length * charW - 1.1 * charScale;
+  let curX = cx - totalW / 2;
+  const baseY = cy - 3 * charScale;
+  const slant = -0.11 * (0.4 + tilt);
+  const strokes = [];
+
+  for (let i = 0; i < upper.length; i++) {
+    const ch = upper[i];
+    const glyph = GLYPHS[ch] || GLYPHS[' '];
+    const yDrift = Math.sin(i * 0.7) * wobble * 1.6 + (rng() - 0.5) * wobble * 1.4;
+    for (const seg of glyph) {
+      const pts = seg.map(([gx, gy]) => [
+        curX + (gx + (6 - gy) * slant) * charScale + (rng() - 0.5) * wobble * 0.9,
+        baseY + gy * charScale + yDrift + (rng() - 0.5) * wobble * 0.9
+      ]);
+      strokes.push({ pts, width: 1.45, alpha: 0.92 });
+    }
+    curX += charW + (rng() - 0.5) * wobble * 0.8;
+  }
+  return strokes;
+}
+
+function drawStrokeList(ctx, strokes, color, maxPoints = Infinity) {
+  ctx.save();
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  let drawn = 0;
+  let lastPt = null;
+
+  for (const s of strokes) {
+    if (drawn >= maxPoints) break;
+    if (!s.pts || s.pts.length < 2) continue;
+    ctx.beginPath();
+    ctx.strokeStyle = s.color || color;
+    ctx.lineWidth = s.width || 1.7;
+    ctx.globalAlpha = s.alpha ?? 0.92;
+    ctx.moveTo(s.pts[0][0], s.pts[0][1]);
+    for (let i = 1; i < s.pts.length; i++) {
+      if (drawn >= maxPoints) break;
+      ctx.lineTo(s.pts[i][0], s.pts[i][1]);
+      lastPt = s.pts[i];
+      drawn++;
+    }
+    ctx.stroke();
+  }
+  ctx.restore();
+  return lastPt;
+}
+
+function anchorPoint(fromNode, toNode) {
+  const fx = fromNode.x + fromNode.w / 2, fy = fromNode.y + fromNode.h / 2;
+  const tx = toNode.x + toNode.w / 2, ty = toNode.y + toNode.h / 2;
+  const dx = tx - fx, dy = ty - fy;
+  const hw = fromNode.w / 2 + 4, hh = fromNode.h / 2 + 4;
+  if (Math.abs(dx) < 1e-3 && Math.abs(dy) < 1e-3) return [fx, fy];
+  const sx = Math.abs(dx) > 1e-3 ? hw / Math.abs(dx) : Infinity;
+  const sy = Math.abs(dy) > 1e-3 ? hh / Math.abs(dy) : Infinity;
+  const s = Math.min(sx, sy);
+  return [fx + dx * s, fy + dy * s];
+}
+
+// ============================================================================
+// VARIATION 1: SPLIT-PANE STUDIO
+// ============================================================================
+const V1_DEFAULT = {
+  nodes: [
+    { id: 1, type: 'oval', x: 165, y: 26, w: 150, h: 48, label: 'RAW IDEA' },
+    { id: 2, type: 'rect', x: 155, y: 122, w: 170, h: 52, label: 'PARSE STROKES' },
+    { id: 3, type: 'diamond', x: 165, y: 222, w: 150, h: 58, label: 'AMBIGUOUS?' },
+    { id: 4, type: 'rect', x: 350, y: 226, w: 122, h: 50, label: 'ASK USER' },
+    { id: 5, type: 'oval', x: 165, y: 314, w: 150, h: 44, label: 'RUN OP' }
+  ],
+  edges: [
+    { from: 1, to: 2 },
+    { from: 2, to: 3 },
+    { from: 3, to: 4 },
+    { from: 3, to: 5 }
+  ]
+};
+
+let v1State = {
+  nodes: JSON.parse(JSON.stringify(V1_DEFAULT.nodes)),
+  edges: JSON.parse(JSON.stringify(V1_DEFAULT.edges)),
+  selectedId: 2,
+  connectMode: false,
+  connectSource: null,
+  dragging: null,
+  dragOffset: [0, 0],
+  ink: { wobble: 0.55, overshoot: 0.50, tilt: 0.45 },
+  cachedStrokes: [],
+  replayFrame: null,
+  replayProgress: Infinity,
+  textMode: 'summarize'
+};
+
+function setupHiDPI(canvas) {
+  const rect = canvas.getBoundingClientRect();
+  if (rect.width === 0 || rect.height === 0) return null;
+  const dpr = window.devicePixelRatio || 1;
+  canvas.width = Math.round(rect.width * dpr);
+  canvas.height = Math.round(rect.height * dpr);
+  const ctx = canvas.getContext('2d');
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  return { ctx, w: rect.width, h: rect.height };
+}
+
+function v1BuildStrokes() {
+  const rng = mulberry32(4217);
+  const strokes = [];
+  for (const n of v1State.nodes) {
+    if (n.type === 'rect') strokes.push(...sketchRectStrokes(n, v1State.ink, rng));
+    else if (n.type === 'diamond') strokes.push(...sketchDiamondStrokes(n, v1State.ink, rng));
+    else strokes.push(...sketchOvalStrokes(n, v1State.ink, rng));
+    strokes.push(...sketchTextStrokes(n.label, n.x + n.w / 2, n.y + n.h / 2, n.w, v1State.ink, rng));
+  }
+  for (const e of v1State.edges) {
+    const a = v1State.nodes.find(n => n.id === e.from);
+    const b = v1State.nodes.find(n => n.id === e.to);
+    if (!a || !b) continue;
+    const [x1, y1] = anchorPoint(a, b);
+    const [x2, y2] = anchorPoint(b, a);
+    strokes.push(...sketchArrowStrokes(x1, y1, x2, y2, v1State.ink, rng));
+  }
+  v1State.cachedStrokes = strokes;
+  document.getElementById('v1-stroke-count').textContent = `${strokes.length} strokes`;
+}
+
+function v1RenderClean() {
+  const canvas = document.getElementById('v1-clean');
+  const info = setupHiDPI(canvas);
+  if (!info) return;
+  const { ctx, w, h } = info;
+  const c = getThemeColors();
+  ctx.clearRect(0, 0, w, h);
+
+  // Subtle alignment guide dots
+  ctx.fillStyle = c.border;
+  for (let gx = 20; gx < w; gx += 28) {
+    for (let gy = 20; gy < h; gy += 28) {
+      ctx.fillRect(gx, gy, 1.5, 1.5);
+    }
+  }
+
+  // Edges
+  for (const e of v1State.edges) {
+    const a = v1State.nodes.find(n => n.id === e.from);
+    const b = v1State.nodes.find(n => n.id === e.to);
+    if (!a || !b) continue;
+    const [x1, y1] = anchorPoint(a, b);
+    const [x2, y2] = anchorPoint(b, a);
+    ctx.strokeStyle = c.muted;
+    ctx.lineWidth = 1.6;
+    ctx.beginPath();
+    ctx.moveTo(x1, y1);
+    ctx.lineTo(x2, y2);
+    ctx.stroke();
+
+    const ang = Math.atan2(y2 - y1, x2 - x1);
+    ctx.fillStyle = c.muted;
+    ctx.beginPath();
+    ctx.moveTo(x2, y2);
+    ctx.lineTo(x2 - 9 * Math.cos(ang - 0.4), y2 - 9 * Math.sin(ang - 0.4));
+    ctx.lineTo(x2 - 9 * Math.cos(ang + 0.4), y2 - 9 * Math.sin(ang + 0.4));
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  // Nodes
+  for (const n of v1State.nodes) {
+    const isSel = n.id === v1State.selectedId || n.id === v1State.connectSource;
+    ctx.fillStyle = c.card;
+    ctx.strokeStyle = isSel ? c.primary : c.fg;
+    ctx.lineWidth = isSel ? 2.2 : 1.4;
+
+    ctx.beginPath();
+    if (n.type === 'rect') {
+      ctx.roundRect(n.x, n.y, n.w, n.h, 6);
+    } else if (n.type === 'diamond') {
+      const cx = n.x + n.w / 2, cy = n.y + n.h / 2;
+      ctx.moveTo(cx, n.y - 4);
+      ctx.lineTo(n.x + n.w + 6, cy);
+      ctx.lineTo(cx, n.y + n.h + 4);
+      ctx.lineTo(n.x - 6, cy);
+      ctx.closePath();
+    } else {
+      ctx.ellipse(n.x + n.w / 2, n.y + n.h / 2, n.w / 2, n.h / 2, 0, 0, Math.PI * 2);
+    }
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.fillStyle = c.fg;
+    ctx.font = '500 12px ui-monospace, SFMono-Regular, Menlo, monospace';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(n.label, n.x + n.w / 2, n.y + n.h / 2);
+  }
+  document.getElementById('v1-status').textContent = `${v1State.nodes.length} nodes · ${v1State.edges.length} edges`;
+}
+
+function v1RenderSketch() {
+  const canvas = document.getElementById('v1-sketch');
+  const info = setupHiDPI(canvas);
+  if (!info) return;
+  const { ctx, w, h } = info;
+  const c = getThemeColors();
+  ctx.clearRect(0, 0, w, h);
+
+  // Subtle napkin margin crease
+  ctx.save();
+  ctx.strokeStyle = c.border;
+  ctx.globalAlpha = 0.28;
+  ctx.setLineDash([4, 6]);
+  ctx.beginPath();
+  ctx.moveTo(w / 2, 8);
+  ctx.lineTo(w / 2, h - 8);
+  ctx.stroke();
+  ctx.restore();
+
+  const lastPt = drawStrokeList(ctx, v1State.cachedStrokes, c.ink, v1State.replayProgress);
+  if (v1State.replayProgress < Infinity && lastPt) {
+    ctx.beginPath();
+    ctx.fillStyle = c.redInk;
+    ctx.arc(lastPt[0], lastPt[1], 4, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+function v1RenderAll() {
+  v1BuildStrokes();
+  v1RenderClean();
+  v1RenderSketch();
+  v1RunTextOp(v1State.textMode);
+  const sel = v1State.nodes.find(n => n.id === v1State.selectedId);
+  const inp = document.getElementById('v1-label-input');
+  if (sel && document.activeElement !== inp) inp.value = sel.label;
+}
+
+function v1UpdateInkParams() {
+  v1State.ink.wobble = parseFloat(document.getElementById('v1-wobble').value);
+  v1State.ink.overshoot = parseFloat(document.getElementById('v1-overshoot').value);
+  v1State.ink.tilt = parseFloat(document.getElementById('v1-tilt').value);
+  document.getElementById('v1-wobble-val').textContent = v1State.ink.wobble.toFixed(2);
+  document.getElementById('v1-over-val').textContent = v1State.ink.overshoot.toFixed(2);
+  document.getElementById('v1-tilt-val').textContent = v1State.ink.tilt.toFixed(2);
+  v1State.replayProgress = Infinity;
+  v1BuildStrokes();
+  v1RenderSketch();
+}
+
+function v1ApplyPreset(name) {
+  const presets = {
+    architect: { wobble: 0.20, overshoot: 0.35, tilt: 0.15 },
+    napkin:    { wobble: 0.55, overshoot: 0.50, tilt: 0.45 },
+    frantic:   { wobble: 0.90, overshoot: 0.85, tilt: 0.90 }
+  };
+  const p = presets[name];
+  document.getElementById('v1-wobble').value = p.wobble;
+  document.getElementById('v1-overshoot').value = p.overshoot;
+  document.getElementById('v1-tilt').value = p.tilt;
+  document.querySelectorAll('.v1-preset').forEach(b => {
+    const active = b.dataset.preset === name;
+    b.className = active
+      ? 'v1-preset px-2 py-1 rounded border border-[var(--primary)] bg-[var(--primary)] text-[var(--primary-foreground)] cursor-pointer'
+      : 'v1-preset px-2 py-1 rounded border border-[var(--border)] bg-[var(--background)] hover:border-[var(--primary)] cursor-pointer';
+  });
+  v1UpdateInkParams();
+}
+
+function v1ReplayPlotter() {
+  if (v1State.replayFrame) cancelAnimationFrame(v1State.replayFrame);
+  v1BuildStrokes();
+  const totalPts = v1State.cachedStrokes.reduce((acc, s) => acc + Math.max(0, s.pts.length - 1), 0);
+  v1State.replayProgress = 0;
+  const step = () => {
+    v1State.replayProgress += Math.max(5, Math.ceil(totalPts / 75));
+    v1RenderSketch();
+    if (v1State.replayProgress < totalPts) {
+      v1State.replayFrame = requestAnimationFrame(step);
+    } else {
+      v1State.replayProgress = Infinity;
+      v1RenderSketch();
+    }
+  };
+  v1State.replayFrame = requestAnimationFrame(step);
+}
+
+function v1ExportSVG() {
+  const c = getThemeColors();
+  const paths = v1State.cachedStrokes.map(s => {
+    const d = s.pts.map((p, i) => `${i === 0 ? 'M' : 'L'}${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(' ');
+    return `<path d="${d}" fill="none" stroke="${c.ink}" stroke-width="${s.width}" stroke-opacity="${s.alpha}" stroke-linecap="round" stroke-linejoin="round"/>`;
+  }).join('\n  ');
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 520 380">\n  ${paths}\n</svg>`;
+  const blob = new Blob([svg], { type: 'image/svg+xml' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'napkin-sketch.svg';
+  a.click();
+}
+
+function v1AddNode(type) {
+  const id = Math.max(0, ...v1State.nodes.map(n => n.id)) + 1;
+  const labels = { rect: 'PROCESS', diamond: 'CHECK?', oval: 'OUTPUT' };
+  const x = 40 + ((id * 53) % 280);
+  const y = 40 + ((id * 67) % 250);
+  v1State.nodes.push({ id, type, x, y, w: 135, h: 48, label: `${labels[type]} ${id}` });
+  v1State.selectedId = id;
+  v1RenderAll();
+}
+
+function v1ToggleConnect() {
+  v1State.connectMode = !v1State.connectMode;
+  v1State.connectSource = null;
+  const btn = document.getElementById('v1-connect-btn');
+  btn.className = v1State.connectMode
+    ? 'pill-btn px-2.5 py-1 rounded-md border border-[var(--primary)] bg-[var(--primary)] text-[var(--primary-foreground)] text-xs cursor-pointer'
+    : 'pill-btn px-2.5 py-1 rounded-md border border-[var(--border)] bg-[var(--background)] hover:border-[var(--primary)] text-xs cursor-pointer';
+  btn.textContent = v1State.connectMode ? '↗ Click Source ➔ Target' : '↗ Link Nodes';
+  v1RenderClean();
+}
+
+function v1DeleteSelected() {
+  if (!v1State.selectedId) return;
+  v1State.nodes = v1State.nodes.filter(n => n.id !== v1State.selectedId);
+  v1State.edges = v1State.edges.filter(e => e.from !== v1State.selectedId && e.to !== v1State.selectedId);
+  v1State.selectedId = v1State.nodes[0]?.id || null;
+  v1RenderAll();
+}
+
+function v1Reset() {
+  v1State.nodes = JSON.parse(JSON.stringify(V1_DEFAULT.nodes));
+  v1State.edges = JSON.parse(JSON.stringify(V1_DEFAULT.edges));
+  v1State.selectedId = 2;
+  v1State.replayProgress = Infinity;
+  v1RenderAll();
+}
+
+function v1RunTextOp(mode) {
+  v1State.textMode = mode;
+  const labels = v1State.nodes.map(n => n.label);
+  const decisions = v1State.nodes.filter(n => n.type === 'diamond').map(n => n.label);
+  const edgesStr = v1State.edges.map(e => {
+    const a = v1State.nodes.find(n => n.id === e.from)?.label || '?';
+    const b = v1State.nodes.find(n => n.id === e.to)?.label || '?';
+    return `${a} → ${b}`;
+  });
+  const titles = { summarize: 'Summary (})', itemize: 'Itemized Steps (≡)', extract: 'Extracted Logic (▽)', compare: 'Branch Comparison (↔)' };
+  document.getElementById('v1-text-mode').textContent = titles[mode];
+  let out = '';
+  if (mode === 'summarize') {
+    out = `A ${v1State.nodes.length}-step workflow starting at "${labels[0] || 'Start'}" that flows through ${labels.slice(1, -1).join(', ') || 'core steps'} to reach "${labels[labels.length - 1] || 'End'}".`;
+  } else if (mode === 'itemize') {
+    out = labels.map((l, i) => `${i + 1}. ${l}`).join('\n');
+  } else if (mode === 'extract') {
+    out = `Decisions: ${decisions.length ? decisions.join(', ') : 'None'}\nTransitions:\n• ${edgesStr.join('\n• ') || 'None'}`;
+  } else {
+    out = decisions.length
+      ? `At "${decisions[0]}":\n• Branch A: Clarify / loop back\n• Branch B: Proceed directly to execution`
+      : `Linear path (${edgesStr.length} links) — add a Decision diamond to compare branches.`;
+  }
+  document.getElementById('v1-text-out').textContent = out;
+}
+
+// Mouse drag & click interactions for V1 clean canvas
+(function initV1Events() {
+  const canvas = document.getElementById('v1-clean');
+  const getPos = e => {
+    const r = canvas.getBoundingClientRect();
+    return [e.clientX - r.left, e.clientY - r.top];
+  };
+  const hitNode = (x, y) => {
+    for (let i = v1State.nodes.length - 1; i >= 0; i--) {
+      const n = v1State.nodes[i];
+      if (x >= n.x - 6 && x <= n.x + n.w + 6 && y >= n.y - 6 && y <= n.y + n.h + 6) return n;
+    }
+    return null;
+  };
+  canvas.addEventListener('pointerdown', e => {
+    const [x, y] = getPos(e);
+    const n = hitNode(x, y);
+    if (!n) return;
+    if (v1State.connectMode) {
+      if (!v1State.connectSource) {
+        v1State.connectSource = n.id;
+      } else if (v1State.connectSource !== n.id) {
+        if (!v1State.edges.some(ed => ed.from === v1State.connectSource && ed.to === n.id)) {
+          v1State.edges.push({ from: v1State.connectSource, to: n.id });
+        }
+        v1State.connectSource = null;
+        v1ToggleConnect();
+        v1RenderAll();
+      }
+      v1RenderClean();
+      return;
+    }
+    v1State.selectedId = n.id;
+    v1State.dragging = n;
+    v1State.dragOffset = [x - n.x, y - n.y];
+    document.getElementById('v1-label-input').value = n.label;
+    canvas.setPointerCapture(e.pointerId);
+    v1RenderClean();
+  });
+  canvas.addEventListener('pointermove', e => {
+    if (!v1State.dragging) return;
+    const [x, y] = getPos(e);
+    const r = canvas.getBoundingClientRect();
+    v1State.dragging.x = Math.max(10, Math.min(r.width - v1State.dragging.w - 10, x - v1State.dragOffset[0]));
+    v1State.dragging.y = Math.max(10, Math.min(r.height - v1State.dragging.h - 10, y - v1State.dragOffset[1]));
+    v1State.replayProgress = Infinity;
+    v1RenderAll();
+  });
+  canvas.addEventListener('pointerup', () => { v1State.dragging = null; });
+
+  document.getElementById('v1-label-input').addEventListener('input', e => {
+    const sel = v1State.nodes.find(n => n.id === v1State.selectedId);
+    if (!sel) return;
+    sel.label = e.target.value;
+    v1RenderAll();
+  });
+})();
+
+// ============================================================================
+// CLIENT-SIDE 32-POINT STROKE CLASSIFIER (Simulates ml5.neuralNetwork() ink)
+// ============================================================================
+function resampleStroke(pts, n = 32) {
+  if (!pts || pts.length < 2) return Array.from({ length: n }, () => [0, 0]);
+  let total = 0;
+  for (let i = 1; i < pts.length; i++) total += Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]);
+  if (total < 1e-3) return Array.from({ length: n }, () => [0, 0]);
+
+  const step = total / (n - 1);
+  const out = [pts[0].slice()];
+  let D = 0;
+  const work = pts.map(p => p.slice());
+  for (let i = 1; i < work.length; i++) {
+    const d = Math.hypot(work[i][0] - work[i - 1][0], work[i][1] - work[i - 1][1]);
+    if (D + d >= step) {
+      const qx = work[i - 1][0] + ((step - D) / d) * (work[i][0] - work[i - 1][0]);
+      const qy = work[i - 1][1] + ((step - D) / d) * (work[i][1] - work[i - 1][1]);
+      const q = [qx, qy];
+      out.push(q);
+      work.splice(i, 0, q);
+      D = 0;
+    } else {
+      D += d;
+    }
+  }
+  while (out.length < n) out.push(work[work.length - 1].slice());
+  // Normalize to [-1, 1] preserving aspect
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+  for (const [x, y] of out) {
+    if (x < minX) minX = x; if (x > maxX) maxX = x;
+    if (y < minY) minY = y; if (y > maxY) maxY = y;
+  }
+  const cx = (minX + maxX) / 2, cy = (minY + maxY) / 2;
+  const scale = Math.max(maxX - minX, maxY - minY, 1) / 2;
+  return out.slice(0, n).map(([x, y]) => [(x - cx) / scale, (y - cy) / scale]);
+}
+
+function strokeDistance(a, b) {
+  let d1 = 0, d2 = 0;
+  for (let i = 0; i < a.length; i++) {
+    d1 += Math.hypot(a[i][0] - b[i][0], a[i][1] - b[i][1]);
+    const j = a.length - 1 - i;
+    d2 += Math.hypot(a[i][0] - b[j][0], a[i][1] - b[j][1]);
+  }
+  return Math.min(d1, d2) / a.length;
+}
+
+function makeTemplate(type) {
+  const pts = [];
+  if (type === 'emphasize') {
+    for (let i = 0; i <= 32; i++) {
+      const a = (i / 32) * Math.PI * 2;
+      pts.push([Math.cos(a) * 40, Math.sin(a) * 32]);
+    }
+  } else if (type === 'extract') {
+    // Funnel / V shape
+    pts.push([-36, -28], [0, 34], [36, -28]);
+  } else if (type === 'summarize') {
+    // Right bracket }
+    pts.push([-14, -44], [6, -38], [6, -8], [22, 0], [6, 8], [6, 38], [-14, 44]);
+  } else if (type === 'compare') {
+    // Horizontal double-arrow / line
+    pts.push([-55, 0], [55, 0]);
+  } else if (type === 'itemize') {
+    // Zigzag / stacked list gesture
+    pts.push([-32, -26], [32, -26], [-32, 0], [32, 0], [-32, 26], [32, 26]);
+  }
+  return resampleStroke(pts, 32);
+}
+
+const GESTURE_TEMPLATES = [
+  { label: 'emphasize', glyph: '◎', vec: makeTemplate('emphasize') },
+  { label: 'extract',   glyph: '▽', vec: makeTemplate('extract') },
+  { label: 'summarize', glyph: '}', vec: makeTemplate('summarize') },
+  { label: 'compare',   glyph: '↔', vec: makeTemplate('compare') },
+  { label: 'itemize',   glyph: '≡', vec: makeTemplate('itemize') }
+];
+
+let customTemplates = [];
+
+function classifyStroke(rawPts) {
+  const vec = resampleStroke(rawPts, 32);
+  const all = [...GESTURE_TEMPLATES, ...customTemplates];
+  // Compute softmax scores from inverse distance
+  const scores = {};
+  for (const t of all) {
+    const d = strokeDistance(vec, t.vec);
+    const sim = Math.exp(-d * 3.1);
+    scores[t.label] = Math.max(scores[t.label] || 0, sim);
+  }
+  const sum = Object.values(scores).reduce((a, b) => a + b, 0) || 1;
+  return Object.entries(scores)
+    .map(([label, val]) => ({ label, prob: val / sum }))
+    .sort((a, b) => b.prob - a.prob);
+}
+
+// ============================================================================
+// VARIATION 2: UNIFIED LIVING NAPKIN
+// ============================================================================
+let v2State = {
+  mode: 'draw',
+  recording: false,
+  recordSamples: [],
+  nodes: [
+    { id: 'a', x: 55,  y: 55,  w: 225, h: 86, title: 'LOCAL BROWSER INK', body: 'Fast 60fps stroke capture, zero GPU server cost, private offline sketching.' },
+    { id: 'b', x: 430, y: 55,  w: 235, h: 86, title: 'CLOUD DIFFUSION',   body: 'High raster realism, but slow latency, broken text, and non-editable pixels.' },
+    { id: 'c', x: 225, y: 245, w: 265, h: 96, title: 'HYBRID PIPELINE',   body: 'Clean primitives morph to vector ink; ml5 parses symbols while thin API runs text ops.' }
+  ],
+  edges: [{ from: 'a', to: 'c' }, { from: 'b', to: 'c' }],
+  gestures: [], // { pts, op, prob, targetIds, color }
+  drawingPts: null,
+  dragging: null,
+  dragOffset: [0, 0]
+};
+
+function v2SetMode(m) {
+  v2State.mode = m;
+  const dBtn = document.getElementById('v2-mode-draw');
+  const mBtn = document.getElementById('v2-mode-move');
+  dBtn.className = m === 'draw'
+    ? 'pill-btn px-2.5 py-1 rounded-md border border-[var(--primary)] bg-[var(--primary)] text-[var(--primary-foreground)] font-medium cursor-pointer'
+    : 'pill-btn px-2.5 py-1 rounded-md border border-[var(--border)] bg-[var(--background)] cursor-pointer';
+  mBtn.className = m === 'move'
+    ? 'pill-btn px-2.5 py-1 rounded-md border border-[var(--primary)] bg-[var(--primary)] text-[var(--primary-foreground)] font-medium cursor-pointer'
+    : 'pill-btn px-2.5 py-1 rounded-md border border-[var(--border)] bg-[var(--background)] cursor-pointer';
+  document.getElementById('v2-canvas').style.cursor = m === 'draw' ? 'crosshair' : 'grab';
+}
+
+function v2ToggleRecord() {
+  v2State.recording = !v2State.recording;
+  const btn = document.getElementById('v2-record-btn');
+  if (v2State.recording) {
+    v2SetMode('draw');
+    btn.className = 'pill-btn flex-1 px-2.5 py-1 rounded border border-[var(--primary)] bg-[var(--primary)] text-[var(--primary-foreground)] cursor-pointer';
+    btn.textContent = '● Drawing sample...';
+    document.getElementById('v2-custom-msg').textContent = 'Sketch your custom symbol anywhere on the napkin!';
+  } else {
+    btn.className = 'pill-btn flex-1 px-2.5 py-1 rounded border border-[var(--border)] bg-[var(--background)] hover:border-[var(--primary)] cursor-pointer';
+    btn.textContent = '● Record Stroke on Canvas';
+  }
+}
+
+function v2FindTargets(pts, op) {
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+  for (const [x, y] of pts) {
+    if (x < minX) minX = x; if (x > maxX) maxX = x;
+    if (y < minY) minY = y; if (y > maxY) maxY = y;
+  }
+  const cx = (minX + maxX) / 2, cy = (minY + maxY) / 2;
+  if (op === 'compare') {
+    const sorted = [...v2State.nodes].sort((a, b) =>
+      Math.hypot(a.x + a.w / 2 - cx, a.y + a.h / 2 - cy) - Math.hypot(b.x + b.w / 2 - cx, b.y + b.h / 2 - cy)
+    );
+    return sorted.slice(0, 2).map(n => n.id);
+  }
+  if (op === 'summarize') {
+    const overlapping = v2State.nodes.filter(n => !(n.y + n.h < minY - 25 || n.y > maxY + 25));
+    return overlapping.length >= 2 ? overlapping.map(n => n.id) : v2State.nodes.map(n => n.id);
+  }
+  let best = v2State.nodes[0], bestD = Infinity;
+  for (const n of v2State.nodes) {
+    const d = Math.hypot(n.x + n.w / 2 - cx, n.y + n.h / 2 - cy);
+    if (d < bestD) { bestD = d; best = n; }
+  }
+  return [best.id];
+}
+
+function v2ProduceText(op, targetIds) {
+  const targets = targetIds.map(id => v2State.nodes.find(n => n.id === id)).filter(Boolean);
+  const names = targets.map(t => t.title).join(' + ');
+  if (op === 'emphasize') {
+    return `★ CORE THESIS (${targets[0].title}):\n"${targets[0].body}"\n→ Elevated as primary design constraint.`;
+  }
+  if (op === 'extract') {
+    return `▽ EXTRACTED KEY ATTRIBUTES (${targets[0].title}):\n• Speed/Format: ${targets[0].body.split(',')[0]}\n• Core Trade-off: ${targets[0].body.split(',').slice(1).join(',').trim()}`;
+  }
+  if (op === 'summarize') {
+    return `} SYNTHESIS (${targets.length} nodes):\nCombine browser-native vector ink with thin API semantics to get instant tactile sketching without GPU infrastructure.`;
+  }
+  if (op === 'compare') {
+    const [a, b] = targets;
+    return `↔ COMPARISON (${a.title} vs ${b ? b.title : 'HYBRID'}):\n• ${a.title}: ${a.body}\n• ${b ? b.title : 'Other'}: ${b ? b.body : 'N/A'}\nVerdict: Vector ink wins on editability & latency.`;
+  }
+  if (op === 'itemize') {
+    const parts = targets[0].body.replace(/\.$/, '').split(/,|;/);
+    return `≡ ACTIONABLE BREAKDOWN (${targets[0].title}):\n` + parts.map((p, i) => `${i + 1}. ${p.trim()}`).join('\n');
+  }
+  return `✦ CUSTOM OP "${op.toUpperCase()}" on [${names}]:\nEvaluated "${targets[0].title}" through user-trained browser symbol — ready to wire to custom LLM prompt!`;
+}
+
+function v2UpdateProbUI(probs, op, targetIds) {
+  const wrap = document.getElementById('v2-probs');
+  wrap.innerHTML = probs.slice(0, 5).map((p, idx) => {
+    const pct = Math.round(p.prob * 100);
+    return `
+      <div class="space-y-0.5">
+        <div class="flex justify-between font-mono text-[11px]">
+          <span class="${idx === 0 ? 'font-semibold text-[var(--foreground)]' : 'text-[var(--muted-foreground)]'}">${p.label}</span>
+          <span class="tabular-nums text-[var(--muted-foreground)]">${pct}%</span>
+        </div>
+        <div class="h-1.5 rounded-full bg-[var(--background)] overflow-hidden border border-[var(--border)]">
+          <div style="width:${pct}%; background:${idx === 0 ? 'var(--primary)' : 'var(--muted-foreground)'}; opacity:${idx === 0 ? 1 : 0.4}" class="h-full rounded-full transition-all duration-200"></div>
+        </div>
+      </div>`;
+  }).join('');
+
+  const targetNames = targetIds.map(id => v2State.nodes.find(n => n.id === id)?.title).join(', ');
+  document.getElementById('v2-binding').innerHTML = `Bound <strong class="text-[var(--foreground)]">${op}</strong> ➔ <span class="font-mono text-[var(--foreground)]">${targetNames}</span>`;
+  document.getElementById('v2-op-badge').textContent = op;
+  const outEl = document.getElementById('v2-output');
+  outEl.classList.remove('text-[var(--muted-foreground)]');
+  outEl.textContent = v2ProduceText(op, targetIds);
+}
+
+function v2CommitStroke(pts) {
+  if (pts.length < 4) return;
+  if (v2State.recording) {
+    const name = (document.getElementById('v2-custom-name').value || 'custom').trim().toLowerCase();
+    customTemplates.push({ label: name, glyph: '✦', vec: resampleStroke(pts, 32) });
+    const count = customTemplates.filter(t => t.label === name).length;
+    document.getElementById('v2-custom-count').textContent = `${count} / 3 samples`;
+    document.getElementById('v2-custom-msg').textContent = count >= 3
+      ? `Trained "${name}"! Toggle off recording and draw it on any card.`
+      : `Saved sample ${count} for "${name}" — draw ${3 - count} more.`;
+    if (count >= 3) v2ToggleRecord();
+    v2Render();
+    return;
+  }
+
+  const probs = classifyStroke(pts);
+  const top = probs[0];
+  const targetIds = v2FindTargets(pts, top.label);
+  const c = getThemeColors();
+  const colorMap = { emphasize: c.redInk, extract: c.blueInk, summarize: c.greenInk, compare: c.primary, itemize: c.warning };
+  v2State.gestures.push({
+    pts,
+    op: top.label,
+    prob: top.prob,
+    targetIds,
+    color: colorMap[top.label] || c.redInk
+  });
+  v2UpdateProbUI(probs, top.label, targetIds);
+  v2Render();
+}
+
+function v2DemoGesture(op) {
+  let pts = [];
+  const a = v2State.nodes[0], b = v2State.nodes[1], h = v2State.nodes[2];
+  if (op === 'emphasize') {
+    const cx = h.x + h.w / 2, cy = h.y + h.h / 2;
+    for (let i = 0; i <= 34; i++) {
+      const ang = (i / 34) * Math.PI * 2.1;
+      pts.push([cx + Math.cos(ang) * (h.w * 0.56), cy + Math.sin(ang) * (h.h * 0.64)]);
+    }
+  } else if (op === 'extract') {
+    const cx = a.x + a.w / 2, cy = a.y + a.h + 26;
+    pts = [[cx - 32, cy - 18], [cx, cy + 28], [cx + 32, cy - 18]];
+  } else if (op === 'summarize') {
+    const x = 685;
+    pts = [[x - 12, 55], [x + 4, 65], [x + 4, 175], [x + 22, 195], [x + 4, 215], [x + 4, 325], [x - 12, 335]];
+  } else if (op === 'compare') {
+    pts = [[a.x + a.w + 8, a.y + 42], [b.x - 8, b.y + 42]];
+  } else if (op === 'itemize') {
+    const x = b.x + b.w / 2, y = b.y + b.h + 36;
+    pts = [[x - 28, y - 20], [x + 28, y - 20], [x - 28, y], [x + 28, y], [x - 28, y + 20], [x + 28, y + 20]];
+  }
+  v2CommitStroke(pts);
+}
+
+function v2ClearGestures() {
+  v2State.gestures = [];
+  document.getElementById('v2-probs').innerHTML = '';
+  document.getElementById('v2-binding').textContent = 'Canvas cleared. Draw a symbol or click an Auto-Demo button.';
+  document.getElementById('v2-op-badge').textContent = 'idle';
+  document.getElementById('v2-output').textContent = 'Waiting for a semantic gesture on the napkin...';
+  document.getElementById('v2-output').classList.add('text-[var(--muted-foreground)]');
+  v2Render();
+}
+
+function v2Render() {
+  const canvas = document.getElementById('v2-canvas');
+  const info = setupHiDPI(canvas);
+  if (!info) return;
+  const { ctx, w, h } = info;
+  const c = getThemeColors();
+  const morph = parseInt(document.getElementById('v2-morph').value, 10) / 100;
+  document.getElementById('v2-morph-val').textContent = `${Math.round(morph * 100)}%`;
+
+  ctx.clearRect(0, 0, w, h);
+  const rng = mulberry32(9911);
+  const inkOpts = { wobble: morph * 0.72, overshoot: morph * 0.65, tilt: morph * 0.55 };
+
+  // Draw edges
+  for (const e of v2State.edges) {
+    const a = v2State.nodes.find(n => n.id === e.from);
+    const b = v2State.nodes.find(n => n.id === e.to);
+    const [x1, y1] = anchorPoint(a, b);
+    const [x2, y2] = anchorPoint(b, a);
+    if (morph < 0.15) {
+      ctx.strokeStyle = c.muted;
+      ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+    } else {
+      const s = sketchArrowStrokes(x1, y1, x2, y2, inkOpts, rng);
+      drawStrokeList(ctx, s, c.inkSubtle);
+    }
+  }
+
+  // Draw nodes (morphing cleanly from sharp card to napkin vector box)
+  const latest = v2State.gestures[v2State.gestures.length - 1];
+  for (const n of v2State.nodes) {
+    const isBound = latest && latest.targetIds.includes(n.id);
+    if (isBound) {
+      ctx.save();
+      ctx.fillStyle = latest.color;
+      ctx.globalAlpha = 0.08;
+      ctx.beginPath();
+      ctx.roundRect(n.x - 5, n.y - 5, n.w + 10, n.h + 10, 10);
+      ctx.fill();
+      ctx.restore();
+    }
+
+    if (morph < 0.12) {
+      ctx.fillStyle = c.card;
+      ctx.strokeStyle = isBound ? latest.color : c.border;
+      ctx.lineWidth = isBound ? 2 : 1.4;
+      ctx.beginPath();
+      ctx.roundRect(n.x, n.y, n.w, n.h, 8);
+      ctx.fill(); ctx.stroke();
+    } else {
+      ctx.save();
+      ctx.fillStyle = c.paperFill;
+      ctx.fillRect(n.x, n.y, n.w, n.h);
+      ctx.restore();
+      const boxStrokes = sketchRectStrokes(n, inkOpts, rng);
+      drawStrokeList(ctx, boxStrokes, isBound ? latest.color : c.ink);
+    }
+
+    // Title (morphs to single-stroke lettering at high napkin %)
+    if (morph > 0.65) {
+      const titleStrokes = sketchTextStrokes(n.title, n.x + n.w / 2, n.y + 20, n.w - 10, { wobble: morph * 0.45, tilt: morph * 0.4 }, rng);
+      drawStrokeList(ctx, titleStrokes, c.ink);
+    } else {
+      ctx.fillStyle = c.fg;
+      ctx.font = '600 12px ui-monospace, SFMono-Regular, Menlo, monospace';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(n.title, n.x + n.w / 2, n.y + 21);
+    }
+
+    // Body text wrapped cleanly inside node
+    ctx.fillStyle = c.muted;
+    ctx.font = `${morph > 0.5 ? 'italic ' : ''}11.5px system-ui, -apple-system, sans-serif`;
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'top';
+    wrapText(ctx, n.body, n.x + 12, n.y + 37, n.w - 24, 15);
+  }
+
+  // Draw committed semantic gestures + binding tethers
+  for (const g of v2State.gestures) {
+    // Binding tether lines
+    const mid = g.pts[Math.floor(g.pts.length / 2)];
+    ctx.save();
+    ctx.strokeStyle = g.color;
+    ctx.setLineDash([4, 4]);
+    ctx.globalAlpha = 0.55;
+    ctx.lineWidth = 1.2;
+    for (const tid of g.targetIds) {
+      const tn = v2State.nodes.find(n => n.id === tid);
+      if (!tn) continue;
+      ctx.beginPath();
+      ctx.moveTo(mid[0], mid[1]);
+      ctx.lineTo(tn.x + tn.w / 2, tn.y + tn.h / 2);
+      ctx.stroke();
+    }
+    ctx.restore();
+
+    // Gesture stroke
+    drawStrokeList(ctx, [{ pts: g.pts, width: 2.8, alpha: 0.92, color: g.color }], g.color);
+
+    // Floating recognized tag
+    const tagX = mid[0] + 10, tagY = mid[1] - 14;
+    ctx.save();
+    ctx.fillStyle = c.card;
+    ctx.strokeStyle = g.color;
+    ctx.lineWidth = 1.2;
+    const label = `${g.op} ${Math.round(g.prob * 100)}%`;
+    ctx.font = '600 11px ui-monospace, monospace';
+    const tw = ctx.measureText(label).width + 12;
+    ctx.beginPath();
+    ctx.roundRect(tagX, tagY - 10, tw, 20, 10);
+    ctx.fill(); ctx.stroke();
+    ctx.fillStyle = g.color;
+    ctx.textBaseline = 'middle';
+    ctx.fillText(label, tagX + 6, tagY);
+    ctx.restore();
+  }
+
+  // Active live pen stroke
+  if (v2State.drawingPts && v2State.drawingPts.length > 1) {
+    drawStrokeList(ctx, [{ pts: v2State.drawingPts, width: 2.8, alpha: 0.95, color: c.redInk }], c.redInk);
+  }
+}
+
+function wrapText(ctx, text, x, y, maxW, lineH) {
+  const words = text.split(' ');
+  let line = '', curY = y;
+  for (const word of words) {
+    const test = line ? line + ' ' + word : word;
+    if (ctx.measureText(test).width > maxW && line) {
+      ctx.fillText(line, x, curY);
+      line = word;
+      curY += lineH;
+    } else {
+      line = test;
+    }
+  }
+  if (line) ctx.fillText(line, x, curY);
+}
+
+(function initV2Events() {
+  const canvas = document.getElementById('v2-canvas');
+  const getPos = e => {
+    const r = canvas.getBoundingClientRect();
+    return [e.clientX - r.left, e.clientY - r.top];
+  };
+  canvas.addEventListener('pointerdown', e => {
+    const [x, y] = getPos(e);
+    canvas.setPointerCapture(e.pointerId);
+    if (v2State.mode === 'move') {
+      for (let i = v2State.nodes.length - 1; i >= 0; i--) {
+        const n = v2State.nodes[i];
+        if (x >= n.x && x <= n.x + n.w && y >= n.y && y <= n.y + n.h) {
+          v2State.dragging = n;
+          v2State.dragOffset = [x - n.x, y - n.y];
+          return;
+        }
+      }
+      return;
+    }
+    v2State.drawingPts = [[x, y]];
+    document.getElementById('v2-hint').textContent = 'Capturing stroke...';
+  });
+  canvas.addEventListener('pointermove', e => {
+    const [x, y] = getPos(e);
+    if (v2State.dragging) {
+      v2State.dragging.x = x - v2State.dragOffset[0];
+      v2State.dragging.y = y - v2State.dragOffset[1];
+      v2Render();
+      return;
+    }
+    if (!v2State.drawingPts) return;
+    v2State.drawingPts.push([x, y]);
+    v2Render();
+  });
+  canvas.addEventListener('pointerup', () => {
+    if (v2State.dragging) { v2State.dragging = null; return; }
+    if (v2State.drawingPts) {
+      const pts = v2State.drawingPts;
+      v2State.drawingPts = null;
+      document.getElementById('v2-hint').textContent = 'Pen ready';
+      v2CommitStroke(pts);
+    }
+  });
+})();
+
+// ============================================================================
+// VARIATION 3: DOCUMENT-FIRST MARGIN SKETCHPAD
+// ============================================================================
+const V3_DOCS = {
+  rfc: [
+    { id: 0, tag: '01 · Architecture', text: 'Run stroke synthesis and symbol classification inside the browser via ml5.js and TensorFlow.js so every pen gesture gets instant 60fps feedback without uploading canvas frames.', diagram: ['BROWSER', 'ML5.JS', '60FPS INK'] },
+    { id: 1, tag: '02 · Data Strategy', text: 'Combine FC_A online InkML flowcharts with hdFlowmind bounding-box geometry residuals to train compact sub-5MB vector models directly on a laptop CPU.', diagram: ['FC_A INKML', 'HDFM XML', 'TINY GRU'] },
+    { id: 2, tag: '03 · Semantic Layer', text: 'Keep the server thin: send only a structured JSON operator graph and selected text span to the LLM API for summarizing, extracting, or comparing ideas.', diagram: ['OP GRAPH', 'THIN API', 'NEW TEXT'] }
+  ],
+  memo: [
+    { id: 0, tag: '01 · Core Problem', text: 'Digital diagramming tools force rigid boxes too early, while pure image diffusion destroys text legibility and breaks graph topology when ideas evolve.', diagram: ['RIGID UI', 'DIFFUSION', 'GAP'] },
+    { id: 1, tag: '02 · Product Wedge', text: 'Let users drop quick computerized boxes or write prose, then morph into tactile napkin ink where drawn symbols actively reshape the underlying text.', diagram: ['CLEAN BOX', 'NAPKIN', 'LIVE OPS'] },
+    { id: 2, tag: '03 · Distribution', text: 'Ship as a zero-install web studio with SVG pen-plotter export and live user-teachable symbols so creative coders adopt and share custom grammars.', diagram: ['WEB APP', 'SVG PLOT', 'CUSTOM OPS'] }
+  ],
+  paper: [
+    { id: 0, tag: '01 · Representation', text: 'Represent every diagram across three aligned layers: a logical graph, normalized spatial bounds, and ordered vector strokes with pen-lift states.', diagram: ['GRAPH', 'LAYOUT', 'STROKES'] },
+    { id: 1, tag: '02 · Reverse Pairing', text: 'Fit canonical clean rectangles and straight connectors onto real handwritten InkML diagrams to create exact supervised pairs without manual redrawing.', diagram: ['INKML', 'FIT CLEAN', 'PAIRS'] },
+    { id: 2, tag: '03 · Evaluation', text: 'Split training and test sets strictly by writer ID and measure topological preservation, gesture F1 accuracy, and subjective human sketch authenticity.', diagram: ['WRITER SPLIT', 'TOPO F1', 'HUMAN EVAL'] }
+  ]
+};
+
+let v3State = {
+  docKey: 'rfc',
+  focusedIdx: 0,
+  blocks: [],
+  marginSketches: {}, // blockIdx -> { type: 'diagram'|'op', op, pts, labels }
+  drawingPts: null
+};
+
+function v3LoadDoc(key) {
+  v3State.docKey = key;
+  v3State.focusedIdx = 0;
+  v3State.blocks = V3_DOCS[key].map(b => ({ ...b, transformed: null, opBadge: null }));
+  v3State.marginSketches = {
+    0: { type: 'diagram', labels: V3_DOCS[key][0].diagram }
+  };
+  document.querySelectorAll('.v3-doc-btn').forEach(b => {
+    const active = b.dataset.doc === key;
+    b.className = active
+      ? 'v3-doc-btn px-2.5 py-1 rounded border border-[var(--primary)] bg-[var(--primary)] text-[var(--primary-foreground)] cursor-pointer'
+      : 'v3-doc-btn px-2.5 py-1 rounded border border-[var(--border)] bg-[var(--background)] hover:border-[var(--primary)] cursor-pointer';
+  });
+  v3RenderDocs();
+  v3RenderMargin();
+}
+
+function v3RenderDocs() {
+  const wrap = document.getElementById('v3-doc-blocks');
+  wrap.innerHTML = v3State.blocks.map((b, i) => {
+    const isFocus = i === v3State.focusedIdx;
+    return `
+      <div onclick="v3SelectBlock(${i})" class="p-3 rounded-xl border transition-colors cursor-pointer ${isFocus ? 'border-[var(--primary)] bg-[var(--background)]' : 'border-[var(--border)] bg-[var(--card)] hover:border-[var(--muted-foreground)]'}">
+        <div class="flex items-center justify-between mb-1.5 text-xs">
+          <span class="font-mono font-medium ${isFocus ? 'text-[var(--primary)]' : 'text-[var(--muted-foreground)]'}">${b.tag}</span>
+          ${b.opBadge ? `<span class="font-mono text-[11px] px-2 py-0.5 rounded-full border border-[var(--primary)] text-[var(--primary)]">${b.opBadge}</span>` : '<span class="text-[11px] text-[var(--muted-foreground)]">click to focus</span>'}
+        </div>
+        <p class="text-xs leading-relaxed text-[var(--foreground)] ${b.transformed ? 'line-through opacity-45 mb-2' : ''}">${b.text}</p>
+        ${b.transformed ? `<div class="text-xs leading-relaxed p-2 rounded-lg border border-[var(--border)] bg-[var(--card)] whitespace-pre-line font-medium text-[var(--foreground)]">${b.transformed}</div>` : ''}
+      </div>`;
+  }).join('');
+}
+
+function v3SelectBlock(i) {
+  v3State.focusedIdx = i;
+  v3RenderDocs();
+  v3RenderMargin();
+}
+
+function v3SketchSelectedToMargin() {
+  const b = v3State.blocks[v3State.focusedIdx];
+  v3State.marginSketches[v3State.focusedIdx] = { type: 'diagram', labels: b.diagram };
+  document.getElementById('v3-margin-status').textContent = `Plotted block 0${v3State.focusedIdx + 1} ➔ napkin`;
+  v3RenderMargin();
+}
+
+function v3ApplyMarginOp(op, blockIdx = v3State.focusedIdx, customPts = null) {
+  const b = v3State.blocks[blockIdx];
+  if (!b) return;
+  const words = b.text.split(' ');
+  let transformed = '';
+  if (op === 'summarize') {
+    transformed = `} Summary: ${words.slice(0, 12).join(' ')} — optimized for browser-first speed.`;
+  } else if (op === 'itemize') {
+    const chunks = b.text.replace(/\.$/, '').split(/,|;|so |and /i).filter(s => s.trim().length > 6);
+    transformed = chunks.slice(0, 3).map((c, idx) => `${idx + 1}. ${c.trim()}`).join('\n');
+  } else if (op === 'extract') {
+    transformed = `▽ Key Concepts: ${b.diagram.join('  ·  ')}`;
+  } else if (op === 'emphasize') {
+    transformed = `★ HIGHLIGHTED CLAIM:\n"${b.text}"`;
+  } else if (op === 'compare') {
+    transformed = `↔ Cross-Block Synthesis:\n` + v3State.blocks.map(x => `• ${x.tag.split('·')[1].trim()}: ${x.diagram.join(' → ')}`).join('\n');
+  }
+  b.transformed = transformed;
+  b.opBadge = op;
+  v3State.marginSketches[blockIdx] = { type: 'op', op, labels: b.diagram, pts: customPts };
+  document.getElementById('v3-margin-status').textContent = `Applied "${op}" to block 0${blockIdx + 1}`;
+  v3RenderDocs();
+  v3RenderMargin();
+}
+
+function v3ResetTransforms() {
+  v3LoadDoc(v3State.docKey);
+}
+
+function v3RenderMargin() {
+  const canvas = document.getElementById('v3-canvas');
+  const info = setupHiDPI(canvas);
+  if (!info) return;
+  const { ctx, w, h } = info;
+  const c = getThemeColors();
+  ctx.clearRect(0, 0, w, h);
+
+  const rowH = h / 3;
+  const rng = mulberry32(31415);
+
+  // Horizontal row dividers aligned to the 3 document blocks
+  for (let i = 0; i < 3; i++) {
+    const y0 = i * rowH;
+    if (i === v3State.focusedIdx) {
+      ctx.save();
+      ctx.fillStyle = c.primary;
+      ctx.globalAlpha = 0.05;
+      ctx.fillRect(0, y0, w, rowH);
+      ctx.restore();
+    }
+    if (i > 0) {
+      ctx.save();
+      ctx.strokeStyle = c.border;
+      ctx.setLineDash([4, 6]);
+      ctx.beginPath(); ctx.moveTo(12, y0); ctx.lineTo(w - 12, y0); ctx.stroke();
+      ctx.restore();
+    }
+
+    ctx.fillStyle = c.muted;
+    ctx.font = '500 11px ui-monospace, monospace';
+    ctx.fillText(`0${i + 1}`, 12, y0 + 18);
+
+    const item = v3State.marginSketches[i];
+    if (!item) {
+      ctx.fillStyle = c.muted;
+      ctx.globalAlpha = 0.55;
+      ctx.font = 'italic 11.5px system-ui, sans-serif';
+      ctx.fillText('Draw a gesture here (}, ▽, ◎, ≡, ↔) or click "Text to Margin Sketch"...', 42, y0 + rowH / 2 + 4);
+      ctx.globalAlpha = 1;
+      continue;
+    }
+
+    // Render mini horizontal napkin flow for this block
+    const labels = item.labels || ['A', 'B', 'C'];
+    const boxW = Math.min(120, (w - 110) / 3);
+    const boxH = 44;
+    const startX = 46;
+    const cy = y0 + rowH / 2;
+    const opts = { wobble: 0.55, overshoot: 0.45, tilt: 0.45 };
+
+    labels.forEach((lbl, idx) => {
+      const bx = startX + idx * (boxW + 28);
+      const by = cy - boxH / 2;
+      const node = { x: bx, y: by, w: boxW, h: boxH };
+      const s = idx === 1 ? sketchOvalStrokes(node, opts, rng) : sketchRectStrokes(node, opts, rng);
+      drawStrokeList(ctx, s, item.type === 'op' ? c.blueInk : c.ink);
+      const t = sketchTextStrokes(lbl, bx + boxW / 2, cy, boxW, { wobble: 0.4, tilt: 0.35 }, rng);
+      drawStrokeList(ctx, t, c.ink);
+      if (idx < labels.length - 1) {
+        const arr = sketchArrowStrokes(bx + boxW + 3, cy, bx + boxW + 25, cy, opts, rng);
+        drawStrokeList(ctx, arr, c.inkSubtle);
+      }
+    });
+
+    // If user applied/drew an operator, show the margin ink mark
+    if (item.type === 'op') {
+      if (item.pts && item.pts.length > 1) {
+        drawStrokeList(ctx, [{ pts: item.pts, width: 2.6, alpha: 0.9, color: c.redInk }], c.redInk);
+      } else {
+        // Draw canonical napkin margin symbol on the far right
+        const gx = w - 38, gy = cy;
+        const tpl = makeTemplate(item.op).map(([px, py]) => [gx + px * 22, gy + py * 22]);
+        drawStrokeList(ctx, [{ pts: tpl, width: 2.5, alpha: 0.92, color: c.redInk }], c.redInk);
+      }
+    }
+  }
+
+  if (v3State.drawingPts && v3State.drawingPts.length > 1) {
+    drawStrokeList(ctx, [{ pts: v3State.drawingPts, width: 2.6, alpha: 0.95, color: c.redInk }], c.redInk);
+  }
+}
+
+(function initV3Events() {
+  const canvas = document.getElementById('v3-canvas');
+  const getPos = e => {
+    const r = canvas.getBoundingClientRect();
+    return [e.clientX - r.left, e.clientY - r.top];
+  };
+  canvas.addEventListener('pointerdown', e => {
+    const [x, y] = getPos(e);
+    canvas.setPointerCapture(e.pointerId);
+    v3State.drawingPts = [[x, y]];
+  });
+  canvas.addEventListener('pointermove', e => {
+    if (!v3State.drawingPts) return;
+    v3State.drawingPts.push(getPos(e));
+    v3RenderMargin();
+  });
+  canvas.addEventListener('pointerup', () => {
+    if (!v3State.drawingPts) return;
+    const pts = v3State.drawingPts;
+    v3State.drawingPts = null;
+    if (pts.length >= 4) {
+      const r = canvas.getBoundingClientRect();
+      const avgY = pts.reduce((a, p) => a + p[1], 0) / pts.length;
+      const idx = Math.max(0, Math.min(2, Math.floor((avgY / r.height) * 3)));
+      v3State.focusedIdx = idx;
+      const top = classifyStroke(pts)[0];
+      v3ApplyMarginOp(top.label, idx, pts);
+    }
+    v3RenderMargin();
+  });
+})();
+
+// ============================================================================
+// NAVIGATION + RESIZE + THEME SYNC
+// ============================================================================
+let activeVar = 'v1';
+
+function switchVariation(v) {
+  activeVar = v;
+  ['v1', 'v2', 'v3'].forEach(id => {
+    document.getElementById(`view-${id}`).classList.toggle('hidden', id !== v);
+    const btn = document.getElementById(`tab-${id}`);
+    btn.className = id === v
+      ? 'pill-btn tab-active px-3 py-1.5 rounded-lg border text-xs font-medium cursor-pointer'
+      : 'pill-btn tab-idle px-3 py-1.5 rounded-lg border text-xs font-medium cursor-pointer';
+  });
+  requestAnimationFrame(redrawActive);
+}
+
+function redrawActive() {
+  if (activeVar === 'v1') v1RenderAll();
+  if (activeVar === 'v2') v2Render();
+  if (activeVar === 'v3') v3RenderMargin();
+}
+
+window.addEventListener('resize', redrawActive);
+window.addEventListener('themechange', redrawActive);
+
+// Boot
+v3LoadDoc('rfc');
+requestAnimationFrame(() => {
+  v1RenderAll();
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,654 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Napkin ML — Live Browser Inference (Trained GRU-MDN + Gesture MLP)</title>
+  <style>
+    :root {
+      --bg: #f8f7f4;
+      --card: #ffffff;
+      --border: #e2e0d8;
+      --fg: #1c1917;
+      --muted: #6b675f;
+      --primary: #1d4ed8;
+      --primary-fg: #ffffff;
+      --ink: #1e293b;
+      --red: #c2410c;
+      --green: #15803d;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #121211;
+        --card: #1b1b19;
+        --border: #2e2d2a;
+        --fg: #f4f3ef;
+        --muted: #a19e95;
+        --primary: #3b82f6;
+        --primary-fg: #ffffff;
+        --ink: #e2e8f0;
+        --red: #fb923c;
+        --green: #4ade80;
+      }
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--fg);
+      font-size: 13px;
+    }
+    .wrap { max-width: 1320px; margin: 0 auto; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+    header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; padding-bottom: 12px; border-bottom: 1px solid var(--border); }
+    h1 { margin: 0; font-size: 17px; letter-spacing: -0.01em; }
+    .sub { color: var(--muted); font-size: 12px; margin-top: 2px; }
+    .row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+    .card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+    .card-hd { padding: 8px 12px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; font-size: 12px; font-weight: 600; }
+    .btn {
+      padding: 6px 10px; border-radius: 7px; border: 1px solid var(--border);
+      background: var(--bg); color: var(--fg); font-size: 12px; cursor: pointer;
+    }
+    .btn:hover { border-color: var(--primary); }
+    .btn-primary { background: var(--primary); color: var(--primary-fg); border-color: var(--primary); font-weight: 600; }
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .grid-main { display: grid; grid-template-columns: 2fr 1fr; gap: 12px; }
+    @media (max-width: 900px) { .grid-2, .grid-main { grid-template-columns: 1fr; } }
+    canvas { display: block; width: 100%; height: 400px; touch-action: none; }
+    .napkin { background-image: radial-gradient(color-mix(in srgb, var(--fg) 7%, transparent) 1px, transparent 1px); background-size: 18px 18px; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; }
+    .bar-bg { height: 6px; border-radius: 99px; background: var(--bg); border: 1px solid var(--border); overflow: hidden; }
+    .bar-fg { height: 100%; background: var(--primary); transition: width 0.15s ease; }
+    .hidden { display: none; }
+    .pad { padding: 12px; }
+    input[type="text"] {
+      padding: 5px 8px; border-radius: 6px; border: 1px solid var(--border);
+      background: var(--bg); color: var(--fg); font-size: 12px;
+    }
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>Napkin ML — Real Trained Models in Browser</h1>
+      <div class="sub" id="model-banner">Loading trained weights from /exports/...</div>
+    </div>
+    <div class="row">
+      <button id="btn-tab1" class="btn btn-primary" onclick="setTab(1)">1. Trained Sketch-GRU Renderer (Idea 1)</button>
+      <button id="btn-tab2" class="btn" onclick="setTab(2)">2. Trained Semantic Gesture MLP (Idea 2)</button>
+    </div>
+  </header>
+
+  <!-- TAB 1: IDEA 1 NEURAL NAPKIN -->
+  <section id="tab1" style="display:flex; flex-direction:column; gap:10px;">
+    <div class="card pad row" style="justify-content:space-between;">
+      <div class="row">
+        <button class="btn" onclick="addNode('square')">+ Box</button>
+        <button class="btn" onclick="addNode('diamond')">+ Decision</button>
+        <button class="btn" onclick="addNode('circle')">+ Concept</button>
+        <button class="btn" onclick="addNode('triangle')">+ Funnel</button>
+        <button id="link-btn" class="btn" onclick="toggleLink()">↗ Link</button>
+        <input id="label-edit" type="text" placeholder="Rename selected..." style="width:140px;" />
+      </div>
+      <div class="row">
+        <label class="row mono">
+          Temp τ: <strong id="temp-val">0.30</strong>
+          <input id="temp-slider" type="range" min="0.10" max="0.80" step="0.05" value="0.30" oninput="onTempChange()" />
+        </label>
+        <button class="btn btn-primary" onclick="resampleAllNeural()">🎲 Resample Neural Ink</button>
+        <button class="btn" onclick="replayStrokes()">▶ Plotter Replay</button>
+        <button class="btn" onclick="exportSVG()">Export SVG</button>
+      </div>
+    </div>
+
+    <div class="grid-2">
+      <div class="card">
+        <div class="card-hd">
+          <span>Computerized Canvas (drag nodes, click to rename)</span>
+          <span class="mono" id="clean-meta">4 nodes</span>
+        </div>
+        <canvas id="c-clean" style="cursor:grab;"></canvas>
+      </div>
+      <div class="card">
+        <div class="card-hd">
+          <span>Neural Napkin Output (real 39k-param GRU-MDN in JS)</span>
+          <span class="mono" id="ink-meta">sampling...</span>
+        </div>
+        <canvas id="c-sketch" class="napkin"></canvas>
+      </div>
+    </div>
+  </section>
+
+  <!-- TAB 2: IDEA 2 TRAINED MLP GESTURE CLASSIFIER -->
+  <section id="tab2" class="hidden" style="display:none; flex-direction:column; gap:10px;">
+    <div class="card pad row" style="justify-content:space-between;">
+      <div class="row">
+        <span style="color:var(--muted);">Draw a freehand symbol directly over the napkin:</span>
+        <span class="mono">◎ circle=emphasize · ▽ tri/V=extract · } bracket=summarize · — line=compare · ≡ zigzag=itemize</span>
+      </div>
+      <button class="btn" onclick="clearV2()">Clear Ink</button>
+    </div>
+
+    <div class="grid-main">
+      <div class="card">
+        <div class="card-hd">
+          <span>Interactive Sketch-to-Text Napkin</span>
+          <span class="mono" id="v2-latency">ready</span>
+        </div>
+        <canvas id="c-v2" class="napkin" style="cursor:crosshair;"></canvas>
+      </div>
+
+      <div style="display:flex; flex-direction:column; gap:10px;">
+        <div class="card pad" style="display:flex; flex-direction:column; gap:8px;">
+          <div class="row" style="justify-content:space-between;">
+            <strong>Trained GestureMLP (68→128→64→5)</strong>
+            <span class="mono" id="mlp-acc">--</span>
+          </div>
+          <div id="mlp-probs" style="display:flex; flex-direction:column; gap:6px;"></div>
+        </div>
+        <div class="card pad" style="flex:1; display:flex; flex-direction:column; gap:6px;">
+          <div class="row" style="justify-content:space-between;">
+            <strong>Semantic Output</strong>
+            <span class="mono" id="v2-op">idle</span>
+          </div>
+          <div id="v2-out" style="white-space:pre-line; line-height:1.5; color:var(--muted);">
+            Draw a symbol over any card to trigger a real neural prediction + semantic text transformation.
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+</div>
+
+<script>
+let GRU = null;
+let MLP = null;
+
+// Single-stroke lettering for node labels
+const GLYPHS = {
+  A:[[[0,6],[2,0],[4,6]],[[0.8,3.8],[3.2,3.8]]],B:[[[0,0],[0,6]],[[0,0],[2.8,0],[3.6,1],[3.6,2.1],[2.8,3],[0,3]],[[2.8,3],[3.8,3.9],[3.8,5.1],[2.8,6],[0,6]]],
+  C:[[[4,1.2],[3,0],[1.2,0],[0,1.4],[0,4.6],[1.2,6],[3,6],[4,4.8]]],D:[[[0,0],[0,6]],[[0,0],[2.4,0],[3.8,1.5],[3.8,4.5],[2.4,6],[0,6]]],
+  E:[[[3.6,0],[0,0],[0,6],[3.6,6]],[[0,3],[2.8,3]]],F:[[[3.6,0],[0,0],[0,6]],[[0,3],[2.6,3]]],
+  G:[[[4,1.2],[2.9,0],[1.2,0],[0,1.4],[0,4.6],[1.2,6],[3,6],[4,4.8],[4,3.2],[2.2,3.2]]],H:[[[0,0],[0,6]],[[3.8,0],[3.8,6]],[[0,3],[3.8,3]]],
+  I:[[[0.8,0],[3.2,0]],[[2,0],[2,6]],[[0.8,6],[3.2,6]]],J:[[[3.4,0],[3.4,4.6],[2.4,6],[1,6],[0,4.8]]],
+  K:[[[0,0],[0,6]],[[3.8,0],[0,3.3]],[[1.4,2.1],[3.8,6]]],L:[[[0,0],[0,6],[3.6,6]]],M:[[[0,6],[0,0],[2,3.4],[4,0],[4,6]]],
+  N:[[[0,6],[0,0],[3.8,6],[3.8,0]]],O:[[[1.3,0],[2.7,0],[4,1.5],[4,4.5],[2.7,6],[1.3,6],[0,4.5],[0,1.5],[1.3,0]]],
+  P:[[[0,6],[0,0],[2.8,0],[3.8,1],[3.8,2.4],[2.8,3.3],[0,3.3]]],Q:[[[1.3,0],[2.7,0],[4,1.5],[4,4.5],[2.7,6],[1.3,6],[0,4.5],[0,1.5],[1.3,0]],[[2.4,4.4],[4.2,6.4]]],
+  R:[[[0,6],[0,0],[2.8,0],[3.8,1],[3.8,2.3],[2.8,3.2],[0,3.2]],[[2.2,3.2],[3.9,6]]],S:[[[3.7,1],[2.8,0],[1,0],[0.1,1],[0.1,2.1],[1,2.8],[2.9,3.2],[3.8,4],[3.8,5.1],[2.8,6],[1,6],[0,5]]],
+  T:[[[0,0],[4,0]],[[2,0],[2,6]]],U:[[[0,0],[0,4.6],[1.2,6],[2.8,6],[4,4.6],[4,0]]],V:[[[0,0],[2,6],[4,0]]],
+  W:[[[0,0],[1,6],[2,2.4],[3,6],[4,0]]],X:[[[0,0],[4,6]],[[4,0],[0,6]]],Y:[[[0,0],[2,3],[4,0]],[[2,3],[2,6]]],
+  Z:[[[0,0],[4,0],[0,6],[4,6]]],'?':[[[0.4,1.3],[1.3,0],[2.9,0],[3.8,1],[3.8,2.1],[2,3.2],[2,4.3]],[[2,5.6],[2,6]]],
+  '0':[[[1.2,0],[2.8,0],[3.8,1.5],[3.8,4.5],[2.8,6],[1.2,6],[0.2,4.5],[0.2,1.5],[1.2,0]]],'1':[[[1,1.3],[2.2,0],[2.2,6]]],
+  '2':[[[0.2,1.4],[1.2,0],[2.9,0],[3.8,1.1],[3.8,2.3],[0.2,6],[3.9,6]]],'3':[[[0.2,1],[1.2,0],[2.8,0],[3.7,1],[3.7,2.1],[2.6,2.9],[1.5,2.9]],[[2.6,2.9],[3.8,3.8],[3.8,5],[2.8,6],[1.1,6],[0.1,5]]],
+  '4':[[[3,6],[3,0],[0,4.1],[4,4.1]]],'5':[[[3.6,0],[0.4,0],[0.2,2.8],[2.6,2.5],[3.8,3.5],[3.8,5],[2.7,6],[1,6],[0.1,5]]],' ':[]
+};
+
+function softmax(arr, temp = 1.0) {
+  const s = arr.map(v => v / Math.max(temp, 1e-4));
+  const m = Math.max(...s);
+  const e = s.map(v => Math.exp(v - m));
+  const sum = e.reduce((a, b) => a + b, 0);
+  return e.map(v => v / sum);
+}
+function randn() {
+  let u = 0, v = 0;
+  while (!u) u = Math.random();
+  while (!v) v = Math.random();
+  return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
+}
+function sampleCat(probs) {
+  let r = Math.random(), acc = 0;
+  for (let i = 0; i < probs.length; i++) { acc += probs[i]; if (r <= acc) return i; }
+  return probs.length - 1;
+}
+
+// Pure-JS PyTorch GRU-MDN Sampler
+function sampleNeuralShape(className, temperature = 0.30) {
+  const clsIdx = GRU.classes.indexOf(className);
+  const H = GRU.hidden_size, M = GRU.num_mixtures, W = GRU.weights;
+  const emb = W.class_emb[clsIdx >= 0 ? clsIdx : 0];
+  let h = new Array(H).fill(0);
+  let x = [0, 0, 0, 1, 0];
+  let cx = 0, cy = 0;
+  const strokes = [];
+  let cur = [];
+  const penTemp = Math.max(temperature, 0.85);
+
+  for (let step = 0; step < GRU.max_seq_len; step++) {
+    const inp = [...x, ...emb];
+    const r = new Array(H), z = new Array(H), hNext = new Array(H);
+    for (let i = 0; i < H; i++) {
+      let ir = W.gru_b_ih[i], hr = W.gru_b_hh[i];
+      let iz = W.gru_b_ih[H + i], hz = W.gru_b_hh[H + i];
+      const w_ir = W.gru_w_ih[i], w_hr = W.gru_w_hh[i];
+      const w_iz = W.gru_w_ih[H + i], w_hz = W.gru_w_hh[H + i];
+      for (let j = 0; j < inp.length; j++) { ir += w_ir[j] * inp[j]; iz += w_iz[j] * inp[j]; }
+      for (let j = 0; j < H; j++) { hr += w_hr[j] * h[j]; hz += w_hz[j] * h[j]; }
+      r[i] = 1 / (1 + Math.exp(-(ir + hr)));
+      z[i] = 1 / (1 + Math.exp(-(iz + hz)));
+    }
+    for (let i = 0; i < H; i++) {
+      let in_v = W.gru_b_ih[2 * H + i], hn_v = W.gru_b_hh[2 * H + i];
+      const w_in = W.gru_w_ih[2 * H + i], w_hn = W.gru_w_hh[2 * H + i];
+      for (let j = 0; j < inp.length; j++) in_v += w_in[j] * inp[j];
+      for (let j = 0; j < H; j++) hn_v += w_hn[j] * h[j];
+      const n = Math.tanh(in_v + r[i] * hn_v);
+      hNext[i] = (1 - z[i]) * n + z[i] * h[i];
+    }
+    h = hNext;
+
+    const p = new Array(W.head_b.length);
+    for (let i = 0; i < p.length; i++) {
+      let sum = W.head_b[i];
+      const row = W.head_w[i];
+      for (let j = 0; j < H; j++) sum += row[j] * h[j];
+      p[i] = sum;
+    }
+    const pi = softmax(p.slice(0, M), temperature);
+    const penProbs = softmax(p.slice(6 * M, 6 * M + 3), penTemp);
+    let penState = sampleCat(penProbs);
+    if (penState === 2 && strokes.length + (cur.length >= 2 ? 1 : 0) >= 1) break;
+    if (penState === 2) penState = 0;
+
+    const k = sampleCat(pi);
+    const mx = p[M + k], my = p[2 * M + k];
+    const sx = (Math.exp(Math.max(-6, Math.min(2, p[3 * M + k]))) + 1e-3) * Math.sqrt(temperature);
+    const sy = (Math.exp(Math.max(-6, Math.min(2, p[4 * M + k]))) + 1e-3) * Math.sqrt(temperature);
+    const rho = Math.tanh(p[5 * M + k]) * 0.95;
+
+    const z1 = randn(), z2 = randn();
+    const dx = mx + sx * z1;
+    const dy = my + sy * (rho * z1 + Math.sqrt(Math.max(1e-4, 1 - rho * rho)) * z2);
+    cx += dx; cy += dy;
+
+    if (penState === 1) {
+      if (cur.length >= 2) strokes.push(cur);
+      cur = [[cx, cy]];
+    } else {
+      if (cur.length === 0) cur = [[cx - dx, cy - dy]];
+      cur.push([cx, cy]);
+    }
+    x = [dx, dy, penState === 0 ? 1 : 0, penState === 1 ? 1 : 0, 0];
+  }
+  if (cur.length >= 2) strokes.push(cur);
+  return strokes;
+}
+
+// Fit sampled normalized neural strokes neatly into target box (x, y, w, h)
+function mapStrokesToBox(strokes, box) {
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+  for (const s of strokes) for (const [x, y] of s) {
+    if (x < minX) minX = x; if (x > maxX) maxX = x;
+    if (y < minY) minY = y; if (y > maxY) maxY = y;
+  }
+  const sw = Math.max(maxX - minX, 0.2), sh = Math.max(maxY - minY, 0.2);
+  return strokes.map(s => s.map(([x, y]) => [
+    box.x + ((x - minX) / sw) * box.w,
+    box.y + ((y - minY) / sh) * box.h
+  ]));
+}
+
+function textStrokes(text, cx, cy, maxW) {
+  const up = (text || '').toUpperCase().slice(0, 18);
+  const sc = Math.min(2.1, Math.max(1.4, (maxW - 18) / Math.max(1, up.length * 5.2)));
+  const cw = 5.1 * sc, tw = up.length * cw - sc;
+  let x = cx - tw / 2, by = cy - 3 * sc;
+  const out = [];
+  for (let i = 0; i < up.length; i++) {
+    const g = GLYPHS[up[i]] || [];
+    const yd = Math.sin(i * 0.8) * 1.1;
+    for (const seg of g) out.push(seg.map(([gx, gy]) => [x + (gx - (6 - gy) * 0.08) * sc, by + gy * sc + yd]));
+    x += cw;
+  }
+  return out;
+}
+
+// Exact 68-feature extractor matching Python train_gesture_classifier.py
+function extract68(rawPts) {
+  if (!rawPts || rawPts.length < 2) return null;
+  const segs = [];
+  let total = 0;
+  for (let i = 1; i < rawPts.length; i++) {
+    const d = Math.hypot(rawPts[i][0] - rawPts[i - 1][0], rawPts[i][1] - rawPts[i - 1][1]);
+    segs.push(d); total += d;
+  }
+  if (total < 1e-3) return null;
+  const cum = [0];
+  for (let i = 0; i < segs.length; i++) cum.push(cum[i] + segs[i]);
+  const rx = [], ry = [];
+  for (let k = 0; k < 32; k++) {
+    const t = (k / 31) * total;
+    let idx = 0;
+    while (idx < cum.length - 2 && cum[idx + 1] < t) idx++;
+    const denom = Math.max(cum[idx + 1] - cum[idx], 1e-6);
+    const f = (t - cum[idx]) / denom;
+    rx.push(rawPts[idx][0] + f * (rawPts[idx + 1][0] - rawPts[idx][0]));
+    ry.push(rawPts[idx][1] + f * (rawPts[idx + 1][1] - rawPts[idx][1]));
+  }
+  const minX = Math.min(...rx), maxX = Math.max(...rx), minY = Math.min(...ry), maxY = Math.max(...ry);
+  const w = Math.max(maxX - minX, 1e-3), h = Math.max(maxY - minY, 1e-3);
+  const cx = (minX + maxX) / 2, cy = (minY + maxY) / 2, scale = Math.max(w, h) / 2;
+  const nx = rx.map(v => (v - cx) / scale), ny = ry.map(v => (v - cy) / scale);
+  const logAsp = Math.max(-3, Math.min(3, Math.log((w + 1e-3) / (h + 1e-3)))) / 3;
+  const se = Math.hypot(nx[31] - nx[0], ny[31] - ny[0]) / 2.83;
+  const np = Math.min(total / (scale * 12), 2);
+  const area = (w * h) / (4 * scale * scale);
+  const feats = [];
+  for (let i = 0; i < 32; i++) { feats.push(nx[i], ny[i]); }
+  feats.push(logAsp, se, np, area);
+  return feats;
+}
+
+function predictGestureMLP(rawPts) {
+  const feats = extract68(rawPts);
+  if (!feats) return null;
+  const t0 = performance.now();
+  let h = feats;
+  for (let li = 0; li < MLP.layers.length; li++) {
+    const { w, b } = MLP.layers[li];
+    const out = new Array(b.length);
+    for (let i = 0; i < b.length; i++) {
+      let sum = b[i];
+      const row = w[i];
+      for (let j = 0; j < row.length; j++) sum += row[j] * h[j];
+      out[i] = li < MLP.layers.length - 1 ? Math.max(0, sum) : sum;
+    }
+    h = out;
+  }
+  const probs = softmax(h);
+  const ms = (performance.now() - t0).toFixed(2);
+  const ranked = MLP.classes.map((label, i) => ({ label, prob: probs[i] })).sort((a, b) => b.prob - a.prob);
+  return { ranked, ms };
+}
+
+// ============================================================================
+// TAB 1 STATE & RENDERING
+// ============================================================================
+const state1 = {
+  nodes: [
+    { id: 1, type: 'circle', x: 185, y: 24, w: 155, h: 52, label: 'IDEA', neural: null },
+    { id: 2, type: 'square', x: 175, y: 120, w: 175, h: 54, label: 'GRU MDN', neural: null },
+    { id: 3, type: 'diamond', x: 185, y: 215, w: 155, h: 66, label: 'GOOD?', neural: null },
+    { id: 4, type: 'square', x: 185, y: 318, w: 155, h: 50, label: 'PLOT SVG', neural: null }
+  ],
+  edges: [{ from: 1, to: 2 }, { from: 2, to: 3 }, { from: 3, to: 4 }],
+  selected: 2, linkMode: false, linkSrc: null, dragging: null, off: [0, 0],
+  temp: 0.30, allStrokes: [], replayPts: Infinity, raf: null
+};
+
+function hiDPI(c) {
+  const r = c.getBoundingClientRect();
+  if (!r.width || !r.height) return null;
+  const dpr = window.devicePixelRatio || 1;
+  c.width = r.width * dpr; c.height = r.height * dpr;
+  const ctx = c.getContext('2d');
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  return { ctx, w: r.width, h: r.height };
+}
+
+function getVar(name) { return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
+
+function anchor(a, b) {
+  const fx = a.x + a.w / 2, fy = a.y + a.h / 2, tx = b.x + b.w / 2, ty = b.y + b.h / 2;
+  const dx = tx - fx, dy = ty - fy;
+  const s = Math.min(Math.abs(dx) > 1e-3 ? (a.w / 2 + 4) / Math.abs(dx) : 999, Math.abs(dy) > 1e-3 ? (a.h / 2 + 4) / Math.abs(dy) : 999);
+  return [fx + dx * s, fy + dy * s];
+}
+
+function resampleAllNeural() {
+  if (!GRU) return;
+  const t0 = performance.now();
+  for (const n of state1.nodes) n.neural = sampleNeuralShape(n.type, state1.temp);
+  const ms = (performance.now() - t0).toFixed(1);
+  state1.replayPts = Infinity;
+  rebuildAndDraw1(ms);
+}
+
+function rebuildAndDraw1(ms = null) {
+  const strokes = [];
+  for (const n of state1.nodes) {
+    if (!n.neural && GRU) n.neural = sampleNeuralShape(n.type, state1.temp);
+    if (n.neural) strokes.push(...mapStrokesToBox(n.neural, n));
+    strokes.push(...textStrokes(n.label, n.x + n.w / 2, n.y + n.h / 2, n.w));
+  }
+  for (const e of state1.edges) {
+    const a = state1.nodes.find(n => n.id === e.from), b = state1.nodes.find(n => n.id === e.to);
+    if (!a || !b) continue;
+    const [x1, y1] = anchor(a, b), [x2, y2] = anchor(b, a);
+    strokes.push([[x1, y1], [(x1 + x2) / 2 + 4, (y1 + y2) / 2], [x2, y2]]);
+    const ang = Math.atan2(y2 - y1, x2 - x1);
+    strokes.push([[x2 - 10 * Math.cos(ang - 0.45), y2 - 10 * Math.sin(ang - 0.45)], [x2, y2]]);
+    strokes.push([[x2 - 10 * Math.cos(ang + 0.45), y2 - 10 * Math.sin(ang + 0.45)], [x2, y2]]);
+  }
+  state1.allStrokes = strokes;
+  document.getElementById('clean-meta').textContent = `${state1.nodes.length} nodes · ${state1.edges.length} edges`;
+  if (ms !== null) document.getElementById('ink-meta').textContent = `${strokes.length} neural strokes (${ms} ms)`;
+  drawClean1();
+  drawSketch1();
+}
+
+function drawClean1() {
+  const info = hiDPI(document.getElementById('c-clean'));
+  if (!info) return;
+  const { ctx, w, h } = info;
+  ctx.clearRect(0, 0, w, h);
+  const fg = getVar('--fg'), muted = getVar('--muted'), primary = getVar('--primary'), card = getVar('--card');
+  for (const e of state1.edges) {
+    const a = state1.nodes.find(n => n.id === e.from), b = state1.nodes.find(n => n.id === e.to);
+    if (!a || !b) continue;
+    const [x1, y1] = anchor(a, b), [x2, y2] = anchor(b, a);
+    ctx.strokeStyle = muted; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+  }
+  for (const n of state1.nodes) {
+    const sel = n.id === state1.selected || n.id === state1.linkSrc;
+    ctx.fillStyle = card; ctx.strokeStyle = sel ? primary : fg; ctx.lineWidth = sel ? 2.2 : 1.3;
+    ctx.beginPath();
+    if (n.type === 'square') ctx.roundRect(n.x, n.y, n.w, n.h, 5);
+    else if (n.type === 'circle') ctx.ellipse(n.x + n.w / 2, n.y + n.h / 2, n.w / 2, n.h / 2, 0, 0, Math.PI * 2);
+    else if (n.type === 'diamond') {
+      ctx.moveTo(n.x + n.w / 2, n.y); ctx.lineTo(n.x + n.w, n.y + n.h / 2);
+      ctx.lineTo(n.x + n.w / 2, n.y + n.h); ctx.lineTo(n.x, n.y + n.h / 2); ctx.closePath();
+    } else {
+      ctx.moveTo(n.x + n.w / 2, n.y); ctx.lineTo(n.x + n.w, n.y + n.h); ctx.lineTo(n.x, n.y + n.h); ctx.closePath();
+    }
+    ctx.fill(); ctx.stroke();
+    ctx.fillStyle = fg; ctx.font = '600 12px ui-monospace, monospace'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(n.label, n.x + n.w / 2, n.y + n.h / 2);
+  }
+}
+
+function drawSketch1() {
+  const info = hiDPI(document.getElementById('c-sketch'));
+  if (!info) return;
+  const { ctx, w, h } = info;
+  ctx.clearRect(0, 0, w, h);
+  ctx.strokeStyle = getVar('--ink'); ctx.lineWidth = 1.85; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  let drawn = 0, last = null;
+  for (const s of state1.allStrokes) {
+    if (drawn >= state1.replayPts) break;
+    if (s.length < 2) continue;
+    ctx.beginPath(); ctx.moveTo(s[0][0], s[0][1]);
+    for (let i = 1; i < s.length; i++) {
+      if (drawn >= state1.replayPts) break;
+      ctx.lineTo(s[i][0], s[i][1]); last = s[i]; drawn++;
+    }
+    ctx.stroke();
+  }
+  if (state1.replayPts < Infinity && last) {
+    ctx.fillStyle = getVar('--red'); ctx.beginPath(); ctx.arc(last[0], last[1], 4, 0, Math.PI * 2); ctx.fill();
+  }
+}
+
+function onTempChange() {
+  state1.temp = parseFloat(document.getElementById('temp-slider').value);
+  document.getElementById('temp-val').textContent = state1.temp.toFixed(2);
+  resampleAllNeural();
+}
+function addNode(type) {
+  const id = Math.max(0, ...state1.nodes.map(n => n.id)) + 1;
+  state1.nodes.push({ id, type, x: 40 + (id * 61) % 300, y: 40 + (id * 53) % 260, w: 145, h: 52, label: type.toUpperCase(), neural: null });
+  state1.selected = id;
+  rebuildAndDraw1();
+}
+function toggleLink() {
+  state1.linkMode = !state1.linkMode; state1.linkSrc = null;
+  document.getElementById('link-btn').className = state1.linkMode ? 'btn btn-primary' : 'btn';
+}
+function replayStrokes() {
+  if (state1.raf) cancelAnimationFrame(state1.raf);
+  const total = state1.allStrokes.reduce((a, s) => a + Math.max(0, s.length - 1), 0);
+  state1.replayPts = 0;
+  const tick = () => {
+    state1.replayPts += Math.max(3, Math.ceil(total / 70));
+    drawSketch1();
+    if (state1.replayPts < total) state1.raf = requestAnimationFrame(tick);
+    else { state1.replayPts = Infinity; drawSketch1(); }
+  };
+  state1.raf = requestAnimationFrame(tick);
+}
+function exportSVG() {
+  const ink = getVar('--ink');
+  const paths = state1.allStrokes.map(s => `<path d="${s.map((p, i) => (i ? 'L' : 'M') + p[0].toFixed(1) + ',' + p[1].toFixed(1)).join(' ')}" fill="none" stroke="${ink}" stroke-width="1.8" stroke-linecap="round"/>`).join('\n');
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 420">${paths}</svg>`], { type: 'image/svg+xml' }));
+  a.download = 'neural-napkin.svg'; a.click();
+}
+
+(function bindV1() {
+  const c = document.getElementById('c-clean');
+  const pos = e => { const r = c.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; };
+  c.addEventListener('pointerdown', e => {
+    const [x, y] = pos(e);
+    const n = [...state1.nodes].reverse().find(n => x >= n.x && x <= n.x + n.w && y >= n.y && y <= n.y + n.h);
+    if (!n) return;
+    if (state1.linkMode) {
+      if (!state1.linkSrc) state1.linkSrc = n.id;
+      else if (state1.linkSrc !== n.id) { state1.edges.push({ from: state1.linkSrc, to: n.id }); toggleLink(); rebuildAndDraw1(); }
+      drawClean1(); return;
+    }
+    state1.selected = n.id; state1.dragging = n; state1.off = [x - n.x, y - n.y];
+    document.getElementById('label-edit').value = n.label;
+    c.setPointerCapture(e.pointerId); drawClean1();
+  });
+  c.addEventListener('pointermove', e => {
+    if (!state1.dragging) return;
+    const [x, y] = pos(e);
+    state1.dragging.x = x - state1.off[0]; state1.dragging.y = y - state1.off[1];
+    rebuildAndDraw1();
+  });
+  c.addEventListener('pointerup', () => state1.dragging = null);
+  document.getElementById('label-edit').addEventListener('input', e => {
+    const n = state1.nodes.find(x => x.id === state1.selected);
+    if (n) { n.label = e.target.value; rebuildAndDraw1(); }
+  });
+})();
+
+// ============================================================================
+// TAB 2 STATE & RENDERING (REAL TRAINED MLP)
+// ============================================================================
+const state2 = {
+  cards: [
+    { id: 'A', x: 45, y: 50, w: 230, h: 95, title: 'VECTOR INK', body: 'Sub-1MB browser GRU-MDN synthesizes editable plotter-ready strokes at 60fps.' },
+    { id: 'B', x: 420, y: 50, w: 230, h: 95, title: 'PIXEL DIFFUSION', body: 'Requires GPU servers, garbles text labels, and outputs non-editable rasters.' },
+    { id: 'C', x: 225, y: 235, w: 255, h: 95, title: 'SEMANTIC CANVAS', body: 'Draw symbols to extract, summarize, emphasize, compare, or itemize live text.' }
+  ],
+  gestures: [], active: null
+};
+
+function drawV2() {
+  const info = hiDPI(document.getElementById('c-v2'));
+  if (!info) return;
+  const { ctx, w, h } = info;
+  ctx.clearRect(0, 0, w, h);
+  const ink = getVar('--ink'), muted = getVar('--muted'), red = getVar('--red'), card = getVar('--card'), border = getVar('--border');
+  for (const cd of state2.cards) {
+    ctx.fillStyle = card; ctx.strokeStyle = border; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.roundRect(cd.x, cd.y, cd.w, cd.h, 8); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = ink; ctx.font = '700 12px ui-monospace, monospace'; ctx.fillText(cd.title, cd.x + 12, cd.y + 22);
+    ctx.fillStyle = muted; ctx.font = '12px system-ui, sans-serif';
+    const words = cd.body.split(' '); let line = '', y = cd.y + 42;
+    for (const wd of words) {
+      if (ctx.measureText(line + ' ' + wd).width > cd.w - 24) { ctx.fillText(line, cd.x + 12, y); line = wd; y += 16; }
+      else line = line ? line + ' ' + wd : wd;
+    }
+    if (line) ctx.fillText(line, cd.x + 12, y);
+  }
+  ctx.lineWidth = 2.6; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  for (const g of state2.gestures) {
+    ctx.strokeStyle = red;
+    ctx.beginPath(); ctx.moveTo(g.pts[0][0], g.pts[0][1]);
+    for (let i = 1; i < g.pts.length; i++) ctx.lineTo(g.pts[i][0], g.pts[i][1]);
+    ctx.stroke();
+  }
+  if (state2.active && state2.active.length > 1) {
+    ctx.strokeStyle = red;
+    ctx.beginPath(); ctx.moveTo(state2.active[0][0], state2.active[0][1]);
+    for (let i = 1; i < state2.active.length; i++) ctx.lineTo(state2.active[i][0], state2.active[i][1]);
+    ctx.stroke();
+  }
+}
+
+function clearV2() { state2.gestures = []; drawV2(); }
+
+(function bindV2() {
+  const c = document.getElementById('c-v2');
+  const pos = e => { const r = c.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; };
+  c.addEventListener('pointerdown', e => { c.setPointerCapture(e.pointerId); state2.active = [pos(e)]; });
+  c.addEventListener('pointermove', e => { if (!state2.active) return; state2.active.push(pos(e)); drawV2(); });
+  c.addEventListener('pointerup', () => {
+    if (!state2.active) return;
+    const pts = state2.active; state2.active = null;
+    if (pts.length >= 4 && MLP) {
+      const res = predictGestureMLP(pts);
+      if (res) {
+        const top = res.ranked[0];
+        state2.gestures.push({ pts, op: top.label });
+        document.getElementById('v2-latency').textContent = `inference: ${res.ms} ms`;
+        document.getElementById('v2-op').textContent = `${top.label} (${Math.round(top.prob * 100)}%)`;
+        document.getElementById('mlp-probs').innerHTML = res.ranked.map(r => `
+          <div>
+            <div class="row mono" style="justify-content:space-between;"><span>${r.label}</span><span>${(r.prob * 100).toFixed(1)}%</span></div>
+            <div class="bar-bg"><div class="bar-fg" style="width:${(r.prob * 100).toFixed(1)}%"></div></div>
+          </div>`).join('');
+        const mid = pts[Math.floor(pts.length / 2)];
+        const nearest = [...state2.cards].sort((a, b) => Math.hypot(a.x + a.w / 2 - mid[0], a.y + a.h / 2 - mid[1]) - Math.hypot(b.x + b.w / 2 - mid[0], b.y + b.h / 2 - mid[1]))[0];
+        const msgs = {
+          emphasize: `◎ EMPHASIZE [${nearest.title}]:\n"${nearest.body}"`,
+          extract: `▽ EXTRACT [${nearest.title}]:\n• Core idea: ${nearest.title}\n• Detail: ${nearest.body}`,
+          summarize: `} SUMMARIZE:\nCombine sub-1MB vector ink with a browser gesture MLP for instant tactile thinking.`,
+          compare: `↔ COMPARE:\n• VECTOR INK vs PIXEL DIFFUSION → Vector ink wins on speed (60fps) & editability.`,
+          itemize: `≡ ITEMIZE [${nearest.title}]:\n` + nearest.body.split(/,| and /i).map((s, i) => `${i + 1}. ${s.trim()}`).join('\n')
+        };
+        document.getElementById('v2-out').style.color = 'var(--fg)';
+        document.getElementById('v2-out').textContent = msgs[top.label] || top.label;
+      }
+    }
+    drawV2();
+  });
+})();
+
+function setTab(n) {
+  document.getElementById('tab1').style.display = n === 1 ? 'flex' : 'none';
+  document.getElementById('tab2').style.display = n === 2 ? 'flex' : 'none';
+  document.getElementById('btn-tab1').className = n === 1 ? 'btn btn-primary' : 'btn';
+  document.getElementById('btn-tab2').className = n === 2 ? 'btn btn-primary' : 'btn';
+  requestAnimationFrame(() => n === 1 ? rebuildAndDraw1() : drawV2());
+}
+
+async function boot() {
+  const [gResp, mResp] = await Promise.all([fetch('../exports/stroke_gru_mdn.json'), fetch('../exports/gesture_mlp.json')]);
+  GRU = await gResp.json();
+  MLP = await mResp.json();
+  document.getElementById('model-banner').textContent =
+    `Loaded real trained weights: Sketch-GRU MDN (${GRU.metrics.params.toLocaleString()} params, Test NLL ${GRU.metrics.test_nll}) + Gesture MLP (${MLP.metrics.params.toLocaleString()} params, Test Acc ${MLP.metrics.test_accuracy}%)`;
+  document.getElementById('mlp-acc').textContent = `${MLP.metrics.test_accuracy}% test acc`;
+  resampleAllNeural();
+}
+window.addEventListener('resize', () => { rebuildAndDraw1(); drawV2(); });
+boot();
+</script>
+</body>
+</html>
