@@ -11,6 +11,8 @@ python3 -m http.server 8765
 ```
 
 Then open in your browser:
+* **v6 Napkin** *(Polished minimalist icon UI + light-brown textured paper napkin + ballpoint blue/black/red ink + explicit shape tools + single-click text + `600 ms` multi-stroke debounce + unified writing style for both typed & handwritten text)*:  
+  `http://localhost:8765/web/v6_napkin.html`
 * **v5 Napkin** *(Simplified UI + `500 ms` multi-stroke Smart Sketch + Direct Handwrite mode + draggable objects + `4.8 KB` hand-written WAT SIMD128 streaming cursive across parallel Web Workers)*:  
   `http://localhost:8765/web/v5_napkin.html`
 * **v4 Interactive Napkin (Method A vs B vs C)** *(Interactive drawing + Per-Char Glyph-VAE `~1 ms` + WASM SIMD128 INT8 cached cursive + live A/B/C latency benchmark)*:  
