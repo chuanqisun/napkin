@@ -1,0 +1,782 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>v5 Napkin — Multi-Stroke Sketch + Direct Handwrite + 60fps WASM Cursive</title>
+  <style>
+    body { font-family: monospace; font-size: 13px; margin: 10px; background: #fff; color: #111; }
+    .bar { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-bottom: 8px; padding-bottom: 6px; border-bottom: 1px solid #ccc; }
+    button, input, select { font-family: monospace; font-size: 12px; padding: 3px 8px; }
+    button.active { background: #111; color: #fff; border: 1px solid #111; }
+    #wrap { position: relative; border: 1px solid #bbb; background: #fcfbf7; }
+    canvas { display: block; width: 100%; height: 600px; touch-action: none; }
+    #inline-text {
+      position: absolute; display: none; font-family: monospace; font-size: 14px;
+      border: 1px dashed #555; background: rgba(255,255,255,0.92); padding: 3px 6px; outline: none;
+    }
+    #status { color: #555; margin-left: auto; }
+  </style>
+</head>
+<body>
+  <div class="bar">
+    <strong>v5 Napkin</strong>
+    <button id="t-sketch" class="active" onclick="setTool('sketch')">Sketch</button>
+    <button id="t-handwrite" onclick="setTool('handwrite')">Handwrite</button>
+    <button id="t-type" onclick="setTool('type')">Type</button>
+    <button id="t-move" onclick="setTool('move')">Move</button>
+    <select id="color-sel" title="Ink color">
+      <option value="#1b2430">Graphite</option>
+      <option value="#1d4ed8">Blue</option>
+      <option value="#b45309">Sepia</option>
+      <option value="#b91c1c">Red</option>
+    </select>
+    <button onclick="undo()">Undo</button>
+    <button onclick="clearAll()">Clear</button>
+    <button onclick="exportSVG()">SVG</button>
+    <span id="status">Loading models...</span>
+  </div>
+
+  <div id="wrap">
+    <canvas id="c"></canvas>
+    <input id="inline-text" type="text" placeholder="Type & press Enter..." />
+  </div>
+
+<script>
+// ============================================================================
+// SENSIBLE DEFAULTS ("just work")
+// ============================================================================
+const DEFAULTS = {
+  isPres: 0.75,
+  tau: 0.65,
+  underSketch: true,
+  multiStrokeTimeoutMs: 500,
+  cursiveStyleId: 9,   // Crisp Designer Cursive
+  cursiveBias: 1.05,
+  cursiveDkMult: 1.06,
+  streamChunkSteps: 28 // ~10ms per chunk -> 60 FPS live ink streaming!
+};
+
+// ============================================================================
+// 1. OPENSKETCH (dx, dy, pressure) RESIDUAL VAE (<0.2ms / stroke)
+// ============================================================================
+let VAE = null;
+
+function randn() {
+  let u = 0, v = 0;
+  while (!u) u = Math.random();
+  while (!v) v = Math.random();
+  return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
+}
+function silu(x) { return x / (1 + Math.exp(-x)); }
+function sigmoid(x) { return 1 / (1 + Math.exp(-Math.max(-20, Math.min(20, x)))); }
+
+function decodeResidual(isCurved, isPres, chordLen, tau = DEFAULTS.tau) {
+  if (!VAE) {
+    return Array.from({ length: 16 }, (_, i) => [0, 0, 0.25 + 0.55 * Math.sin((i / 15) * Math.PI)]);
+  }
+  const nll = Math.max(-1.5, Math.min(1.5, (Math.log(Math.max(chordLen, 25)) - Math.log(140)) / 1.2));
+  let h = [];
+  for (let i = 0; i < VAE.latent_dim; i++) h.push(randn() * tau);
+  h.push(isCurved, isPres, nll);
+  for (let li = 0; li < VAE.layers.length; li++) {
+    const { w, b } = VAE.layers[li];
+    const out = new Array(b.length);
+    for (let i = 0; i < b.length; i++) {
+      let sum = b[i];
+      const row = w[i];
+      for (let j = 0; j < row.length; j++) sum += row[j] * h[j];
+      out[i] = li < VAE.layers.length - 1 ? silu(sum) : sum;
+    }
+    h = out;
+  }
+  const K = VAE.k, sc = VAE.res_scale, out = [];
+  for (let i = 0; i < K; i++) out.push([h[i * 3] * sc, h[i * 3 + 1] * sc, sigmoid(h[i * 3 + 2])]);
+  return out;
+}
+
+function designerLine(x1, y1, x2, y2, isPres = DEFAULTS.isPres, tau = DEFAULTS.tau, ov = 3) {
+  const dx = x2 - x1, dy = y2 - y1, len = Math.hypot(dx, dy) || 1;
+  const ux = dx / len, uy = dy / len, nx = -uy, ny = ux;
+  const sx = x1 - ux * ov * Math.random(), sy = y1 - uy * ov * Math.random();
+  const ex = x2 + ux * ov * Math.random(), ey = y2 + uy * ov * Math.random();
+  const res = decodeResidual(0, isPres, len, tau);
+  const K = res.length;
+  return res.map(([ru, rv, p], i) => {
+    const t = i / (K - 1);
+    return [sx + (ex - sx) * (t + ru) + nx * rv * len, sy + (ey - sy) * (t + ru) + ny * rv * len, p];
+  });
+}
+
+function designerBezier(x0, y0, cx, cy, x2, y2, isPres = DEFAULTS.isPres, tau = DEFAULTS.tau) {
+  const chord = Math.hypot(x2 - x0, y2 - y0) || 1;
+  const ux = (x2 - x0) / chord, uy = (y2 - y0) / chord, nx = -uy, ny = ux;
+  const res = decodeResidual(1, isPres, chord, tau);
+  const K = res.length;
+  return res.map(([ru, rv, p], i) => {
+    const t = i / (K - 1), mt = 1 - t, env = Math.sin(t * Math.PI);
+    const bx = mt * mt * x0 + 2 * mt * t * cx + t * t * x2;
+    const by = mt * mt * y0 + 2 * mt * t * cy + t * t * y2;
+    return [bx + (ux * ru + nx * rv) * chord * env, by + (uy * ru + ny * rv) * chord * env, p];
+  });
+}
+
+function chaikin(pts, iters = 1) {
+  let cur = pts;
+  for (let k = 0; k < iters; k++) {
+    if (cur.length < 3) break;
+    const next = [cur[0]];
+    for (let i = 0; i < cur.length - 1; i++) {
+      const a = cur[i], b = cur[i + 1];
+      next.push([0.75 * a[0] + 0.25 * b[0], 0.75 * a[1] + 0.25 * b[1]]);
+      next.push([0.25 * a[0] + 0.75 * b[0], 0.25 * a[1] + 0.75 * b[1]]);
+    }
+    next.push(cur[cur.length - 1]);
+    cur = next;
+  }
+  return cur;
+}
+
+// ============================================================================
+// 2. PARALLEL WEB WORKER POOL FOR 60 FPS STREAMING WAT SIMD128 CURSIVE
+// ============================================================================
+const POOL_SIZE = Math.min(4, Math.max(2, navigator.hardwareConcurrency || 3));
+const workers = [];
+let workersReady = 0;
+let workerRR = 0;
+let reqCounter = 0;
+const activeJobs = new Map();
+
+async function initWasmPool() {
+  const t0 = performance.now();
+  const [metaRes, binRes, wasmRes] = await Promise.all([
+    fetch('../exports/handwriting/graves_v5_meta.json'),
+    fetch('../exports/handwriting/graves_v5.bin'),
+    fetch('../exports/handwriting/graves_v5.wasm')
+  ]);
+  const [meta, binBuf, wasmBytes] = await Promise.all([metaRes.json(), binRes.arrayBuffer(), wasmRes.arrayBuffer()]);
+  const wasmModule = await WebAssembly.compile(wasmBytes);
+
+  return new Promise((resolve) => {
+    for (let i = 0; i < POOL_SIZE; i++) {
+      const w = new Worker('hw_worker_v5.js');
+      w.onmessage = (e) => {
+        const msg = e.data;
+        if (msg.type === 'ready') {
+          workersReady++;
+          if (workersReady === POOL_SIZE) {
+            const ms = (performance.now() - t0).toFixed(0);
+            document.getElementById('status').textContent =
+              `Ready — Sketch (500ms multi-stroke), Handwrite, or double-click to Type (${POOL_SIZE}× WAT SIMD workers in ${ms}ms)`;
+            resolve();
+          }
+        } else if (msg.type === 'chunk') {
+          onWorkerChunk(msg);
+        } else if (msg.type === 'error') {
+          document.getElementById('status').textContent = 'WASM error: ' + msg.error;
+        }
+      };
+      // Clone binBuf per worker (fast RAM copy, zero duplicate HTTP requests!)
+      const copy = binBuf.slice(0);
+      w.postMessage({ type: 'init', wasmModule, binBuf: copy, meta }, [copy]);
+      workers.push(w);
+    }
+  });
+}
+
+// Convert accumulated word sequences into centered, velocity-pressure-tapered strokes
+function layoutWordsToStrokes(wordBuffers, xCenter, yCenter, targetH, maxW, color, baseW = 1.65) {
+  const wordBoxes = [];
+  let totalRawW = 0;
+  let globalMinY = 1e9, globalMaxY = -1e9;
+  const wordGap = 14.0; // natural space between words in Graves coord space
+
+  for (const buf of wordBuffers) {
+    const segs = [];
+    let x = 0, y = 0, cur = [];
+    let minX = 1e9, maxX = -1e9, minY = 1e9, maxY = -1e9;
+    const n = buf.length / 3;
+    for (let i = 0; i < n; i++) {
+      const dx = buf[i * 3], dy = buf[i * 3 + 1], eos = buf[i * 3 + 2];
+      x += dx; y -= dy;
+      cur.push([x, y]);
+      if (x < minX) minX = x; if (x > maxX) maxX = x;
+      if (y < minY) minY = y; if (y > maxY) maxY = y;
+      if (eos > 0.5) {
+        if (cur.length >= 2) segs.push(cur);
+        cur = [];
+      }
+    }
+    if (cur.length >= 2) segs.push(cur);
+    if (!segs.length) {
+      wordBoxes.push({ segs: [], minX: 0, w: 10 });
+      totalRawW += 10 + wordGap;
+      continue;
+    }
+    if (minY < globalMinY) globalMinY = minY;
+    if (maxY > globalMaxY) globalMaxY = maxY;
+    const w = Math.max(4, maxX - minX);
+    wordBoxes.push({ segs, minX, w });
+    totalRawW += w + wordGap;
+  }
+  if (globalMinY > globalMaxY) return { strokes: [], bbox: null };
+  totalRawW = Math.max(1, totalRawW - wordGap);
+
+  const bh = Math.max(10, globalMaxY - globalMinY);
+  let sc = targetH / bh;
+  if (maxW && totalRawW * sc > maxW) sc = maxW / totalRawW;
+  const cy = (globalMinY + globalMaxY) * 0.5;
+  let curX = xCenter - (totalRawW * sc) * 0.5;
+
+  const strokes = [];
+  let outMinX = 1e9, outMaxX = -1e9, outMinY = 1e9, outMaxY = -1e9;
+
+  for (const wb of wordBoxes) {
+    for (const seg of wb.segs) {
+      const pts = seg.map(([px, py], idx) => {
+        const prev = seg[Math.max(0, idx - 1)];
+        const sp = Math.hypot(px - prev[0], py - prev[1]);
+        const t = idx / Math.max(1, seg.length - 1);
+        const taper = Math.min(1, t * 6, (1 - t) * 6);
+        const p = Math.max(0.24, Math.min(0.94, (0.88 - sp * 0.045) * (0.45 + 0.55 * taper)));
+        const sx = curX + (px - wb.minX) * sc;
+        const sy = yCenter + (py - cy) * sc;
+        if (sx < outMinX) outMinX = sx; if (sx > outMaxX) outMaxX = sx;
+        if (sy < outMinY) outMinY = sy; if (sy > outMaxY) outMaxY = sy;
+        return [sx, sy, p];
+      });
+      strokes.push({ pts, alpha: 0.96, baseW, color });
+    }
+    curX += (wb.w + wordGap) * sc;
+  }
+  return {
+    strokes,
+    bbox: outMinX < outMaxX ? { x: outMinX, y: outMinY, w: Math.max(24, outMaxX - outMinX), h: Math.max(20, outMaxY - outMinY) } : null
+  };
+}
+
+function onWorkerChunk(msg) {
+  const job = activeJobs.get(msg.reqId);
+  if (!job) return;
+  const arr = job.wordBufs[msg.wordIdx];
+  for (let i = 0; i < msg.chunk.length; i++) arr.push(msg.chunk[i]);
+  if (job.firstInkMs === null) job.firstInkMs = performance.now() - job.t0;
+  if (msg.done) job.doneCount++;
+
+  // Stream live onto canvas at 60 FPS!
+  const { strokes, bbox } = layoutWordsToStrokes(
+    job.wordBufs, job.cx, job.cy, job.targetH, job.maxW, job.color, job.baseW
+  );
+  if (job.targetShape) {
+    job.targetShape.textStrokes = strokes;
+  } else if (job.textItem) {
+    job.textItem.strokes = strokes;
+    if (bbox) {
+      job.textItem.x = bbox.x; job.textItem.y = bbox.y;
+      job.textItem.w = bbox.w; job.textItem.h = bbox.h;
+    }
+  }
+  scheduleRender();
+
+  if (job.doneCount === job.words.length) {
+    const totalMs = performance.now() - job.t0;
+    document.getElementById('status').textContent =
+      `Cursive "${job.text}" — first ink ${job.firstInkMs.toFixed(0)}ms, done ${totalMs.toFixed(0)}ms (${job.words.length} word${job.words.length > 1 ? 's' : ''} parallel)`;
+    activeJobs.delete(msg.reqId);
+    if (job.resolve) job.resolve();
+  }
+}
+
+function synthesizeCursiveStreaming(text, cx, cy, targetH, maxW, color, targetShape = null, textItem = null) {
+  const words = text.trim().split(/\s+/).filter(Boolean);
+  if (!words.length || !workers.length) return Promise.resolve();
+  const reqId = ++reqCounter;
+  return new Promise((resolve) => {
+    const job = {
+      reqId, text, words, cx, cy, targetH, maxW, color,
+      baseW: targetShape ? 1.55 : 1.7,
+      targetShape, textItem,
+      wordBufs: words.map(() => []),
+      doneCount: 0,
+      t0: performance.now(),
+      firstInkMs: null,
+      resolve
+    };
+    activeJobs.set(reqId, job);
+    words.forEach((word, wordIdx) => {
+      const w = workers[(workerRR++) % workers.length];
+      w.postMessage({
+        type: 'synth_word',
+        reqId,
+        wordIdx,
+        word,
+        styleId: DEFAULTS.cursiveStyleId,
+        dkMult: DEFAULTS.cursiveDkMult,
+        bias: DEFAULTS.cursiveBias,
+        seed: Math.floor(Math.random() * 1e9) + 1,
+        chunkSteps: DEFAULTS.streamChunkSteps
+      });
+    });
+  });
+}
+
+// ============================================================================
+// 3. OBJECT BUILDERS + MULTI-STROKE SMART SKETCH + DIRECT HANDWRITING
+// ============================================================================
+function getColor() { return document.getElementById('color-sel').value; }
+
+function buildShapeItem(shapeType, x, y, w, h, label = '', color = null) {
+  const col = color || getColor();
+  const strokes = [];
+  const addPass = (isP, tau, ov, alpha, baseW) => {
+    if (shapeType === 'box') {
+      strokes.push({ pts: designerLine(x, y, x + w, y, isP, tau, ov), alpha, baseW, color: col });
+      strokes.push({ pts: designerLine(x + w, y, x + w, y + h, isP, tau, ov), alpha, baseW, color: col });
+      strokes.push({ pts: designerLine(x + w, y + h, x, y + h, isP, tau, ov), alpha, baseW, color: col });
+      strokes.push({ pts: designerLine(x, y + h, x, y, isP, tau, ov), alpha, baseW, color: col });
+    } else if (shapeType === 'diamond') {
+      const cx = x + w / 2, cy = y + h / 2;
+      strokes.push({ pts: designerLine(cx, y, x + w, cy, isP, tau, ov), alpha, baseW, color: col });
+      strokes.push({ pts: designerLine(x + w, cy, cx, y + h, isP, tau, ov), alpha, baseW, color: col });
+      strokes.push({ pts: designerLine(cx, y + h, x, cy, isP, tau, ov), alpha, baseW, color: col });
+      strokes.push({ pts: designerLine(x, cy, cx, y, isP, tau, ov), alpha, baseW, color: col });
+    } else {
+      const cx = x + w / 2, cy = y + h / 2, rx = w / 2, ry = h / 2;
+      strokes.push({ pts: designerBezier(cx - rx, cy, cx - rx, cy - ry, cx, cy - ry, isP, tau), alpha, baseW, color: col });
+      strokes.push({ pts: designerBezier(cx, cy - ry, cx + rx, cy - ry, cx + rx, cy, isP, tau), alpha, baseW, color: col });
+      strokes.push({ pts: designerBezier(cx + rx, cy, cx + rx, cy + ry, cx, cy + ry, isP, tau), alpha, baseW, color: col });
+      strokes.push({ pts: designerBezier(cx, cy + ry, cx - rx, cy + ry, cx - rx, cy, isP, tau), alpha, baseW, color: col });
+    }
+  };
+  if (DEFAULTS.underSketch) addPass(0.0, DEFAULTS.tau * 1.15, 6.5, 0.22, 1.3);
+  addPass(DEFAULTS.isPres, DEFAULTS.tau, 2.5, 1.0, 2.2);
+  return { kind: 'shape', shapeType, x, y, w, h, label, color: col, strokes, textStrokes: [] };
+}
+
+function buildArrowItem(x1, y1, x2, y2, color = null) {
+  const col = color || getColor();
+  const ang = Math.atan2(y2 - y1, x2 - x1), hl = 12;
+  const strokes = [
+    { pts: designerLine(x1, y1, x2, y2, DEFAULTS.isPres, DEFAULTS.tau, 1.5), alpha: 0.96, baseW: 2.0, color: col },
+    { pts: designerLine(x2 - hl * Math.cos(ang - 0.45), y2 - hl * Math.sin(ang - 0.45), x2, y2, DEFAULTS.isPres, DEFAULTS.tau, 1.0), alpha: 0.96, baseW: 1.85, color: col },
+    { pts: designerLine(x2 - hl * Math.cos(ang + 0.45), y2 - hl * Math.sin(ang + 0.45), x2, y2, DEFAULTS.isPres, DEFAULTS.tau, 1.0), alpha: 0.96, baseW: 1.85, color: col }
+  ];
+  return {
+    kind: 'arrow',
+    x: Math.min(x1, x2) - 6, y: Math.min(y1, y2) - 6,
+    w: Math.max(18, Math.abs(x2 - x1) + 12), h: Math.max(18, Math.abs(y2 - y1) + 12),
+    color: col, strokes
+  };
+}
+
+// Convert one raw pointer stroke into organic velocity-pressure-tapered ink
+function rawToInkPoints(rawPts, isHandwriting = false) {
+  const minDist = isHandwriting ? 2.2 : 3.5;
+  const simp = [rawPts[0]];
+  for (let i = 1; i < rawPts.length; i++) {
+    const prev = simp[simp.length - 1];
+    if (Math.hypot(rawPts[i].x - prev.x, rawPts[i].y - prev.y) >= minDist) simp.push(rawPts[i]);
+  }
+  if (simp.length < 2) simp.push({ x: rawPts[0].x + 0.8, y: rawPts[0].y + 0.8 });
+  const smoothed = chaikin(simp.map(p => [p.x, p.y]), 1);
+  return smoothed.map(([x, y], i) => {
+    const prev = smoothed[Math.max(0, i - 1)];
+    const sp = Math.hypot(x - prev[0], y - prev[1]);
+    const t = i / Math.max(1, smoothed.length - 1);
+    const endTaper = Math.min(1, t * 7, (1 - t) * 7);
+    const baseP = isHandwriting ? (0.86 - sp * 0.038) : (0.85 - sp * 0.03);
+    const p = Math.max(0.20, Math.min(0.94, baseP * (0.40 + 0.60 * endTaper)));
+    return [x, y, p];
+  });
+}
+
+// Group a multi-stroke burst into ONE draggable object (handwriting or freehand sketch)
+function buildMultiStrokeInkObject(rawList, kind = 'free', color = null) {
+  const col = color || getColor();
+  const isHw = kind === 'handwrite';
+  const baseW = isHw ? 1.85 : 2.1;
+  const strokes = rawList.map(raw => ({ pts: rawToInkPoints(raw, isHw), alpha: 0.96, baseW, color: col }));
+  let minX = 1e9, maxX = -1e9, minY = 1e9, maxY = -1e9;
+  for (const s of strokes) {
+    for (const [x, y] of s.pts) {
+      if (x < minX) minX = x; if (x > maxX) maxX = x;
+      if (y < minY) minY = y; if (y > maxY) maxY = y;
+    }
+  }
+  return {
+    kind, color: col, strokes,
+    x: minX, y: minY,
+    w: Math.max(16, maxX - minX),
+    h: Math.max(16, maxY - minY)
+  };
+}
+
+// Multi-Stroke Smart Sketch Recognizer (runs 500ms after user stops drawing!)
+function recognizeMultiStroke(rawList) {
+  const allPts = [];
+  const stats = rawList.map(raw => {
+    let arc = 0;
+    for (let i = 1; i < raw.length; i++) arc += Math.hypot(raw[i].x - raw[i - 1].x, raw[i].y - raw[i - 1].y);
+    const s = raw[0], e = raw[raw.length - 1];
+    const chord = Math.hypot(e.x - s.x, e.y - s.y);
+    for (const p of raw) allPts.push(p);
+    return { raw, s, e, arc, chord, straightness: chord / Math.max(arc, 1) };
+  });
+
+  let minX = 1e9, maxX = -1e9, minY = 1e9, maxY = -1e9;
+  for (const p of allPts) {
+    if (p.x < minX) minX = p.x; if (p.x > maxX) maxX = p.x;
+    if (p.y < minY) minY = p.y; if (p.y > maxY) maxY = p.y;
+  }
+  const w = maxX - minX, h = maxY - minY, diag = Math.hypot(w, h);
+  if (diag < 26) return buildMultiStrokeInkObject(rawList, 'free');
+
+  // 1. Single-stroke OR multi-stroke Arrow (shaft + 1-2 arrowhead ticks near one endpoint!)
+  if (rawList.length <= 3) {
+    let mainIdx = 0;
+    for (let i = 1; i < stats.length; i++) if (stats[i].arc > stats[mainIdx].arc) mainIdx = i;
+    const main = stats[mainIdx];
+    if (rawList.length === 1 && main.straightness > 0.72 && main.chord > 34) {
+      document.getElementById('status').textContent = 'Smart Sketch → Arrow';
+      return buildArrowItem(main.s.x, main.s.y, main.e.x, main.e.y);
+    }
+    if (rawList.length >= 2 && main.straightness > 0.68 && main.chord > 36) {
+      const others = stats.filter((_, i) => i !== mainIdx);
+      const nearEnd = others.every(o =>
+        o.arc < main.arc * 0.65 &&
+        Math.min(Math.hypot(o.s.x - main.e.x, o.s.y - main.e.y), Math.hypot(o.e.x - main.e.x, o.e.y - main.e.y)) < Math.max(36, main.chord * 0.4)
+      );
+      const nearStart = others.every(o =>
+        o.arc < main.arc * 0.65 &&
+        Math.min(Math.hypot(o.s.x - main.s.x, o.s.y - main.s.y), Math.hypot(o.e.x - main.s.x, o.e.y - main.s.y)) < Math.max(36, main.chord * 0.4)
+      );
+      if (nearEnd || nearStart) {
+        document.getElementById('status').textContent = `Smart Sketch (${rawList.length} strokes) → Arrow`;
+        return nearEnd ? buildArrowItem(main.s.x, main.s.y, main.e.x, main.e.y) : buildArrowItem(main.e.x, main.e.y, main.s.x, main.s.y);
+      }
+    }
+  }
+
+  // 2. Closed 1-stroke OR Multi-Stroke Shape (Box / Diamond / Oval drawn in 1..6 strokes!)
+  const isSingleClosed = rawList.length === 1 && stats[0].chord < diag * 0.42;
+  const totalArc = stats.reduce((a, s) => a + s.arc, 0);
+  const estPerim = 2 * (w + h);
+  const isMultiClosed = rawList.length >= 2 && rawList.length <= 6 && totalArc > estPerim * 0.62;
+
+  if ((isSingleClosed || isMultiClosed) && w > 28 && h > 22) {
+    const cx = (minX + maxX) / 2, cy = (minY + maxY) / 2, rx = w / 2, ry = h / 2;
+    let eErr = 0, dErr = 0, bErr = 0;
+    for (const p of allPts) {
+      const nx = Math.abs(p.x - cx) / rx, ny = Math.abs(p.y - cy) / ry;
+      eErr += Math.abs(nx * nx + ny * ny - 1);
+      dErr += Math.abs(nx + ny - 1);
+      bErr += Math.abs(Math.max(nx, ny) - 1);
+    }
+    const n = allPts.length;
+    eErr /= n; dErr /= n; bErr /= n;
+    const bestErr = Math.min(eErr, dErr, bErr);
+
+    if (bestErr < 0.30) {
+      let shapeType = 'oval';
+      if (dErr < eErr && dErr < bErr) shapeType = 'diamond';
+      else if (bErr < eErr * 0.94) shapeType = 'box';
+      const label = shapeType[0].toUpperCase() + shapeType.slice(1);
+      document.getElementById('status').textContent =
+        rawList.length > 1 ? `Smart Sketch (${rawList.length} strokes) → ${label}` : `Smart Sketch → ${label}`;
+      return buildShapeItem(shapeType, minX, minY, w, h);
+    }
+  }
+
+  document.getElementById('status').textContent =
+    rawList.length > 1 ? `Grouped sketch (${rawList.length} strokes)` : 'Freehand ink';
+  return buildMultiStrokeInkObject(rawList, 'free');
+}
+
+// ============================================================================
+// 4. INTERACTIVE CANVAS + 500ms MULTI-STROKE ENGINE + DRAGGABLE OBJECTS
+// ============================================================================
+const canvas = document.getElementById('c');
+const inlineInput = document.getElementById('inline-text');
+let tool = 'sketch';
+let items = [];
+let activeRaw = null;
+let pendingStrokes = [];
+let pendingMode = null;
+let pendingTimer = null;
+let dragItem = null, dragOff = [0, 0], hoverItem = null;
+let typingTarget = null;
+let renderQueued = false;
+
+function scheduleRender() {
+  if (renderQueued) return;
+  renderQueued = true;
+  requestAnimationFrame(() => { renderQueued = false; render(); });
+}
+
+function flushPendingNow() {
+  if (pendingTimer) { clearTimeout(pendingTimer); pendingTimer = null; }
+  if (!pendingStrokes.length) return;
+  const batch = pendingStrokes;
+  const mode = pendingMode || tool;
+  pendingStrokes = [];
+  pendingMode = null;
+
+  if (mode === 'handwrite') {
+    items.push(buildMultiStrokeInkObject(batch, 'handwrite'));
+    document.getElementById('status').textContent = `Handwritten object (${batch.length} stroke${batch.length > 1 ? 's' : ''}) — switch to Move to drag`;
+  } else {
+    items.push(recognizeMultiStroke(batch));
+  }
+  scheduleRender();
+}
+
+function setTool(t) {
+  flushPendingNow();
+  tool = t;
+  hoverItem = null;
+  document.querySelectorAll('.bar button[id^="t-"]').forEach(b => b.classList.remove('active'));
+  const btn = document.getElementById('t-' + t);
+  if (btn) btn.classList.add('active');
+  canvas.style.cursor = t === 'move' ? 'grab' : (t === 'type' ? 'text' : 'crosshair');
+  scheduleRender();
+}
+
+function drawPStroke(ctx, pts, baseW, color, alphaScale) {
+  if (!pts || pts.length < 2) return;
+  ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.strokeStyle = color;
+  for (let i = 1; i < pts.length; i++) {
+    const [x0, y0, p0] = pts[i - 1], [x1, y1, p1] = pts[i];
+    const p = (p0 + p1) * 0.5;
+    ctx.lineWidth = Math.max(0.45, baseW * (0.28 + 1.15 * p));
+    ctx.globalAlpha = Math.min(1, (0.42 + 0.58 * p) * alphaScale);
+    ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke();
+  }
+  ctx.globalAlpha = 1;
+}
+
+function drawRawPreview(ctx, rawPts, color) {
+  if (!rawPts || rawPts.length < 2) return;
+  ctx.strokeStyle = color; ctx.lineWidth = 2.0; ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.globalAlpha = 0.65;
+  ctx.beginPath(); ctx.moveTo(rawPts[0].x, rawPts[0].y);
+  for (let i = 1; i < rawPts.length; i++) ctx.lineTo(rawPts[i].x, rawPts[i].y);
+  ctx.stroke(); ctx.globalAlpha = 1;
+}
+
+function render() {
+  const r = canvas.getBoundingClientRect();
+  const dpr = window.devicePixelRatio || 1;
+  if (canvas.width !== Math.round(r.width * dpr) || canvas.height !== Math.round(r.height * dpr)) {
+    canvas.width = Math.round(r.width * dpr);
+    canvas.height = Math.round(r.height * dpr);
+  }
+  const ctx = canvas.getContext('2d');
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, r.width, r.height);
+
+  for (const it of items) {
+    for (const s of it.strokes) drawPStroke(ctx, s.pts, s.baseW, s.color, s.alpha);
+    if (it.textStrokes) for (const s of it.textStrokes) drawPStroke(ctx, s.pts, s.baseW, s.color, s.alpha);
+  }
+
+  // Highlight hovered/dragged object in Move mode
+  const hi = dragItem || (tool === 'move' ? hoverItem : null);
+  if (hi) {
+    ctx.save();
+    ctx.strokeStyle = '#64748b'; ctx.lineWidth = 1; ctx.setLineDash([4, 3]);
+    ctx.strokeRect(hi.x - 5, hi.y - 5, hi.w + 10, hi.h + 10);
+    ctx.restore();
+  }
+
+  // Pending multi-stroke buffer (waiting for 500ms timeout) + current live stroke
+  const col = getColor();
+  for (const ps of pendingStrokes) drawRawPreview(ctx, ps, col);
+  if (activeRaw) drawRawPreview(ctx, activeRaw, col);
+}
+
+function openTextBox(x, y, shapeRef = null) {
+  flushPendingNow();
+  typingTarget = { x, y, shapeRef };
+  inlineInput.style.left = Math.max(8, x - 75) + 'px';
+  inlineInput.style.top = Math.max(8, y - 14) + 'px';
+  inlineInput.style.display = 'block';
+  inlineInput.value = shapeRef ? (shapeRef.label || '') : '';
+  inlineInput.focus();
+}
+
+function commitTextBox() {
+  if (!typingTarget) return;
+  const tgt = typingTarget;
+  typingTarget = null;
+  const val = inlineInput.value.trim();
+  inlineInput.style.display = 'none';
+  if (!val) {
+    if (tgt.shapeRef) { tgt.shapeRef.label = ''; tgt.shapeRef.textStrokes = []; scheduleRender(); }
+    return;
+  }
+  if (tgt.shapeRef) {
+    const it = tgt.shapeRef;
+    it.label = val;
+    const maxW = it.shapeType === 'diamond' ? it.w * 0.62 : it.w * 0.84;
+    const targetH = Math.min(30, Math.max(18, it.h * 0.48));
+    synthesizeCursiveStreaming(val, it.x + it.w / 2, it.y + it.h / 2, targetH, maxW, it.color, it, null);
+  } else {
+    const col = getColor();
+    const textItem = { kind: 'text', text: val, x: tgt.x - 40, y: tgt.y - 16, w: 80, h: 32, color: col, strokes: [] };
+    items.push(textItem);
+    synthesizeCursiveStreaming(val, tgt.x, tgt.y, 32, 520, col, null, textItem);
+  }
+}
+
+inlineInput.addEventListener('keydown', e => {
+  if (e.key === 'Enter') commitTextBox();
+  if (e.key === 'Escape') { inlineInput.style.display = 'none'; typingTarget = null; }
+});
+inlineInput.addEventListener('blur', commitTextBox);
+
+function getPos(e) {
+  const r = canvas.getBoundingClientRect();
+  return { x: e.clientX - r.left, y: e.clientY - r.top };
+}
+function hitItem(x, y) {
+  for (let i = items.length - 1; i >= 0; i--) {
+    const it = items[i];
+    if (x >= it.x - 8 && x <= it.x + it.w + 8 && y >= it.y - 8 && y <= it.y + it.h + 8) return it;
+  }
+  return null;
+}
+
+canvas.addEventListener('dblclick', e => {
+  const p = getPos(e), hit = hitItem(p.x, p.y);
+  if (hit && hit.kind === 'shape') openTextBox(hit.x + hit.w / 2, hit.y + hit.h / 2, hit);
+  else openTextBox(p.x, p.y, null);
+});
+
+canvas.addEventListener('pointerdown', e => {
+  if (typingTarget) commitTextBox();
+  const p = getPos(e);
+  canvas.setPointerCapture(e.pointerId);
+
+  if (tool === 'type') {
+    const hit = hitItem(p.x, p.y);
+    if (hit && hit.kind === 'shape') openTextBox(hit.x + hit.w / 2, hit.y + hit.h / 2, hit);
+    else openTextBox(p.x, p.y, null);
+    return;
+  }
+  if (tool === 'move') {
+    const hit = hitItem(p.x, p.y);
+    if (hit) {
+      dragItem = hit;
+      dragOff = [p.x, p.y];
+      canvas.style.cursor = 'grabbing';
+      scheduleRender();
+    }
+    return;
+  }
+  // Multi-stroke Sketch or Direct Handwrite: cancel pending 500ms timer so new stroke joins batch!
+  if (pendingTimer) { clearTimeout(pendingTimer); pendingTimer = null; }
+  pendingMode = tool;
+  activeRaw = [p];
+  scheduleRender();
+});
+
+canvas.addEventListener('pointermove', e => {
+  const p = getPos(e);
+  if (dragItem) {
+    const dx = p.x - dragOff[0], dy = p.y - dragOff[1];
+    dragOff = [p.x, p.y];
+    dragItem.x += dx; dragItem.y += dy;
+    const shift = s => { for (const pt of s.pts) { pt[0] += dx; pt[1] += dy; } };
+    dragItem.strokes.forEach(shift);
+    if (dragItem.textStrokes) dragItem.textStrokes.forEach(shift);
+    scheduleRender();
+    return;
+  }
+  if (tool === 'move') {
+    const h = hitItem(p.x, p.y);
+    if (h !== hoverItem) { hoverItem = h; scheduleRender(); }
+    return;
+  }
+  if (activeRaw) {
+    activeRaw.push(p);
+    scheduleRender();
+  }
+});
+
+canvas.addEventListener('pointerup', () => {
+  if (dragItem) {
+    dragItem = null;
+    canvas.style.cursor = 'grab';
+    scheduleRender();
+    return;
+  }
+  if (activeRaw) {
+    const pts = activeRaw;
+    activeRaw = null;
+    if (pts.length >= 2) {
+      pendingStrokes.push(pts);
+      document.getElementById('status').textContent =
+        `${pendingMode === 'handwrite' ? 'Handwrite' : 'Sketch'}: ${pendingStrokes.length} stroke${pendingStrokes.length > 1 ? 's' : ''} (committing in 500ms...)`;
+      pendingTimer = setTimeout(flushPendingNow, DEFAULTS.multiStrokeTimeoutMs);
+    }
+    scheduleRender();
+  }
+});
+
+function undo() {
+  if (pendingStrokes.length) {
+    pendingStrokes.pop();
+    if (!pendingStrokes.length && pendingTimer) { clearTimeout(pendingTimer); pendingTimer = null; }
+  } else {
+    items.pop();
+  }
+  scheduleRender();
+}
+
+function clearAll() {
+  if (pendingTimer) { clearTimeout(pendingTimer); pendingTimer = null; }
+  pendingStrokes = [];
+  items = [];
+  scheduleRender();
+}
+
+function exportSVG() {
+  flushPendingNow();
+  const lines = [];
+  const emit = s => {
+    for (let i = 1; i < s.pts.length; i++) {
+      const [x0, y0, p0] = s.pts[i - 1], [x1, y1, p1] = s.pts[i];
+      const p = (p0 + p1) * 0.5;
+      lines.push(`<line x1="${x0.toFixed(1)}" y1="${y0.toFixed(1)}" x2="${x1.toFixed(1)}" y2="${y1.toFixed(1)}" stroke="${s.color}" stroke-width="${(s.baseW * (0.28 + 1.15 * p)).toFixed(2)}" stroke-opacity="${((0.42 + 0.58 * p) * s.alpha).toFixed(2)}" stroke-linecap="round"/>`);
+    }
+  };
+  for (const it of items) { it.strokes.forEach(emit); if (it.textStrokes) it.textStrokes.forEach(emit); }
+  const r = canvas.getBoundingClientRect();
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${r.width} ${r.height}">${lines.join('')}</svg>`], { type: 'image/svg+xml' }));
+  a.download = 'v5-napkin.svg'; a.click();
+}
+
+async function loadStarterScene() {
+  const s1 = buildShapeItem('oval', 110, 46, 185, 62, 'Raw Idea');
+  const a1 = buildArrowItem(202, 112, 202, 162);
+  const s2 = buildShapeItem('box', 85, 168, 235, 66, 'Sketch on Napkin');
+  const a2 = buildArrowItem(325, 201, 415, 201);
+  const s3 = buildShapeItem('diamond', 422, 158, 175, 84, 'Clear?');
+  items = [s1, a1, s2, a2, s3];
+  scheduleRender();
+  // Stream all 3 starter labels in parallel across our WAT SIMD128 worker pool!
+  await Promise.all([
+    synthesizeCursiveStreaming(s1.label, s1.x + s1.w / 2, s1.y + s1.h / 2, 28, s1.w * 0.82, s1.color, s1, null),
+    synthesizeCursiveStreaming(s2.label, s2.x + s2.w / 2, s2.y + s2.h / 2, 28, s2.w * 0.84, s2.color, s2, null),
+    synthesizeCursiveStreaming(s3.label, s3.x + s3.w / 2, s3.y + s3.h / 2, 26, s3.w * 0.62, s3.color, s3, null)
+  ]);
+}
+
+window.addEventListener('resize', scheduleRender);
+
+Promise.all([
+  fetch('../exports/opensketch_residual_vae.json').then(r => r.json()).then(j => { VAE = j; }),
+  initWasmPool()
+]).then(() => loadStarterScene());
+</script>
+</body>
+</html>

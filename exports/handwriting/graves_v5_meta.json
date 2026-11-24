@@ -1,0 +1,190 @@
+{
+  "total_bytes": 4047452,
+  "style_labels": [
+    "9: Designer Cursive",
+    "1: Crisp Print",
+    "7: Clean Upright",
+    "12: Fast Journal",
+    "0: Neat Italic",
+    "2: Flowing Script"
+  ],
+  "style_ids": [
+    9,
+    1,
+    7,
+    12,
+    0,
+    2
+  ],
+  "tensors": {
+    "l1_dq": {
+      "byte_offset": 0,
+      "bytes": 665600,
+      "shape": [
+        1600,
+        416
+      ],
+      "dtype": "int8"
+    },
+    "l1_dsc": {
+      "byte_offset": 665600,
+      "bytes": 6400,
+      "shape": [
+        1600
+      ],
+      "dtype": "float32"
+    },
+    "l1_cq": {
+      "byte_offset": 672000,
+      "bytes": 116800,
+      "shape": [
+        73,
+        1600
+      ],
+      "dtype": "int8"
+    },
+    "l1_csc": {
+      "byte_offset": 788800,
+      "bytes": 292,
+      "shape": [
+        73
+      ],
+      "dtype": "float32"
+    },
+    "l1_b": {
+      "byte_offset": 789104,
+      "bytes": 6400,
+      "shape": [
+        1600
+      ],
+      "dtype": "float32"
+    },
+    "l2_dq": {
+      "byte_offset": 795504,
+      "bytes": 1305600,
+      "shape": [
+        1600,
+        816
+      ],
+      "dtype": "int8"
+    },
+    "l2_dsc": {
+      "byte_offset": 2101104,
+      "bytes": 6400,
+      "shape": [
+        1600
+      ],
+      "dtype": "float32"
+    },
+    "l2_cq": {
+      "byte_offset": 2107504,
+      "bytes": 116800,
+      "shape": [
+        73,
+        1600
+      ],
+      "dtype": "int8"
+    },
+    "l2_csc": {
+      "byte_offset": 2224304,
+      "bytes": 292,
+      "shape": [
+        73
+      ],
+      "dtype": "float32"
+    },
+    "l2_b": {
+      "byte_offset": 2224608,
+      "bytes": 6400,
+      "shape": [
+        1600
+      ],
+      "dtype": "float32"
+    },
+    "l3_dq": {
+      "byte_offset": 2231008,
+      "bytes": 1305600,
+      "shape": [
+        1600,
+        816
+      ],
+      "dtype": "int8"
+    },
+    "l3_dsc": {
+      "byte_offset": 3536608,
+      "bytes": 6400,
+      "shape": [
+        1600
+      ],
+      "dtype": "float32"
+    },
+    "l3_cq": {
+      "byte_offset": 3543008,
+      "bytes": 116800,
+      "shape": [
+        73,
+        1600
+      ],
+      "dtype": "int8"
+    },
+    "l3_csc": {
+      "byte_offset": 3659808,
+      "bytes": 292,
+      "shape": [
+        73
+      ],
+      "dtype": "float32"
+    },
+    "l3_b": {
+      "byte_offset": 3660112,
+      "bytes": 6400,
+      "shape": [
+        1600
+      ],
+      "dtype": "float32"
+    },
+    "attn_WT": {
+      "byte_offset": 3666512,
+      "bytes": 57600,
+      "shape": [
+        30,
+        480
+      ],
+      "dtype": "float32"
+    },
+    "attn_b": {
+      "byte_offset": 3724112,
+      "bytes": 120,
+      "shape": [
+        30
+      ],
+      "dtype": "float32"
+    },
+    "gmm_WT": {
+      "byte_offset": 3724240,
+      "bytes": 193600,
+      "shape": [
+        121,
+        400
+      ],
+      "dtype": "float32"
+    },
+    "gmm_b": {
+      "byte_offset": 3917840,
+      "bytes": 484,
+      "shape": [
+        121
+      ],
+      "dtype": "float32"
+    },
+    "primed": {
+      "byte_offset": 3918336,
+      "bytes": 129116,
+      "shape": [
+        13,
+        2483
+      ],
+      "dtype": "float32"
+    }
+  }
+}
