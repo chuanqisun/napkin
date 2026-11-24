@@ -206,16 +206,26 @@
     button.pen-opt .po-hint { font-size: 10.5px; color: var(--ink-muted); display: block; line-height: 1.2; }
     button.pen-opt.active .po-hint { color: rgba(248, 243, 234, 0.72); }
 
-    /* Handwriting style grid inside combined Pen & Style popover */
-    .style-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; }
+    /* Handwriting style preview cards inside combined Pen & Style popover */
+    .style-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
     button.style-opt {
-      padding: 6px 8px; border-radius: 7px; text-align: left;
-      border: 1px solid rgba(92, 74, 52, 0.18);
-      background: rgba(255, 255, 255, 0.55); color: var(--ink-ui);
-      font-size: 11.5px; font-weight: 500; cursor: pointer;
+      display: flex; flex-direction: column; align-items: stretch; gap: 4px;
+      padding: 5px; border-radius: 8px; text-align: left;
+      border: 1px solid rgba(92, 74, 52, 0.20);
+      background: rgba(255, 255, 255, 0.58); color: var(--ink-ui);
+      font-size: 11px; font-weight: 600; cursor: pointer;
+      transition: background 0.12s ease, border-color 0.12s ease;
     }
-    button.style-opt:hover { background: rgba(255, 255, 255, 0.92); }
+    button.style-opt:hover { background: rgba(255, 255, 255, 0.94); border-color: rgba(92, 74, 52, 0.36); }
     button.style-opt.active { background: var(--active-bg); color: var(--active-fg); border-color: var(--active-bg); }
+    button.style-opt canvas.style-prev {
+      display: block; width: 100%; height: 34px; border-radius: 5px;
+      background: #ece1ce;
+      box-shadow: inset 0 0 0 1px rgba(104, 82, 54, 0.18);
+    }
+    button.style-opt .so-lbl {
+      display: block; padding: 0 2px; line-height: 1.15;
+    }
 
     /* Café drink menu grid */
     .drink-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
@@ -239,8 +249,9 @@
     main.stage {
       position: relative; flex: 1; min-height: 0; width: 100%;
       display: flex; align-items: center; justify-content: center;
-      padding: 14px;
+      padding: 24px 38px;
       background: radial-gradient(circle at 50% 45%, #d8c9b2 0%, #c8b69b 100%);
+      overflow: hidden;
     }
 
     .napkin-frame {
@@ -254,6 +265,14 @@
     }
 
     canvas#c { display: block; width: 100%; height: 100%; touch-action: none; }
+
+    /* Full-stage unclipped cup layer (allows mug & handle to overhang napkin edges naturally!) */
+    canvas#cup-layer {
+      position: absolute; inset: 0;
+      width: 100%; height: 100%;
+      pointer-events: none;
+      z-index: 15;
+    }
 
     /* Invisible focus/IME proxy — the napkin canvas itself is the only visible text box */
     #inline-text {
@@ -434,11 +453,12 @@
     </div>
   </header>
 
-  <main class="stage">
+  <main class="stage" id="stage">
     <div class="napkin-frame" id="wrap">
       <canvas id="c"></canvas>
       <input id="inline-text" type="text" autocomplete="off" autocorrect="off" spellcheck="false" aria-label="Napkin text input" />
     </div>
+    <canvas id="cup-layer"></canvas>
   </main>
 
   <!-- Declarative Popover: Combined Pen & Handwriting Style Menu -->
@@ -527,6 +547,7 @@ function setColor(hex, btnEl) {
   currentColor = hex;
   document.querySelectorAll('button.swatch').forEach(b => b.classList.remove('active'));
   if (btnEl) btnEl.classList.add('active');
+  paintStylePreviews();
 }
 
 function setPen(penId) {
@@ -538,12 +559,59 @@ function setPen(penId) {
   if (img) img.src = pen.img;
   if (lbl) lbl.textContent = pen.short;
   document.querySelectorAll('button.pen-opt').forEach(b => b.classList.toggle('active', b.dataset.pen === pen.id));
+  paintStylePreviews();
 }
 
 function setWritingStyle(key) {
   if (!WRITING_STYLES[key]) return;
   currentStyleKey = key;
   document.querySelectorAll('button.style-opt').forEach(b => b.classList.toggle('active', b.dataset.style === key));
+}
+
+const STYLE_PREVIEW_SEEDS = { cursive: 1042, print: 2077, upright: 3091, journal: 4129 };
+const stylePreviewBufs = {}; // styleKey -> Float32Array strokes for "Napkin"
+
+function paintStylePreviews() {
+  for (const key of Object.keys(WRITING_STYLES)) {
+    const cv = document.querySelector(`canvas.style-prev[data-style-prev="${key}"]`);
+    if (!cv) continue;
+    const dpr = 2;
+    const w = 136, h = 34;
+    if (cv.width !== w * dpr || cv.height !== h * dpr) { cv.width = w * dpr; cv.height = h * dpr; }
+    const ctx = cv.getContext('2d');
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.fillStyle = '#ece1ce';
+    ctx.fillRect(0, 0, w, h);
+
+    // Faint warm ruled baseline inside swatch
+    ctx.strokeStyle = 'rgba(110, 86, 56, 0.16)';
+    ctx.lineWidth = 0.75;
+    ctx.beginPath(); ctx.moveTo(8, h - 7.5); ctx.lineTo(w - 8, h - 7.5); ctx.stroke();
+
+    const buf = stylePreviewBufs[key];
+    if (buf && buf.length >= 6) {
+      const { strokes } = layoutWordsToStrokes([buf], w * 0.5, h * 0.48, 20, w - 18, currentColor, 1.45, 'center', currentPenId);
+      for (const s of strokes) drawPStroke(ctx, s.pts, s.baseW, s.color, s.alpha, currentPenId);
+    } else {
+      ctx.fillStyle = 'rgba(110, 100, 87, 0.45)';
+      ctx.font = 'italic 11px Georgia, serif';
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText('Napkin', w * 0.5, h * 0.5);
+    }
+  }
+}
+
+async function generateStylePreviews() {
+  const keys = Object.keys(WRITING_STYLES);
+  await Promise.all(keys.map(key => {
+    const dummy = {};
+    return synthesizeCursiveStreaming('Napkin', 68, 17, 20, 118, currentColor, null, dummy, key, 'center').then(() => {
+      if (dummy.wordCache?.[0]?.buf) {
+        stylePreviewBufs[key] = dummy.wordCache[0].buf;
+        paintStylePreviews();
+      }
+    });
+  }));
 }
 
 function initPenAndStyleMenu() {
@@ -559,8 +627,12 @@ function initPenAndStyleMenu() {
   const styleGrid = document.getElementById('style-grid');
   if (styleGrid) {
     styleGrid.innerHTML = Object.entries(WRITING_STYLES).map(([k, v]) => `
-      <button class="style-opt${k === currentStyleKey ? ' active' : ''}" data-style="${k}" onclick="setWritingStyle('${k}')">${v.label}</button>
+      <button class="style-opt${k === currentStyleKey ? ' active' : ''}" data-style="${k}" onclick="setWritingStyle('${k}')">
+        <canvas class="style-prev" data-style-prev="${k}" width="272" height="68" aria-hidden="true"></canvas>
+        <span class="so-lbl">${v.label}</span>
+      </button>
     `).join('');
+    paintStylePreviews();
   }
 }
 
@@ -2272,9 +2344,9 @@ const NapkinCup = (() => {
 
   function getCupCenter(w, h) {
     const sz = getCupSizePx(w, h);
-    // Allow realistic corner/edge overhang while keeping the mug easy to grab
-    const minX = sz * 0.10, maxX = w - sz * 0.06;
-    const minY = sz * 0.12, maxY = h - sz * 0.12;
+    // Allow generous natural overhang past napkin borders onto the café table
+    const minX = -sz * 0.04, maxX = w + sz * 0.04;
+    const minY = -sz * 0.04, maxY = h + sz * 0.04;
     return {
       x: Math.max(minX, Math.min(maxX, state.cupNX * w)),
       y: Math.max(minY, Math.min(maxY, state.cupNY * h)),
@@ -2557,7 +2629,7 @@ const NapkinCup = (() => {
 
     ctx.save();
     ctx.translate(cx, cy);
-    ctx.globalCompositeOperation = 'multiply';
+    ctx.globalCompositeOperation = 'source-over';
     const shFade = Math.max(0, 1 - lift * 0.42);
     ctx.globalAlpha = opacity * shFade;
     const shDist = sz * (0.048 + lift * 0.14);
@@ -2687,6 +2759,28 @@ const NapkinCup = (() => {
       }
     }
     drawCupSprite(ctx, drawX, drawY, sz, state.drinkId, state.volume, state.rotDeg, drawLift, drawOpacity);
+  }
+
+  // Render cup on the unclipped full-stage overlay canvas so napkin edges NEVER clip the mug!
+  function renderCupLayer(now = performance.now()) {
+    const cupCanvas = document.getElementById('cup-layer');
+    const stageEl = document.getElementById('stage');
+    if (!cupCanvas || !stageEl) return;
+    const sr = stageEl.getBoundingClientRect();
+    const nr = canvas.getBoundingClientRect();
+    if (!sr.width || !sr.height) return;
+    const dpr = window.devicePixelRatio || 1;
+    const cw = Math.round(sr.width * dpr), ch = Math.round(sr.height * dpr);
+    if (cupCanvas.width !== cw || cupCanvas.height !== ch) { cupCanvas.width = cw; cupCanvas.height = ch; }
+    const cctx = cupCanvas.getContext('2d');
+    cctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    cctx.clearRect(0, 0, sr.width, sr.height);
+    if (!state.hasDrink) return;
+
+    cctx.save();
+    cctx.translate(nr.left - sr.left, nr.top - sr.top);
+    renderCupTo(cctx, nr.width, nr.height, now);
+    cctx.restore();
   }
 
   // ---- Smooth On-Demand Animation Loop (0 idle CPU when settled) ----
@@ -2887,10 +2981,10 @@ const NapkinCup = (() => {
   }
 
   // ---- Pointer Handling (Press-and-Hold to Move + Rotate; Click to Drink) ----
-  function onPointerDown(e, p) {
+  function onPointerDown(e, p, captureEl = canvas) {
     if (!hitsCup(p.x, p.y)) return false;
     e.preventDefault();
-    canvas.setPointerCapture(e.pointerId);
+    try { captureEl.setPointerCapture(e.pointerId); } catch (_) {}
     const { w, h } = getStageSize();
     const { x, y, sz } = getCupCenter(w, h);
     const bowl = getBowlCenter(x, y, sz, state.rotDeg);
@@ -2907,12 +3001,18 @@ const NapkinCup = (() => {
         if (!pointerState || pointerState.dragging) return;
         pointerState.dragging = true;
         state.targetLift = 1;
-        canvas.style.cursor = 'grabbing';
+        setCupCursor('grabbing');
         kickAnim();
       }, HOLD_MS)
     };
     resetIdleTimer();
     return true;
+  }
+
+  function setCupCursor(cur) {
+    const stageEl = document.getElementById('stage');
+    if (stageEl) stageEl.style.cursor = cur || '';
+    canvas.style.cursor = cur || (tool === 'move' ? 'default' : (tool === 'text' ? 'text' : 'crosshair'));
   }
 
   function onPointerMove(e, p) {
@@ -2927,7 +3027,7 @@ const NapkinCup = (() => {
         clearTimeout(pointerState.holdTimer);
         pointerState.dragging = true;
         state.targetLift = 1;
-        canvas.style.cursor = 'grabbing';
+        setCupCursor('grabbing');
       }
 
       if (pointerState.dragging) {
@@ -2935,8 +3035,8 @@ const NapkinCup = (() => {
         const { x, y, sz } = getCupCenter(w, h);
         const newX = p.x - pointerState.grabOffX;
         const newY = p.y - pointerState.grabOffY;
-        const minX = sz * 0.10, maxX = w - sz * 0.06;
-        const minY = sz * 0.12, maxY = h - sz * 0.12;
+        const minX = -sz * 0.04, maxX = w + sz * 0.04;
+        const minY = -sz * 0.04, maxY = h + sz * 0.04;
         state.cupNX = Math.max(minX, Math.min(maxX, newX)) / Math.max(1, w);
         state.cupNY = Math.max(minY, Math.min(maxY, newY)) / Math.max(1, h);
 
@@ -2953,13 +3053,12 @@ const NapkinCup = (() => {
       return true;
     }
 
-    // Hover feedback over the cup (only when not actively drawing a stroke)
+    // Hover feedback over the cup (even on parts overhanging the napkin edge!)
     if (!activeRaw && !dragShape && !dragItem && !resizeState) {
       const over = hitsCup(p.x, p.y);
       if (over !== hoveringCup) {
         hoveringCup = over;
-        if (over) canvas.style.cursor = 'pointer';
-        else canvas.style.cursor = tool === 'move' ? 'default' : (tool === 'text' ? 'text' : 'crosshair');
+        setCupCursor(over ? 'pointer' : '');
       }
       if (over) return true;
     }
@@ -2974,7 +3073,7 @@ const NapkinCup = (() => {
 
     if (ps.dragging) {
       state.targetLift = 0;
-      canvas.style.cursor = hoveringCup ? 'pointer' : (tool === 'move' ? 'default' : (tool === 'text' ? 'text' : 'crosshair'));
+      setCupCursor(hoveringCup ? 'pointer' : '');
       const { w, h } = getStageSize();
       const { x, y, sz } = getCupCenter(w, h);
       const bowl = getBowlCenter(x, y, sz, state.rotDeg);
@@ -3144,6 +3243,38 @@ const NapkinCup = (() => {
     }
     syncMenuBtn();
     resetIdleTimer();
+
+    // Capture cup pointer interactions across the full stage (including mug parts overhanging napkin edges!)
+    const stageEl = document.getElementById('stage');
+    if (stageEl) {
+      const toNapkin = e => {
+        const r = canvas.getBoundingClientRect();
+        return { x: e.clientX - r.left, y: e.clientY - r.top };
+      };
+      stageEl.addEventListener('pointerdown', e => {
+        if (e.pointerType === 'mouse' && e.button !== 0) return;
+        const p = toNapkin(e);
+        if (typingTarget && isPointInsideTypingTarget(p.x, p.y)) return;
+        if (onPointerDown(e, p, stageEl)) {
+          if (typingTarget) commitTextBox();
+          e.stopPropagation();
+        }
+      }, true);
+      stageEl.addEventListener('pointermove', e => {
+        if (onPointerMove(e, toNapkin(e))) e.stopPropagation();
+      }, true);
+      stageEl.addEventListener('pointerup', e => {
+        if (finishPointer(false)) e.stopPropagation();
+      }, true);
+      stageEl.addEventListener('pointercancel', () => finishPointer(true), true);
+      stageEl.addEventListener('lostpointercapture', () => finishPointer(true), false);
+      stageEl.addEventListener('pointerleave', () => {
+        if (!pointerState && hoveringCup) {
+          hoveringCup = false;
+          setCupCursor('');
+        }
+      });
+    }
   }
 
   return {
@@ -3157,6 +3288,7 @@ const NapkinCup = (() => {
     onPointerCancel: () => finishPointer(true),
     renderStainsTo,
     renderCupTo,
+    renderCupLayer,
     triggerDrink,
     triggerRefill,
     onActivity,
@@ -3614,52 +3746,193 @@ function finalizeResize(it) {
   }
 }
 
-// Simple, distinct per-pen ink renderer (ballpoint, pencil, marker, fountain, 0.5mm mech)
+// Node-free variable-width filled stroke polygon builder (single atomic fill -> zero joint beads!)
+function buildStrokeOutline(pts, baseW, penId = 'ballpoint') {
+  if (!pts || pts.length === 0) return null;
+
+  // 1. Deduplicate near-coincident points so tangents stay well-defined
+  const clean = [pts[0]];
+  for (let i = 1; i < pts.length; i++) {
+    const prev = clean[clean.length - 1];
+    if (Math.hypot(pts[i][0] - prev[0], pts[i][1] - prev[1]) >= 0.35) {
+      clean.push(pts[i]);
+    }
+  }
+  const n = clean.length;
+
+  const radiusFor = (p, ang) => {
+    if (penId === 'pencil') return Math.max(0.45, baseW * (0.76 + 0.56 * p) * 0.5);
+    if (penId === 'marker') return Math.max(1.30, baseW * (1.85 + 0.62 * p) * 0.5);
+    if (penId === 'fountain') {
+      const nib = 0.42 + 0.96 * Math.abs(Math.sin(ang - 0.72));
+      return Math.max(0.28, baseW * (0.30 + 1.32 * p) * nib * 0.5);
+    }
+    if (penId === 'mech') return Math.max(0.28, baseW * (0.50 + 0.24 * p) * 0.5);
+    return Math.max(0.32, baseW * (0.38 + 0.92 * p) * 0.5);
+  };
+
+  // Single-dot stroke (e.g., short 'i' dot)
+  if (n < 2) {
+    const r0 = radiusFor(clean[0][2] ?? 0.8, 0);
+    return { dot: true, x: clean[0][0], y: clean[0][1], r: r0 };
+  }
+
+  // 2. Unit segment tangents & smoothed per-vertex half-widths
+  const segT = [];
+  for (let i = 0; i < n - 1; i++) {
+    const dx = clean[i + 1][0] - clean[i][0];
+    const dy = clean[i + 1][1] - clean[i][1];
+    const d = Math.hypot(dx, dy) || 1;
+    segT.push([dx / d, dy / d]);
+  }
+
+  const rawR = new Array(n);
+  for (let i = 0; i < n; i++) {
+    const t = i === 0 ? segT[0] : (i === n - 1 ? segT[n - 2] : [segT[i - 1][0] + segT[i][0], segT[i - 1][1] + segT[i][1]]);
+    const ang = Math.atan2(t[1], t[0]);
+    rawR[i] = radiusFor(clean[i][2] ?? 0.75, ang);
+  }
+  const rad = new Array(n);
+  rad[0] = rawR[0]; rad[n - 1] = rawR[n - 1];
+  for (let i = 1; i < n - 1; i++) rad[i] = rawR[i - 1] * 0.22 + rawR[i] * 0.56 + rawR[i + 1] * 0.22;
+
+  // 3. Build left & right contour chains with smooth round bevels on sharp corners
+  const left = [], right = [];
+  const pushArc = (arr, cx, cy, r, aStart, aEnd, steps) => {
+    let dA = aEnd - aStart;
+    while (dA > Math.PI) dA -= Math.PI * 2;
+    while (dA < -Math.PI) dA += Math.PI * 2;
+    for (let s = 0; s <= steps; s++) {
+      const a = aStart + dA * (s / steps);
+      arr.push([cx + Math.cos(a) * r, cy + Math.sin(a) * r]);
+    }
+  };
+
+  // Start point
+  {
+    const [tx, ty] = segT[0];
+    const nx = -ty, ny = tx, r = rad[0];
+    left.push([clean[0][0] + nx * r, clean[0][1] + ny * r]);
+    right.push([clean[0][0] - nx * r, clean[0][1] - ny * r]);
+  }
+
+  // Interior points
+  for (let i = 1; i < n - 1; i++) {
+    const [tx0, ty0] = segT[i - 1], [tx1, ty1] = segT[i];
+    const nx0 = -ty0, ny0 = tx0;
+    const nx1 = -ty1, ny1 = tx1;
+    const x = clean[i][0], y = clean[i][1], r = rad[i];
+    const dot = tx0 * tx1 + ty0 * ty1;
+
+    if (dot > 0.55) {
+      let mx = nx0 + nx1, my = ny0 + ny1;
+      const ml = Math.hypot(mx, my) || 1;
+      mx /= ml; my /= ml;
+      const miter = Math.min(1.22, 1 / Math.max(0.6, mx * nx0 + my * ny0));
+      left.push([x + mx * r * miter, y + my * r * miter]);
+      right.push([x - mx * r * miter, y - my * r * miter]);
+    } else {
+      // Sharp corner (e.g., Z zig-zag or box corner): round outer edge smoothly so zero spike/node forms!
+      const cross = tx0 * ty1 - ty0 * tx1;
+      if (cross >= 0) {
+        // Turning right (in screen Y-down coords): left side is outer!
+        pushArc(left, x, y, r, Math.atan2(ny0, nx0), Math.atan2(ny1, nx1), 4);
+        right.push([x - nx0 * r, y - ny0 * r]);
+        right.push([x - nx1 * r, y - ny1 * r]);
+      } else {
+        // Turning left: right side is outer!
+        left.push([x + nx0 * r, y + ny0 * r]);
+        left.push([x + nx1 * r, y + ny1 * r]);
+        pushArc(right, x, y, r, Math.atan2(-ny0, -nx0), Math.atan2(-ny1, -nx1), 4);
+      }
+    }
+  }
+
+  // End point
+  {
+    const [tx, ty] = segT[n - 2];
+    const nx = -ty, ny = tx, r = rad[n - 1];
+    left.push([clean[n - 1][0] + nx * r, clean[n - 1][1] + ny * r]);
+    right.push([clean[n - 1][0] - nx * r, clean[n - 1][1] - ny * r]);
+  }
+
+  // 4. Assemble one closed polygon: left chain -> rounded end cap -> reversed right chain -> rounded start cap
+  const poly = [];
+  for (const pt of left) poly.push(pt);
+
+  // Rounded end cap from left[end] around tip to right[end]
+  const [etx, ety] = segT[n - 2];
+  const endAng = Math.atan2(ety, etx);
+  const er = rad[n - 1];
+  for (let s = 1; s < 5; s++) {
+    const a = (endAng + Math.PI * 0.5) - (Math.PI * s) / 5;
+    poly.push([clean[n - 1][0] + Math.cos(a) * er, clean[n - 1][1] + Math.sin(a) * er]);
+  }
+
+  for (let i = right.length - 1; i >= 0; i--) poly.push(right[i]);
+
+  // Rounded start cap from right[0] around tail to left[0]
+  const [stx, sty] = segT[0];
+  const startAng = Math.atan2(sty, stx);
+  const sr = rad[0];
+  for (let s = 1; s < 5; s++) {
+    const a = (startAng - Math.PI * 0.5) - (Math.PI * s) / 5;
+    poly.push([clean[0][0] + Math.cos(a) * sr, clean[0][1] + Math.sin(a) * sr]);
+  }
+
+  return { dot: false, poly };
+}
+
+function tracePoly(ctx, poly, ox = 0, oy = 0) {
+  if (!poly || poly.length < 3) return;
+  ctx.beginPath();
+  ctx.moveTo(poly[0][0] + ox, poly[0][1] + oy);
+  for (let i = 1; i < poly.length; i++) {
+    ctx.lineTo(poly[i][0] + ox, poly[i][1] + oy);
+  }
+  ctx.closePath();
+}
+
+function strokeAlphaForPen(penId, alphaScale) {
+  if (penId === 'pencil')   return Math.min(0.68, 0.52 * alphaScale);
+  if (penId === 'marker')   return Math.min(0.66, 0.58 * alphaScale);
+  if (penId === 'fountain') return Math.min(0.96, 0.91 * alphaScale);
+  if (penId === 'mech')     return Math.min(0.86, 0.80 * alphaScale);
+  return Math.min(0.95, 0.88 * alphaScale);
+}
+
+// Node-free single-fill ink renderer (ballpoint, pencil, marker, fountain, 0.5mm mech)
 function drawPStroke(ctx, pts, baseW, color, alphaScale, penId = 'ballpoint') {
-  if (!pts || pts.length < 2) return;
+  if (!pts || pts.length < 1) return;
+  const outline = buildStrokeOutline(pts, baseW, penId);
+  if (!outline) return;
+
+  const al = strokeAlphaForPen(penId, alphaScale);
   ctx.save();
   ctx.globalCompositeOperation = 'multiply';
-  ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.strokeStyle = color;
+  ctx.fillStyle = color;
 
-  for (let i = 1; i < pts.length; i++) {
-    const [x0, y0, p0] = pts[i - 1], [x1, y1, p1] = pts[i];
-    const p = (p0 + p1) * 0.5;
-    let lw, al;
-
-    if (penId === 'pencil') {
-      // Soft powdery 2B graphite tooth
-      lw = Math.max(0.7, baseW * (0.72 + 0.62 * p));
-      al = Math.min(0.72, (0.30 + 0.34 * p) * alphaScale);
-      ctx.lineWidth = lw; ctx.globalAlpha = al;
-      ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke();
-      // Subtle dry paper-grain offset pass
-      ctx.lineWidth = lw * 0.65; ctx.globalAlpha = al * 0.36;
-      ctx.beginPath(); ctx.moveTo(x0 + 0.65, y0 + 0.45); ctx.lineTo(x1 + 0.65, y1 + 0.45); ctx.stroke();
-      continue;
-    } else if (penId === 'marker') {
-      // Bold thick translucent felt marker (overlaps darken naturally under multiply)
-      lw = Math.max(2.2, baseW * (1.85 + 0.72 * p));
-      al = Math.min(0.68, (0.48 + 0.16 * p) * alphaScale);
-    } else if (penId === 'fountain') {
-      // Calligraphic angled nib: thick downstrokes, crisp hairline upstrokes
-      const ang = Math.atan2(y1 - y0, x1 - x0);
-      const nib = 0.42 + 0.96 * Math.abs(Math.sin(ang - 0.72));
-      lw = Math.max(0.45, baseW * (0.30 + 1.32 * p) * nib);
-      al = Math.min(0.98, (0.56 + 0.42 * p) * alphaScale);
-    } else if (penId === 'mech') {
-      // Ultra-fine consistent 0.5mm technical lead
-      lw = Math.max(0.45, baseW * (0.48 + 0.28 * p));
-      al = Math.min(0.88, (0.56 + 0.28 * p) * alphaScale);
-    } else {
-      // Classic smooth ballpoint pen
-      lw = Math.max(0.55, baseW * (0.34 + 1.02 * p));
-      al = Math.min(0.96, (0.48 + 0.50 * p) * alphaScale);
-    }
-
-    ctx.lineWidth = lw;
+  if (outline.dot) {
     ctx.globalAlpha = al;
-    ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(outline.x, outline.y, outline.r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+    return;
   }
+
+  // ONE atomic fill call per stroke -> zero overlapping round-cap joint dots!
+  ctx.globalAlpha = al;
+  tracePoly(ctx, outline.poly, 0, 0);
+  ctx.fill('nonzero');
+
+  // Subtle single-fill dry graphite paper-tooth offset pass for 2B pencil (also node-free!)
+  if (penId === 'pencil') {
+    ctx.globalAlpha = al * 0.28;
+    tracePoly(ctx, outline.poly, 0.72, 0.52);
+    ctx.fill('nonzero');
+  }
+
   ctx.restore();
 }
 
@@ -3841,7 +4114,7 @@ function render(opts = {}) {
   }
 
   if (!opts.skipCup) {
-    NapkinCup.renderCupTo(ctx, r.width, r.height);
+    NapkinCup.renderCupLayer();
   }
 }
 
@@ -4029,9 +4302,6 @@ canvas.addEventListener('pointerdown', e => {
     if (tool !== 'text') return;
   }
 
-  // Click cup to drink, press & hold to move + rotate
-  if (NapkinCup.onPointerDown(e, p)) return;
-
   if (tool === 'text') {
     e.preventDefault();
     const hit = hitItem(p.x, p.y);
@@ -4084,8 +4354,6 @@ canvas.addEventListener('pointerdown', e => {
 
 canvas.addEventListener('pointermove', e => {
   const p = getPos(e);
-
-  if (NapkinCup.onPointerMove(e, p)) return;
 
   if (resizeState) {
     const { item, handle, snap } = resizeState;
@@ -4140,7 +4408,6 @@ canvas.addEventListener('pointermove', e => {
 
 canvas.addEventListener('pointerup', e => {
   const p = getPos(e);
-  if (NapkinCup.onPointerUp()) return;
   NapkinAudio.stopDraw();
 
   if (resizeState) {
@@ -4203,8 +4470,8 @@ canvas.addEventListener('pointerup', e => {
   }
 });
 
-canvas.addEventListener('pointercancel', () => { NapkinCup.onPointerCancel(); NapkinAudio.stopDraw(); activeRaw = null; dragShape = null; });
-canvas.addEventListener('lostpointercapture', () => { NapkinCup.onPointerCancel(); NapkinAudio.stopDraw(); });
+canvas.addEventListener('pointercancel', () => { NapkinAudio.stopDraw(); activeRaw = null; dragShape = null; });
+canvas.addEventListener('lostpointercapture', () => { NapkinAudio.stopDraw(); });
 
 // Double-click in Select mode edits a shape's label or text object
 canvas.addEventListener('dblclick', e => {
@@ -4335,17 +4602,14 @@ function exportSVG() {
   const inkLines = [];
   const emit = (s, fallbackPen) => {
     const pid = s.penId || fallbackPen || 'ballpoint';
-    for (let i = 1; i < s.pts.length; i++) {
-      const [x0, y0, p0] = s.pts[i - 1], [x1, y1, p1] = s.pts[i];
-      const p = (p0 + p1) * 0.5;
-      let wMul = 0.34 + 1.02 * p, op = (0.48 + 0.50 * p) * s.alpha;
-      if (pid === 'pencil') { wMul = 0.72 + 0.62 * p; op = (0.30 + 0.34 * p) * s.alpha; }
-      else if (pid === 'marker') { wMul = 1.85 + 0.72 * p; op = (0.48 + 0.16 * p) * s.alpha; }
-      else if (pid === 'fountain') {
-        const nib = 0.42 + 0.96 * Math.abs(Math.sin(Math.atan2(y1 - y0, x1 - x0) - 0.72));
-        wMul = (0.30 + 1.32 * p) * nib; op = (0.56 + 0.42 * p) * s.alpha;
-      } else if (pid === 'mech') { wMul = 0.48 + 0.28 * p; op = (0.56 + 0.28 * p) * s.alpha; }
-      inkLines.push(`<line x1="${x0.toFixed(1)}" y1="${y0.toFixed(1)}" x2="${x1.toFixed(1)}" y2="${y1.toFixed(1)}" stroke="${s.color}" stroke-width="${(s.baseW * wMul).toFixed(2)}" stroke-opacity="${Math.min(0.98, op).toFixed(2)}" stroke-linecap="round"/>`);
+    const outline = buildStrokeOutline(s.pts, s.baseW, pid);
+    if (!outline) return;
+    const op = strokeAlphaForPen(pid, s.alpha).toFixed(2);
+    if (outline.dot) {
+      inkLines.push(`<circle cx="${outline.x.toFixed(1)}" cy="${outline.y.toFixed(1)}" r="${outline.r.toFixed(2)}" fill="${s.color}" fill-opacity="${op}"/>`);
+    } else {
+      const d = 'M' + outline.poly.map(p => `${p[0].toFixed(1)},${p[1].toFixed(1)}`).join('L') + 'Z';
+      inkLines.push(`<path d="${d}" fill="${s.color}" fill-opacity="${op}" fill-rule="nonzero"/>`);
     }
   };
   for (const it of items) { it.strokes.forEach(s => emit(s, it.penId)); if (it.textStrokes) it.textStrokes.forEach(s => emit(s, it.penId)); }
@@ -4392,7 +4656,7 @@ cachedFetchJSON('../exports/opensketch_residual_vae.json').then(j => {
   VAE = j;
   loadStarterScene();
 });
-initWasmPool();
+initWasmPool().then(() => generateStylePreviews());
 </script>
 </body>
 </html>
