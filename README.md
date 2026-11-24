@@ -11,6 +11,8 @@ python3 -m http.server 8765
 ```
 
 Then open in your browser:
+* **v3 Interactive Napkin** *(Smart Sketch auto-beautify + Freehand ink + `<1 ms` OpenSketch-ink handwriting)*:  
+  `http://localhost:8765/web/v3_draw.html`
 * **v2 Napkin Engine** *(OpenSketch `(dx, dy, pressure)` stroke residuals + IAM-OnDB neural handwriting)*:  
   `http://localhost:8765/web/v2_napkin.html`
 * **v1 Live Inference Studio** *(Conditional Sketch-GRU MDN + 68-feature Semantic Gesture MLP)*:  
