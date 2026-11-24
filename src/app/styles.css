@@ -1,0 +1,649 @@
+:root {
+  --bg: #d9cbb5;
+  --paper: #e7dbc6;
+  --bar-bg: rgba(248, 243, 234, 0.94);
+  --bar-border: rgba(92, 74, 52, 0.18);
+  --ink-ui: #23201c;
+  --ink-muted: #6e6457;
+  --active-bg: #23201c;
+  --active-fg: #f8f3ea;
+  --hover-bg: rgba(35, 32, 28, 0.08);
+  --radius: 8px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  height: 100dvh;
+  width: 100vw;
+  overflow: hidden;
+  background: var(--bg);
+  color: var(--ink-ui);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, sans-serif;
+  font-size: 13px;
+  -webkit-font-smoothing: antialiased;
+}
+
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100dvh;
+  width: 100vw;
+}
+
+header.toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+  padding: 7px 10px;
+  background: var(--bar-bg);
+  border-bottom: 1px solid var(--bar-border);
+  backdrop-filter: blur(8px);
+  flex-wrap: wrap;
+  z-index: 20;
+}
+
+.group {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.divider {
+  width: 1px;
+  height: 20px;
+  background: var(--bar-border);
+  margin: 0 2px;
+  flex-shrink: 0;
+}
+
+.brand {
+  font-weight: 600;
+  font-size: 13px;
+  letter-spacing: -0.01em;
+  padding: 0 4px 0 2px;
+  color: var(--ink-ui);
+  white-space: nowrap;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+button.tool-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  height: 32px;
+  padding: 0 6px;
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--ink-ui);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+  white-space: nowrap;
+}
+
+button.tool-btn:hover {
+  background: var(--hover-bg);
+}
+
+button.tool-btn.active {
+  background: var(--active-bg);
+  color: var(--active-fg);
+}
+
+button.tool-btn svg {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.swatches {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 4px;
+}
+
+button.swatch {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  padding: 0;
+  border: 2px solid transparent;
+  cursor: pointer;
+  transition: transform 0.12s ease, box-shadow 0.12s ease;
+}
+
+button.swatch:hover {
+  transform: scale(1.12);
+}
+
+button.swatch.active {
+  box-shadow: 0 0 0 2px var(--bar-bg), 0 0 0 3.5px var(--ink-ui);
+}
+
+/* Combined Pen + Style button & Café Menu button (Declarative Popover triggers) */
+button#pen-btn {
+  anchor-name: --pen-anchor;
+  padding: 0 8px 0 6px;
+  border: 1px solid var(--bar-border);
+  background: rgba(255, 255, 255, 0.5);
+  gap: 6px;
+}
+
+button#pen-btn:hover {
+  background: rgba(255, 255, 255, 0.85);
+}
+
+button#pen-btn .pen-mini {
+  width: 38px;
+  height: 14px;
+  object-fit: contain;
+  display: block;
+  filter: drop-shadow(0 1px 1px rgba(35, 32, 28, 0.16));
+}
+
+button#drink-menu-btn {
+  anchor-name: --drink-anchor;
+  position: relative;
+  padding: 0 9px;
+  border: 1px solid var(--bar-border);
+  background: rgba(255, 255, 255, 0.5);
+  gap: 5px;
+}
+
+button#drink-menu-btn:hover {
+  background: rgba(255, 255, 255, 0.85);
+}
+
+button#drink-menu-btn .menu-dot {
+  display: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #f59e0b;
+  box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.65);
+  animation: menuDotPulse 1.9s ease-out infinite;
+}
+
+button#drink-menu-btn.menu-prominent {
+  background: #23201c;
+  color: #f8f3ea;
+  border-color: #23201c;
+  font-weight: 600;
+  box-shadow: 0 2px 10px rgba(35, 32, 28, 0.24), 0 0 0 2px rgba(245, 158, 11, 0.35);
+}
+
+button#drink-menu-btn.menu-prominent:hover {
+  background: #36312a;
+}
+
+button#drink-menu-btn.menu-prominent .menu-dot {
+  display: inline-block;
+}
+
+@keyframes menuDotPulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.72);
+  }
+  70% {
+    box-shadow: 0 0 0 7px rgba(245, 158, 11, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(245, 158, 11, 0);
+  }
+}
+
+/* Declarative Top-Layer Popovers (native :popover-open + polyfill .\:popover-open) */
+.napkin-popover {
+  margin: 0;
+  padding: 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(92, 74, 52, 0.24);
+  background: rgba(248, 243, 234, 0.98);
+  color: var(--ink-ui);
+  box-shadow: 0 14px 36px rgba(45, 32, 18, 0.22), 0 2px 6px rgba(45, 32, 18, 0.08);
+  backdrop-filter: blur(12px);
+  display: none;
+  inset: auto;
+  top: 52px;
+  right: 16px;
+  max-width: calc(100vw - 24px);
+}
+
+.napkin-popover:is(:popover-open, .\:popover-open) {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+#pen-menu {
+  width: 318px;
+  position-anchor: --pen-anchor;
+  top: calc(anchor(bottom) + 6px);
+  right: anchor(right);
+}
+
+#drink-menu {
+  width: 286px;
+  position-anchor: --drink-anchor;
+  top: calc(anchor(bottom) + 6px);
+  right: anchor(right);
+}
+
+.pop-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding-bottom: 7px;
+  border-bottom: 1px solid var(--bar-border);
+}
+
+.pop-title {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--ink-ui);
+}
+
+.pop-sub {
+  font-size: 11px;
+  color: var(--ink-muted);
+}
+
+.pop-close {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border-radius: 6px;
+  border: 1px solid var(--bar-border);
+  background: rgba(255, 255, 255, 0.55);
+  color: var(--ink-ui);
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.pop-close:hover {
+  background: var(--hover-bg);
+}
+
+.pop-sec-lbl {
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--ink-muted);
+}
+
+/* Pen chooser list */
+.pen-list {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+button.pen-opt {
+  display: grid;
+  grid-template-columns: 112px 1fr;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 9px;
+  text-align: left;
+  border-radius: 8px;
+  border: 1px solid rgba(92, 74, 52, 0.16);
+  background: rgba(255, 255, 255, 0.55);
+  color: var(--ink-ui);
+  cursor: pointer;
+  transition: background 0.12s ease, border-color 0.12s ease;
+}
+
+button.pen-opt:hover {
+  background: rgba(255, 255, 255, 0.92);
+  border-color: rgba(92, 74, 52, 0.34);
+}
+
+button.pen-opt.active {
+  background: var(--active-bg);
+  color: var(--active-fg);
+  border-color: var(--active-bg);
+}
+
+button.pen-opt img {
+  width: 112px;
+  height: 26px;
+  object-fit: contain;
+  display: block;
+  filter: drop-shadow(0 1px 2px rgba(35, 32, 28, 0.18));
+}
+
+button.pen-opt .po-name {
+  font-size: 12px;
+  font-weight: 600;
+  display: block;
+  line-height: 1.2;
+}
+
+button.pen-opt .po-hint {
+  font-size: 10.5px;
+  color: var(--ink-muted);
+  display: block;
+  line-height: 1.2;
+}
+
+button.pen-opt.active .po-hint {
+  color: rgba(248, 243, 234, 0.72);
+}
+
+/* Handwriting style preview cards inside combined Pen & Style popover */
+.style-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+button.style-opt {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+  padding: 5px;
+  border-radius: 8px;
+  text-align: left;
+  border: 1px solid rgba(92, 74, 52, 0.2);
+  background: rgba(255, 255, 255, 0.58);
+  color: var(--ink-ui);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.12s ease, border-color 0.12s ease;
+}
+
+button.style-opt:hover {
+  background: rgba(255, 255, 255, 0.94);
+  border-color: rgba(92, 74, 52, 0.36);
+}
+
+button.style-opt.active {
+  background: var(--active-bg);
+  color: var(--active-fg);
+  border-color: var(--active-bg);
+}
+
+button.style-opt canvas.style-prev {
+  display: block;
+  width: 100%;
+  height: 34px;
+  border-radius: 5px;
+  background: #ece1ce;
+  box-shadow: inset 0 0 0 1px rgba(104, 82, 54, 0.18);
+}
+
+button.style-opt .so-lbl {
+  display: block;
+  padding: 0 2px;
+  line-height: 1.15;
+}
+
+/* Café drink menu grid */
+.drink-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 7px;
+}
+
+button.drink-opt {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 6px 9px;
+  text-align: center;
+  border-radius: 9px;
+  border: 1px solid rgba(92, 74, 52, 0.18);
+  background: rgba(255, 255, 255, 0.58);
+  color: var(--ink-ui);
+  cursor: pointer;
+  transition: background 0.12s ease, border-color 0.12s ease, transform 0.08s ease;
+}
+
+button.drink-opt:hover {
+  background: rgba(255, 255, 255, 0.95);
+  border-color: rgba(92, 74, 52, 0.38);
+  transform: translateY(-1px);
+}
+
+button.drink-opt.active {
+  border-color: var(--active-bg);
+  box-shadow: inset 0 0 0 1px var(--active-bg);
+  background: rgba(255, 255, 255, 0.88);
+}
+
+button.drink-opt img {
+  width: 68px;
+  height: 68px;
+  object-fit: contain;
+  display: block;
+  filter: drop-shadow(0 3px 5px rgba(45, 32, 18, 0.18));
+}
+
+button.drink-opt .do-name {
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+button.drink-opt .do-sub {
+  font-size: 10.5px;
+  color: var(--ink-muted);
+  line-height: 1.15;
+}
+
+main.stage {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 38px;
+  background: radial-gradient(circle at 50% 45%, #d8c9b2 0%, #c8b69b 100%);
+  overflow: hidden;
+}
+
+.napkin-frame {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  max-width: 1440px;
+  border-radius: 6px;
+  overflow: hidden;
+  background: var(--paper);
+  box-shadow:
+    0 1px 2px rgba(55, 40, 22, 0.14),
+    0 10px 28px rgba(55, 40, 22, 0.16),
+    inset 0 0 0 1px rgba(104, 82, 54, 0.22);
+}
+
+canvas#c {
+  display: block;
+  width: 100%;
+  height: 100%;
+  touch-action: none;
+}
+
+/* Full-stage unclipped cup layer (allows mug & handle to overhang napkin edges naturally!) */
+canvas#cup-layer {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 15;
+}
+
+/* Invisible focus/IME proxy — the napkin canvas itself is the only visible text box */
+#inline-text {
+  position: absolute;
+  display: none;
+  left: 0;
+  top: 0;
+  width: 2px;
+  height: 28px;
+  padding: 0;
+  margin: 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: transparent;
+  caret-color: transparent;
+  opacity: 0;
+  pointer-events: none;
+  font-size: 16px;
+}
+
+/* Single Sound On/Off toolbar toggle */
+button#sound-toggle {
+  position: relative;
+}
+
+button#sound-toggle .snd-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #15803d;
+  display: inline-block;
+  transition: background 0.15s ease;
+}
+
+button#sound-toggle .snd-icon-off {
+  display: none;
+}
+
+button#sound-toggle.muted {
+  color: var(--ink-muted);
+}
+
+button#sound-toggle.muted .snd-dot {
+  background: #a89f91;
+}
+
+button#sound-toggle.muted .snd-icon-on {
+  display: none;
+}
+
+button#sound-toggle.muted .snd-icon-off {
+  display: inline;
+}
+
+/* Compact Save format popover */
+.save-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.save-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  min-width: 196px;
+  padding: 5px;
+  border-radius: 10px;
+  background: rgba(248, 243, 234, 0.98);
+  border: 1px solid rgba(92, 74, 52, 0.24);
+  box-shadow: 0 10px 26px rgba(45, 32, 18, 0.18), 0 2px 6px rgba(45, 32, 18, 0.08);
+  backdrop-filter: blur(10px);
+  display: none;
+  flex-direction: column;
+  gap: 2px;
+  z-index: 45;
+}
+
+.save-menu.open {
+  display: flex;
+}
+
+.save-menu button {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+  width: 100%;
+  padding: 7px 9px;
+  border: none;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--ink-ui);
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.12s ease;
+}
+
+.save-menu button:hover {
+  background: var(--hover-bg);
+}
+
+.save-menu .sm-title {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.save-menu .sm-sub {
+  font-size: 10.5px;
+  color: var(--ink-muted);
+}
+
+/* Full-viewport overlay for the crumpled napkin ball throw animation */
+canvas#crumple-overlay {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100dvh;
+  pointer-events: none;
+  z-index: 60;
+  display: none;
+}
+
+@media (max-width: 1180px) {
+  button.tool-btn .lbl {
+    display: none;
+  }
+  button.tool-btn {
+    padding: 0 8px;
+  }
+}
+
+@media (max-width: 680px) {
+  header.toolbar {
+    padding: 6px 8px;
+    gap: 5px;
+  }
+  main.stage {
+    padding: 6px;
+  }
+  .divider {
+    margin: 0 2px;
+  }
+  button.tool-btn {
+    height: 30px;
+    padding: 0 7px;
+  }
+}
