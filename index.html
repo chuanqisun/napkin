@@ -2491,7 +2491,7 @@ const NapkinCup = (() => {
     const bowlR = getCupSizePx(w, h) * 0.335;
     if (kind === 'trail') {
       const ang = Math.random() * 6.2831853;
-      const count = 3 + (Math.random() < 0.48 ? 1 : 0);
+      const count = 3 + (Math.random() < 0.60 ? 1 : 0);
       for (let i = 0; i < count; i++) {
         const d = i * (20 + Math.random() * 14);
         const p = Math.sin(i * 1.15) * 9.0;
@@ -2899,7 +2899,7 @@ const NapkinCup = (() => {
         state.dripFired = true;
         const { w, h } = getStageSize();
         const pos = randomNapkinDripPos(w, h);
-        addStain(Math.random() < 0.46 ? 'drip' : 'trail', pos.x, pos.y, 1.18);
+        addStain(Math.random() < 0.34 ? 'drip' : 'trail', pos.x, pos.y, 1.18);
 
         // Drip stain always uses the crisp "Oops!" sound
         scheduleTimer(() => {
@@ -3025,7 +3025,7 @@ const NapkinCup = (() => {
     // Stain rule: accidental drinking drips & trails happen once user has interacted with the drawing!
     const dripProb = !hasInteractedWithDrawing
       ? 0
-      : (opts.forceDrip ? 1.0 : (state.targetVolume >= 0.9 ? 0.50 : 0.40));
+      : (opts.forceDrip ? 1.0 : (state.targetVolume >= 0.9 ? 0.72 : 0.58));
     state.pendingDrip = Math.random() < dripProb;
     state.dripFired = false;
     state.phase = 'exiting';
@@ -3144,10 +3144,10 @@ const NapkinCup = (() => {
           const shouldRing = (mugMoveCount >= 2) || (hasInteractedWithDrawing && Math.random() < 0.80);
           if (shouldRing) {
             addStain('ring', ps.originBowlX, ps.originBowlY, 0.98);
-            const splashProb = mugMoveCount >= 3 ? 0.64 : (mugMoveCount >= 2 ? 0.46 : (hasInteractedWithDrawing ? 0.22 : 0));
+            const splashProb = mugMoveCount >= 3 ? 0.82 : (mugMoveCount >= 2 ? 0.68 : (hasInteractedWithDrawing ? 0.45 : 0));
             if (Math.random() < splashProb) {
               const pos = randomNapkinDripPos(w, h);
-              const kind = Math.random() < 0.52 ? 'trail' : 'drip';
+              const kind = Math.random() < 0.65 ? 'trail' : 'drip';
               addStain(kind, pos.x, pos.y, 1.08);
               scheduleTimer(() => {
                 NapkinAudio.playClip('oops_drip', { channel: 'vocal', interrupt: true });

@@ -2,7 +2,7 @@ name: Deploy static content to Pages
 
 on:
   push:
-    branches: ["master"]
+    branches: ["main", "master"]
 
   # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
@@ -34,10 +34,32 @@ jobs:
         uses: actions/configure-pages@v6
         with:
           enablement: true
-      - name: npm install, build, and test
+      - name: Stage minimal runtime assets
         run: |
-          npm install
-          npm run build
+          rm -rf dist
+          mkdir -p dist/web/sfx dist/docs/vfx/cups dist/docs/vfx/pens dist/exports/handwriting
+
+          # Root app entry point
+          cp index.html dist/
+
+          # Web Worker & audio SFX needed at runtime
+          cp web/hw_worker_v5.js web/crumble.mp3 dist/web/
+          cp web/sfx/*.mp3 dist/web/sfx/
+
+          # Top-down cup & pen VFX sprites only (excludes docs screenshots, GIFs, report.md, vfx-board.html)
+          cp docs/vfx/cups/*.webp dist/docs/vfx/cups/
+          cp docs/vfx/pens/*.webp dist/docs/vfx/pens/
+
+          # Runtime ML models only (excludes PyTorch .pt checkpoints and legacy v1-v4 exports)
+          cp exports/opensketch_residual_vae.json dist/exports/
+          cp exports/handwriting/graves_v5.wasm \
+             exports/handwriting/graves_v5.bin \
+             exports/handwriting/graves_v5_meta.json \
+             dist/exports/handwriting/
+
+          touch dist/.nojekyll
+          du -sh dist
+          find dist -type f | sort
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v5
         with:
